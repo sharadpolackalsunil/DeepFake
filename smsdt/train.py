@@ -14,6 +14,21 @@ def focal_bce(logits, targets, alpha=0.25, gamma=2.0):
     alpha_w = alpha * targets + (1 - alpha) * (1 - targets)
     return (alpha_w * focal).mean()
 
+def video_level_loss(chunk_logits, video_labels, k=3, alpha=0.25, gamma=2.0):
+    """
+    Computes loss at the video level using Top-K aggregation of chunk logits.
+    chunk_logits: (B, num_chunks)
+    video_labels: (B,)
+    """
+    if chunk_logits.dim() == 1:
+        chunk_logits = chunk_logits.unsqueeze(0)
+    # Get top K highest scoring chunks (most likely to be fake)
+    k = min(k, chunk_logits.size(1))
+    topk_logits, _ = torch.topk(chunk_logits, k, dim=1)
+    # Aggregate to a single video-level logit
+    video_logits = topk_logits.mean(dim=1)
+    return focal_bce(video_logits, video_labels, alpha=alpha, gamma=gamma)
+
 def evaluate(model, loader, device):
     from sklearn.metrics import roc_auc_score
     model.eval()
