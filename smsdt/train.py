@@ -69,9 +69,20 @@ def main(cfg):
     accum_steps = cfg.train.grad_accum
 
     os.makedirs("outputs/checkpoints", exist_ok=True)
+    checkpoint_path = "outputs/checkpoints/latest.pt"
+
+    start_epoch = 0
+    if os.path.exists(checkpoint_path):
+        print(f"Loading checkpoint from {checkpoint_path}")
+        checkpoint_data = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        model.load_state_dict(checkpoint_data["model_state_dict"])
+        opt.load_state_dict(checkpoint_data["optimizer_state_dict"])
+        sched.load_state_dict(checkpoint_data["scheduler_state_dict"])
+        start_epoch = checkpoint_data["epoch"] + 1
+        print(f"Resuming training from epoch {start_epoch}")
 
     model.train()
-    for epoch in range(cfg.train.epochs):
+    for epoch in range(start_epoch, cfg.train.epochs):
         for i, batch in enumerate(train_loader):
             frames = batch["frames"].to(device, non_blocking=True)   # (B,T,3,224,224)
             conf = batch["conf"].to(device, non_blocking=True)       # (B,T)
@@ -96,7 +107,15 @@ def main(cfg):
         val_auc = evaluate(model, val_loader, device)
         wandb.log({"val/auc": val_auc, "epoch": epoch})
         print(f"Epoch {epoch} Val AUC: {val_auc}")
-        torch.save(model.state_dict(), f"outputs/checkpoints/epoch{epoch}.pt")
+
+        save_data = {
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": opt.state_dict(),
+            "scheduler_state_dict": sched.state_dict()
+        }
+        torch.save(save_data, checkpoint_path)
+        print(f"Saved checkpoint to {checkpoint_path}")
 
 if __name__ == "__main__":
     from omegaconf import OmegaConf
