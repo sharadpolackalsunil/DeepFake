@@ -1,0 +1,23 @@
+name: "top_k_aggregator"
+backend: "python"
+max_batch_size: 1
+input [
+  {
+    name: "chunk_predictions"
+    data_type: TYPE_FP32
+    dims: [ -1, 1 ]
+  }
+]
+output [
+  {
+    name: "video_prediction"
+    data_type: TYPE_FP32
+    dims: [ 1 ]
+  }
+]
+instance_group [
+  {
+    count: 1
+    kind: KIND_CPU
+  }
+]

@@ -1,0 +1,28 @@
+name: "scrfd"
+platform: "tensorrt_plan"
+max_batch_size: 16
+input [
+  {
+    name: "input_image"
+    data_type: TYPE_FP32
+    dims: [ 3, 480, 640 ]
+  }
+]
+output [
+  {
+    name: "bboxes"
+    data_type: TYPE_FP32
+    dims: [ 100, 5 ]
+  },
+  {
+    name: "kpss"
+    data_type: TYPE_FP32
+    dims: [ 100, 10 ]
+  }
+]
+instance_group [
+  {
+    count: 1
+    kind: KIND_GPU
+  }
+]
