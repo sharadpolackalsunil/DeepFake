@@ -50,5 +50,4 @@ outputs/triton_repo/
 .DS_Store
 
 # Claude
-.claude/*
-!.claude/commands/
+.claude/
