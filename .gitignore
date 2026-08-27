@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+ENV/
+
+# PyTorch
+*.pt
+*.pth
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Project specific
+data/raw/*
+!data/raw/.gitkeep
+data/cache/*
+!data/cache/.gitkeep
+outputs/checkpoints/*
+!outputs/checkpoints/.gitkeep
+outputs/logs/*
+!outputs/logs/.gitkeep
+outputs/*.onnx
+outputs/*.engine
+outputs/triton_repo/
+
+# MacOS
+.DS_Store
+
+# Claude
+.claude/*
+!.claude/commands/
