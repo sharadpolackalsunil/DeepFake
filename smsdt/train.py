@@ -16,6 +16,48 @@ from smsdt.data.dataset import build_dataloader
 from smsdt.losses import total_loss
 from smsdt.eval import evaluate
 
+def focal_bce(logits, targets, alpha=0.25, gamma=2.0):
+    p = torch.sigmoid(logits)
+    ce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
+    pt = p * targets + (1 - p) * (1 - targets)
+    focal = ((1 - pt) ** gamma) * ce
+    alpha_w = alpha * targets + (1 - alpha) * (1 - targets)
+    return (alpha_w * focal).mean()
+
+def video_level_loss(chunk_logits, video_labels, k=3, alpha=0.25, gamma=2.0):
+    """
+    Computes loss at the video level using Top-K aggregation of chunk logits.
+    chunk_logits: (B, num_chunks)
+    video_labels: (B,)
+    """
+    if chunk_logits.dim() == 1:
+        chunk_logits = chunk_logits.unsqueeze(0)
+    # Get top K highest scoring chunks (most likely to be fake)
+    k = min(k, chunk_logits.size(1))
+    topk_logits, _ = torch.topk(chunk_logits, k, dim=1)
+    # Aggregate to a single video-level logit
+    video_logits = topk_logits.mean(dim=1)
+    return focal_bce(video_logits, video_labels, alpha=alpha, gamma=gamma)
+
+def evaluate(model, loader, device):
+    from sklearn.metrics import roc_auc_score
+    model.eval()
+    all_logits, all_labels = [], []
+    with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
+        for batch in loader:
+            frames = batch["frames"].to(device)
+            conf = batch["conf"].to(device)
+            logits = model(frames, conf)
+            all_logits.append(logits.float().cpu())
+            all_labels.append(batch["label"].cpu())
+    if len(all_logits) == 0:
+        return 0.5
+    logits = torch.cat(all_logits).numpy()
+    labels = torch.cat(all_labels).numpy()
+    try:
+        return roc_auc_score(labels, logits)
+    except ValueError:
+        return 0.5 # Single class in batch
 
 def main(cfg):
     # --- Device setup ---
@@ -98,19 +140,20 @@ def main(cfg):
     }
 
     os.makedirs("outputs/checkpoints", exist_ok=True)
-    best_auc = 0.0
-    step = 0
+    checkpoint_path = "outputs/checkpoints/latest.pt"
 
-    # --- Training loop ---
-    print(f"\nStarting training: {cfg.train.epochs} epochs, "
-          f"batch_size={cfg.data.batch_size}, accum={accum_steps}, "
-          f"effective_batch={cfg.data.batch_size * accum_steps}")
+    start_epoch = 0
+    if os.path.exists(checkpoint_path):
+        print(f"Loading checkpoint from {checkpoint_path}")
+        checkpoint_data = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        model.load_state_dict(checkpoint_data["model_state_dict"])
+        opt.load_state_dict(checkpoint_data["optimizer_state_dict"])
+        sched.load_state_dict(checkpoint_data["scheduler_state_dict"])
+        start_epoch = checkpoint_data["epoch"] + 1
+        print(f"Resuming training from epoch {start_epoch}")
 
-    for epoch in range(cfg.train.epochs):
-        model.train()
-        epoch_loss = 0.0
-        epoch_steps = 0
-
+    model.train()
+    for epoch in range(start_epoch, cfg.train.epochs):
         for i, batch in enumerate(train_loader):
             frames = batch["frames"].to(device, non_blocking=True)   # (B,T,3,224,224)
             conf = batch["conf"].to(device, non_blocking=True)       # (B,T)
@@ -208,6 +251,18 @@ def main(cfg):
     if use_wandb:
         wandb.finish()
 
+        val_auc = evaluate(model, val_loader, device)
+        wandb.log({"val/auc": val_auc, "epoch": epoch})
+        print(f"Epoch {epoch} Val AUC: {val_auc}")
+
+        save_data = {
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": opt.state_dict(),
+            "scheduler_state_dict": sched.state_dict()
+        }
+        torch.save(save_data, checkpoint_path)
+        print(f"Saved checkpoint to {checkpoint_path}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train S-MSDT")
