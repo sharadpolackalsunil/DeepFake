@@ -1,2 +1,9 @@
+# Data configuration
 dataset: ffpp
-batch_size: 2
+batch_size: 4
+cache_root: data/cache
+data_root: data/raw/ffpp_c23
+compression: c23
+chunk_length: 8
+chunk_stride: 4
+img_size: 224

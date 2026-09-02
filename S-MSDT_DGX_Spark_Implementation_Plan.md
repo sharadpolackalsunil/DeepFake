@@ -131,17 +131,86 @@ smsdt/
 
 ## 2. Datasets
 
-| Dataset | Purpose | Notes |
+| Dataset | Purpose | Notes | Status |
+|---|---|---|---|
+| FaceForensics++ (FF++, c23) | Primary train set — Stage 1 warm‑up, 4+ manipulation types | Light H.264 compression (CRF 23); trains baseline spatial/temporal features | **Available** — download via `download1.py -c c23` |
+| FaceForensics++ (FF++, c40) | Compression‑robustness training — Stage 2 | Heavy H.264 compression (CRF 40); teaches the wavelet branch to survive lossy encoding | **Available** — download via `download1.py -c c40` |
+| FaceForensics v1 (source‑to‑target / self‑reenactment) | Supplementary Face2Face data | Older v1 release with raw/compressed options and train/val/test splits | **Available** — download via `download2.py` |
+| Celeb‑DF v2 | Cross‑dataset generalization eval | Held out entirely from training | 🔜 **To be provided later** |
+| DFDC (full or sampled subset) | Scale + diversity, adversarial perturbations — Stage 3 training | Large — sample a class‑balanced subset first if disk/time constrained | 🔜 **To be provided later** |
+| WildDeepfake | In‑the‑wild generalization eval | Held out entirely from training | 🔜 **To be provided later** |
+| DeeperForensics‑1.0 | Perturbation robustness (blur, noise, compression) | Optional augmentation source | 🔜 **To be provided later** |
+
+### 2.1 Download Scripts & Commands
+
+Two download scripts are available in [`Download_ff/`](file:///e:/DEEPFAKE/Download_ff):
+
+#### [`download1.py`](file:///e:/DEEPFAKE/Download_ff/download1.py) — FaceForensics++ v2 (Primary)
+
+This is the **main downloader** for the FF++ dataset. It supports:
+- **All FF++ manipulation types:** Deepfakes, Face2Face, FaceSwap, FaceShifter, NeuralTextures, DeepFakeDetection
+- **Compression:** `raw` (lossless), `c23` (light H.264), `c40` (heavy H.264)
+- **Server:** EU2 (`http://kaldir.vc.in.tum.de/faceforensics/`)
+- **Partial download:** `--num_videos N` to limit video count
+
+```bash
+# ── Stage 1: Download FF++ c23 (all manipulation types + originals) ──
+python Download_ff/download1.py data/raw/ffpp_c23 -d all -c c23 -t videos --server EU2
+
+# ── Stage 2: Download FF++ c40 (all manipulation types + originals) ──
+python Download_ff/download1.py data/raw/ffpp_c40 -d all -c c40 -t videos --server EU2
+
+# ── Optional: Download only specific manipulation types ──
+python Download_ff/download1.py data/raw/ffpp_c23 -d Deepfakes -c c23 -t videos --server EU2
+python Download_ff/download1.py data/raw/ffpp_c23 -d Face2Face -c c23 -t videos --server EU2
+python Download_ff/download1.py data/raw/ffpp_c23 -d FaceSwap -c c23 -t videos --server EU2
+python Download_ff/download1.py data/raw/ffpp_c23 -d NeuralTextures -c c23 -t videos --server EU2
+python Download_ff/download1.py data/raw/ffpp_c23 -d FaceShifter -c c23 -t videos --server EU2
+
+# ── Optional: Download original (real) videos only ──
+python Download_ff/download1.py data/raw/ffpp_c23 -d original -c c23 -t videos --server EU2
+
+# ── Optional: Download a small subset first for pipeline validation ──
+python Download_ff/download1.py data/raw/ffpp_c23_mini -d all -c c23 -t videos -n 20 --server EU2
+```
+
+> **Note:** The script outputs videos into the structure `<output_path>/<dataset_path>/<compression>/videos/`, e.g.:
+> `data/raw/ffpp_c23/manipulated_sequences/Deepfakes/c23/videos/*.mp4`
+> `data/raw/ffpp_c23/original_sequences/youtube/c23/videos/*.mp4`
+
+#### [`download2.py`](file:///e:/DEEPFAKE/Download_ff/download2.py) — FaceForensics v1 (Supplementary)
+
+Older v1 release. Useful for additional Face2Face self‑reenactment data and source‑to‑target pairs with built‑in train/val/test splits.
+
+```bash
+# ── Download v1 compressed data with train/val/test splits ──
+python Download_ff/download2.py data/raw/ffv1 -d compressed
+
+# ── Download only training set (skip test for now) ──
+python Download_ff/download2.py data/raw/ffv1 -d compressed --not_test
+
+# ── Sample-only mode (5 files per subfolder, for pipeline testing) ──
+python Download_ff/download2.py data/raw/ffv1 -d compressed --sample_only
+```
+
+### 2.2 Dataset Acquisition Strategy (aligned with Training Curriculum §5.6)
+
+| Training Stage | Datasets Needed | Download Action |
 |---|---|---|
-| FaceForensics++ (FF++, c23/c40) | Primary train set, 4 manipulation types | Use both c23 (light compression) and c40 (heavy) to teach the wavelet branch to survive compression |
-| Celeb‑DF v2 | Cross‑dataset generalization eval | Held out entirely from training |
-| DFDC (full or sampled subset) | Scale + diversity, adversarial perturbations | Large — sample a class‑balanced subset first if disk/time constrained |
-| WildDeepfake | In‑the‑wild generalization eval | Held out |
-| DeeperForensics‑1.0 | Perturbation robustness (blur, noise, compression) | Optional augmentation source |
+| **Stage 1** — Single‑dataset warm‑up | FF++ c23 only | Run `download1.py -c c23 -d all` now |
+| **Stage 2** — Compression robustness | FF++ c23 + c40 | Run `download1.py -c c40 -d all` now |
+| **Stage 3** — Scale + diversity | FF++ + DFDC subset | DFDC to be provided later |
+| **Stage 4** — Top‑K fine‑tune | Same as Stage 3 | No new data needed |
+| **Evaluation** | Celeb‑DF v2, WildDeepfake, DeeperForensics | All to be provided later |
+
+> **Action items:**
+> 1. Download FF++ c23 and c40 immediately using `download1.py` — these are sufficient for Stages 1–2.
+> 2. Testing/evaluation datasets (Celeb‑DF v2, DFDC, WildDeepfake, DeeperForensics) will be provided separately later. These are **held out from training** entirely (per §5.6), so training can begin without them.
+> 3. Optionally download FF v1 data via `download2.py` for supplementary Face2Face self‑reenactment coverage.
 
 **Splitting rule:** split by **identity/subject**, never by clip, so no identity leaks across train/val/test. Store manifests as CSVs in `data/splits/` with columns `video_id, subject_id, label, manipulation_type, split`.
 
-**Storage estimate:** raw FF++ (all methods, c23+c40) + DFDC subset + Celeb‑DF + WildDeepfake will comfortably exceed 1–2 TB. Confirm the Spark's NVMe (up to 4 TB on Founder's Edition config) before committing to "download everything."
+**Storage estimate:** raw FF++ (all methods, c23+c40) ≈ 50–100 GB compressed video. Adding DFDC subset + Celeb‑DF + WildDeepfake later will push total past 1–2 TB. Confirm the Spark's NVMe (up to 4 TB on Founder's Edition config) before committing to "download everything."
 
 ---
 
@@ -473,20 +542,72 @@ class SMSDT(nn.Module):
 
 ### 5.1 Loss
 
+> **FF++ class imbalance:** The full FF++ dataset has a **1:4 real:fake ratio** (1,000 original videos vs. 4,000 manipulated — 1,000 each from Deepfakes, Face2Face, FaceSwap, NeuralTextures). The focal loss `alpha` must be tuned accordingly: `alpha=0.8` weights the minority class (real) more heavily to prevent the model from defaulting to "predict fake."
+
+#### Primary loss — Focal BCE
+
 ```python
 # focal loss to handle real/fake class imbalance across mixed datasets
 import torch.nn.functional as F
 
-def focal_bce(logits, targets, alpha=0.25, gamma=2.0):
+def focal_bce(logits, targets, alpha=0.8, gamma=2.0):
+    """Focal binary cross-entropy.
+    alpha=0.8 upweights the minority class (real, label=0) in FF++'s 1:4 ratio.
+    gamma=2.0 downweights easy/well-classified examples.
+    """
     p = torch.sigmoid(logits)
     ce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
     pt = p * targets + (1 - p) * (1 - targets)
     focal = ((1 - pt) ** gamma) * ce
+    # alpha weights: alpha for fake (label=1), (1-alpha) for real (label=0)
+    # With alpha=0.8, fake gets 0.8, real gets 0.2 — but since there are 4x more
+    # fakes, effective per-sample weight is balanced: 0.8/4 ≈ 0.2/1
     alpha_w = alpha * targets + (1 - alpha) * (1 - targets)
     return (alpha_w * focal).mean()
 ```
 
-Optional auxiliary loss: a supervised contrastive term on the pooled wavelet tokens (`z_dwt`) alone, pulling same‑manipulation‑type fakes together — helps the frequency branch specialize instead of being drowned out by the (usually stronger) RGB gradient.
+#### Auxiliary losses (combined with focal BCE)
+
+```python
+def supervised_contrastive_loss(z_dwt, labels, manipulation_types, temperature=0.07):
+    """Supervised contrastive on wavelet tokens — pulls same-manipulation-type
+    fakes together and pushes real/fake apart. Helps the frequency branch
+    specialize instead of being drowned out by the (usually stronger) RGB gradient.
+    Also acts as a cross-entropy variant that localizes temporal forgeries across frames."""
+    z = nn.functional.normalize(z_dwt, dim=-1)
+    sim = z @ z.T / temperature
+    # Positive pairs: same manipulation type (or both real)
+    mask = (manipulation_types.unsqueeze(0) == manipulation_types.unsqueeze(1)).float()
+    mask.fill_diagonal_(0)
+    # Standard SupCon log-softmax
+    log_prob = sim - torch.logsumexp(sim, dim=1, keepdim=True)
+    loss = -(mask * log_prob).sum(1) / mask.sum(1).clamp(min=1)
+    return loss.mean()
+
+def alignment_loss(z_rgb, z_dwt):
+    """Cross-domain alignment loss (CAL) — encourages RGB and wavelet features
+    to learn complementary representations while maintaining shared structure
+    for deepfake artifact localization."""
+    z_rgb_n = nn.functional.normalize(z_rgb, dim=-1)
+    z_dwt_n = nn.functional.normalize(z_dwt, dim=-1)
+    return 2 - 2 * (z_rgb_n * z_dwt_n).sum(dim=-1).mean()
+```
+
+#### Total loss composition
+
+```python
+def total_loss(logits, targets, z_rgb, z_dwt, manipulation_types,
+               lambda_contrastive=0.1, lambda_align=0.05):
+    L_focal = focal_bce(logits, targets)
+    L_con = supervised_contrastive_loss(z_dwt, targets, manipulation_types)
+    L_align = alignment_loss(z_rgb, z_dwt)
+    return L_focal + lambda_contrastive * L_con + lambda_align * L_align
+```
+
+> **Design rationale:** The three-term loss targets different failure modes:
+> - **Focal BCE** → handles the 1:4 class imbalance, focuses training on hard examples
+> - **Supervised contrastive** → forces the wavelet branch to learn manipulation-type-specific frequency signatures
+> - **Alignment loss** → ensures RGB and wavelet branches are complementary, not redundant
 
 ### 5.2 Optimizer / schedule
 
@@ -598,9 +719,35 @@ Train Stage 4 with this video‑level Top‑K loss (sampling ~16–32 chunks per
 
 ## 6. Evaluation Protocol
 
+### 6.1 Metrics
+
+| Metric | What it measures | Why it matters for deepfake detection |
+|---|---|---|
+| **AUC / AUROC** | Area under ROC curve — overall discrimination ability across all thresholds | Primary standard metric for FF++ benchmarks; threshold-agnostic, handles class imbalance |
+| **Precision** | Proportion of predicted fakes that are actually fake | Critical for understanding false alarm rates in deployment |
+| **Recall (TPR)** | Proportion of actual fakes correctly identified | Measures detection coverage — missed fakes are costly |
+| **F1‑Score** | Harmonic mean of Precision and Recall | Single metric capturing the precision/recall trade-off |
+| **FPR** | Proportion of real videos incorrectly flagged as fake | Directly measures false alarm rate; critical for imbalanced real-world scenarios |
+| **EER** | Threshold where FPR = FNR (false acceptance = false rejection) | Evaluates the optimal operating point of the detector |
+| **ROC Curve** | TPR vs. FPR across all thresholds | Visual diagnostic of per-threshold performance |
+| **Accuracy** | Overall correct classification rate | Reported for completeness but less informative under class imbalance |
+
+### 6.2 Implementation
+
 ```python
 # smsdt/eval.py
-from sklearn.metrics import roc_auc_score
+import numpy as np
+import torch
+from sklearn.metrics import (
+    roc_auc_score, roc_curve, precision_recall_fscore_support,
+    accuracy_score, confusion_matrix
+)
+
+def compute_eer(fpr, tpr, thresholds):
+    """Equal Error Rate: threshold where FPR == FNR."""
+    fnr = 1 - tpr
+    idx = np.nanargmin(np.abs(fnr - fpr))
+    return fpr[idx], thresholds[idx]
 
 def evaluate(model, loader, device):
     model.eval()
@@ -614,14 +761,48 @@ def evaluate(model, loader, device):
             all_labels.append(batch["label"].cpu())
     logits = torch.cat(all_logits).numpy()
     labels = torch.cat(all_labels).numpy()
-    return roc_auc_score(labels, logits)
+    probs = 1 / (1 + np.exp(-logits))  # sigmoid
+
+    # --- Core metrics ---
+    auc = roc_auc_score(labels, probs)
+    fpr_arr, tpr_arr, thresholds = roc_curve(labels, probs)
+    eer_value, eer_thresh = compute_eer(fpr_arr, tpr_arr, thresholds)
+
+    # --- Threshold-dependent metrics (at EER threshold and at 0.5) ---
+    preds_eer = (probs >= eer_thresh).astype(int)
+    preds_05 = (probs >= 0.5).astype(int)
+
+    prec_eer, rec_eer, f1_eer, _ = precision_recall_fscore_support(
+        labels, preds_eer, average="binary", zero_division=0)
+    prec_05, rec_05, f1_05, _ = precision_recall_fscore_support(
+        labels, preds_05, average="binary", zero_division=0)
+
+    tn, fp, fn, tp = confusion_matrix(labels, preds_05).ravel()
+    fpr_at_05 = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+    acc = accuracy_score(labels, preds_05)
+
+    metrics = {
+        "auc": auc,
+        "eer": eer_value,
+        "eer_threshold": eer_thresh,
+        "accuracy": acc,
+        "fpr_at_05": fpr_at_05,
+        "precision_eer": prec_eer, "recall_eer": rec_eer, "f1_eer": f1_eer,
+        "precision_05": prec_05, "recall_05": rec_05, "f1_05": f1_05,
+        "roc_curve": {"fpr": fpr_arr, "tpr": tpr_arr, "thresholds": thresholds},
+    }
+    return metrics
 ```
 
+### 6.3 Reporting requirements
+
 Report, at minimum:
-- **Per‑dataset AUC / EER / accuracy** (FF++ c23, FF++ c40, DFDC, Celeb‑DF, WildDeepfake)
+- **Per‑dataset AUC / EER / Precision / Recall / F1 / FPR** (FF++ c23, FF++ c40, DFDC, Celeb‑DF, WildDeepfake)
+- **ROC curves** plotted per dataset and per manipulation type for visual threshold analysis
 - **Cross‑manipulation generalization matrix** (train on FF++ subset X, test on manipulation types the model never saw)
 - **Video‑level metrics using Top‑K aggregation** vs. naive full‑average, to justify the aggregation choice empirically
-- **Perturbation robustness curve** (accuracy vs. JPEG quality / blur sigma / resize factor) using DeeperForensics perturbations
+- **Perturbation robustness curve** (accuracy/AUC vs. JPEG quality / blur sigma / resize factor) using DeeperForensics perturbations
+- **Per‑manipulation‑type breakdown** (Deepfakes, Face2Face, FaceSwap, NeuralTextures, FaceShifter) to identify which forgery types the model handles best/worst
 
 ---
 

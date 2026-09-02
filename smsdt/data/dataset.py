@@ -1,3 +1,10 @@
+"""
+S-MSDT Dataset: WebDataset-based chunked face-crop loader.
+Reads preprocessed T=8 aligned face chunks from webdataset .tar shards.
+"""
+import os
+import glob
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
@@ -149,6 +156,8 @@ def build_dataloader(cfg, split="train", num_workers=12):
             "label": torch.tensor(label, dtype=torch.float32)
         }
 
+    # Build WebDataset pipeline
+    is_train = (split == "train")
     dataset = (
         wds.WebDataset(shard_pattern, resampled=True if split=="train" else False)
         .decode("numpy")
@@ -158,8 +167,9 @@ def build_dataloader(cfg, split="train", num_workers=12):
 
     loader = DataLoader(
         dataset,
-        batch_size=None,
+        batch_size=None,     # WebDataset handles batching internally
         num_workers=num_workers,
-        pin_memory=True
+        pin_memory=True,
+        persistent_workers=(num_workers > 0),
     )
     return loader
