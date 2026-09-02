@@ -91,3 +91,5 @@ docker-compose.override.yml
 *.orig
 .env
 .env.local
+# Claude
+.claude/
