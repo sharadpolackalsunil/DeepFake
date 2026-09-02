@@ -1,10 +1,20 @@
+"""
+S-MSDT Training Script
+=====================
+Trains the S-MSDT model on preprocessed webdataset shards.
+Supports mixed-precision (BF16), gradient accumulation, gradient checkpointing,
+and multi-term loss (focal BCE + contrastive + alignment).
+"""
+import os
+import argparse
 import torch
-import wandb
-import torch.nn.functional as F
-from torch.utils.checkpoint import checkpoint
+import torch.nn as nn
+
+from omegaconf import OmegaConf
 from smsdt.models.smsdt import SMSDT
 from smsdt.data.dataset import build_dataloader
-import os
+from smsdt.losses import total_loss
+from smsdt.eval import evaluate
 
 def focal_bce(logits, targets, alpha=0.25, gamma=2.0):
     p = torch.sigmoid(logits)
@@ -50,23 +60,84 @@ def evaluate(model, loader, device):
         return 0.5 # Single class in batch
 
 def main(cfg):
+    # --- Device setup ---
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
-    model = SMSDT(embed_dim=cfg.model.embed_dim, depth=cfg.model.depth).to(device)
-    if device == "cuda" and hasattr(torch, "compile"):
-        model = torch.compile(model, mode="max-autotune")
+    if device == "cuda":
+        cap = torch.cuda.get_device_capability()
+        print(f"GPU compute capability: {cap}")
 
-    opt = torch.optim.AdamW(model.parameters(), lr=cfg.train.lr, weight_decay=cfg.train.weight_decay)
-    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=cfg.train.lr, total_steps=cfg.train.total_steps)
-    scaler = torch.amp.GradScaler("cuda", enabled=False)   # bf16 needs no loss scaling
+    # --- Model ---
+    model = SMSDT(
+        embed_dim=cfg.model.embed_dim,
+        depth=cfg.model.depth,
+        heads=cfg.model.get("heads", 8),
+        num_classes=cfg.model.get("num_classes", 1),
+        grid=cfg.model.get("grid", 7),
+    ).to(device)
 
-    # Dummy loaders since we don't have real data yet
-    train_loader = build_dataloader(cfg.data, split="train", num_workers=cfg.train.workers)
-    val_loader = build_dataloader(cfg.data, split="val", num_workers=max(1, cfg.train.workers // 2))
+    param_count = sum(p.numel() for p in model.parameters()) / 1e6
+    print(f"Model parameters: {param_count:.1f}M")
 
-    wandb.init(project="smsdt-dgx-spark", config=cfg, mode="disabled") # Disable wandb for local tests
-    step = 0
-    accum_steps = cfg.train.grad_accum
+    # Optional: torch.compile for sm_121 (verify support first)
+    if device == "cuda" and cfg.train.get("compile", False):
+        try:
+            model = torch.compile(model, mode="max-autotune")
+            print("Model compiled with torch.compile (max-autotune)")
+        except Exception as e:
+            print(f"torch.compile failed (may need nightly build for sm_121): {e}")
+
+    # --- Gradient checkpointing ---
+    if cfg.train.get("gradient_checkpointing", False):
+        for blk in model.blocks:
+            blk.spatial.gradient_checkpointing = True
+            blk.temporal.gradient_checkpointing = True
+        print("Gradient checkpointing enabled for ViT blocks")
+
+    # --- Optimizer & scheduler ---
+    opt = torch.optim.AdamW(
+        model.parameters(),
+        lr=cfg.train.lr,
+        weight_decay=cfg.train.weight_decay,
+        betas=tuple(cfg.train.get("betas", [0.9, 0.999])),
+    )
+    sched = torch.optim.lr_scheduler.OneCycleLR(
+        opt,
+        max_lr=cfg.train.lr,
+        total_steps=cfg.train.total_steps,
+        pct_start=cfg.train.get("warmup_pct", 0.05),
+    )
+
+    # --- Data loaders ---
+    train_loader = build_dataloader(
+        cfg.data, split="train",
+        num_workers=cfg.train.get("workers", 10),
+    )
+    val_loader = build_dataloader(
+        cfg.data, split="val",
+        num_workers=max(1, cfg.train.get("workers", 10) // 2),
+    )
+
+    # --- Logging ---
+    use_wandb = cfg.train.get("use_wandb", False)
+    if use_wandb:
+        import wandb
+        wandb.init(project="smsdt-dgx-spark", config=OmegaConf.to_container(cfg))
+    else:
+        print("WandB disabled — logging to stdout only")
+
+    # --- Training state ---
+    accum_steps = cfg.train.get("grad_accum", 8)
+    grad_clip = cfg.train.get("grad_clip", 1.0)
+    use_aux_losses = cfg.train.get("lambda_contrastive", 0.1) > 0
+
+    # Loss hyperparameters
+    loss_kwargs = {
+        "alpha": cfg.train.get("alpha", 0.8),
+        "gamma": cfg.train.get("gamma", 2.0),
+        "lambda_contrastive": cfg.train.get("lambda_contrastive", 0.1),
+        "lambda_align": cfg.train.get("lambda_align", 0.05),
+    }
 
     os.makedirs("outputs/checkpoints", exist_ok=True)
     checkpoint_path = "outputs/checkpoints/latest.pt"
@@ -86,23 +157,99 @@ def main(cfg):
         for i, batch in enumerate(train_loader):
             frames = batch["frames"].to(device, non_blocking=True)   # (B,T,3,224,224)
             conf = batch["conf"].to(device, non_blocking=True)       # (B,T)
-            labels = batch["label"].float().to(device, non_blocking=True)
+            labels = batch["label"].float().to(device, non_blocking=True)  # (B,)
 
-            with torch.autocast(device_type=device, dtype=torch.bfloat16 if device == "cuda" else torch.float32):
-                logits = model(frames, conf)
-                loss = focal_bce(logits, labels) / accum_steps
+            # Forward pass with mixed precision
+            use_autocast = (device == "cuda")
+            with torch.autocast("cuda", dtype=torch.bfloat16, enabled=use_autocast):
+                if use_aux_losses:
+                    logits, z_rgb, z_dwt = model(frames, conf, return_features=True)
+                    manip_types = batch.get("manip_type")
+                    if manip_types is not None:
+                        manip_types = manip_types.to(device, non_blocking=True)
+                    loss, loss_dict = total_loss(
+                        logits, labels, z_rgb, z_dwt, manip_types, **loss_kwargs
+                    )
+                else:
+                    logits = model(frames, conf, return_features=False)
+                    loss, loss_dict = total_loss(logits, labels, **loss_kwargs)
 
+                loss = loss / accum_steps
+
+            # Backward
             loss.backward()
+
             if (i + 1) % accum_steps == 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.train.grad_clip)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
                 opt.step()
                 sched.step()
                 opt.zero_grad(set_to_none=True)
                 step += 1
 
-            if step % 50 == 0:
-                wandb.log({"train/loss": loss.item() * accum_steps, "lr": sched.get_last_lr()[0]}, step=step)
-                print(f"Epoch {epoch} Step {step} Loss: {loss.item() * accum_steps}")
+            epoch_loss += loss_dict["total"]
+            epoch_steps += 1
+
+            # Logging
+            if step > 0 and step % 50 == 0:
+                avg_loss = epoch_loss / epoch_steps
+                lr = sched.get_last_lr()[0]
+                log_msg = (f"Epoch {epoch} | Step {step} | "
+                           f"Loss: {loss_dict['total']:.4f} | "
+                           f"Avg: {avg_loss:.4f} | LR: {lr:.2e}")
+                if "contrastive" in loss_dict:
+                    log_msg += f" | Con: {loss_dict['contrastive']:.4f}"
+                if "alignment" in loss_dict:
+                    log_msg += f" | Align: {loss_dict['alignment']:.4f}"
+                print(log_msg)
+
+                if use_wandb:
+                    wandb.log({
+                        "train/loss_total": loss_dict["total"],
+                        "train/loss_focal": loss_dict["focal"],
+                        "train/loss_contrastive": loss_dict.get("contrastive", 0),
+                        "train/loss_alignment": loss_dict.get("alignment", 0),
+                        "train/lr": lr,
+                    }, step=step)
+
+        # --- Validation ---
+        print(f"\nEpoch {epoch} finished. Running validation...")
+        metrics = evaluate(model, val_loader, device)
+        auc = metrics["auc"]
+        print(f"Epoch {epoch} | Val AUC: {auc:.4f} | "
+              f"EER: {metrics['eer']:.4f} | "
+              f"F1@0.5: {metrics['f1_05']:.4f} | "
+              f"FPR@0.5: {metrics['fpr_at_05']:.4f}")
+
+        if use_wandb:
+            wandb.log({
+                "val/auc": auc,
+                "val/eer": metrics["eer"],
+                "val/f1_05": metrics["f1_05"],
+                "val/precision_05": metrics["precision_05"],
+                "val/recall_05": metrics["recall_05"],
+                "val/fpr_at_05": metrics["fpr_at_05"],
+                "epoch": epoch,
+            })
+
+        # Save checkpoint
+        torch.save({
+            "epoch": epoch,
+            "step": step,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": opt.state_dict(),
+            "scheduler_state_dict": sched.state_dict(),
+            "val_auc": auc,
+        }, f"outputs/checkpoints/epoch{epoch}.pt")
+
+        # Save best
+        if auc > best_auc:
+            best_auc = auc
+            torch.save(model.state_dict(), "outputs/checkpoints/best.pt")
+            print(f"  >> New best model saved (AUC: {best_auc:.4f})")
+
+    print(f"\nTraining complete. Best AUC: {best_auc:.4f}")
+    if use_wandb:
+        wandb.finish()
 
         val_auc = evaluate(model, val_loader, device)
         wandb.log({"val/auc": val_auc, "epoch": epoch})
@@ -118,10 +265,33 @@ def main(cfg):
         print(f"Saved checkpoint to {checkpoint_path}")
 
 if __name__ == "__main__":
-    from omegaconf import OmegaConf
+    parser = argparse.ArgumentParser(description="Train S-MSDT")
+    parser.add_argument("--config-dir", type=str, default="configs",
+                        help="Directory containing YAML config files")
+    parser.add_argument("--override", nargs="*", default=[],
+                        help="Override config values (e.g. train.lr=1e-4)")
+    args = parser.parse_args()
+
+    # Load configs from YAML files
+    data_cfg = OmegaConf.load(os.path.join(args.config_dir, "data.yaml"))
+    model_cfg = OmegaConf.load(os.path.join(args.config_dir, "model.yaml"))
+    train_cfg = OmegaConf.load(os.path.join(args.config_dir, "train.yaml"))
+
     cfg = OmegaConf.create({
-        "model": {"embed_dim": 256, "depth": 4},
-        "train": {"lr": 3e-4, "weight_decay": 0.05, "total_steps": 1000, "grad_accum": 1, "grad_clip": 1.0, "epochs": 1, "workers": 0},
-        "data": {"dataset": "ffpp", "batch_size": 2}
+        "data": data_cfg,
+        "model": model_cfg,
+        "train": train_cfg,
     })
+
+    # Apply CLI overrides
+    if args.override:
+        overrides = OmegaConf.from_dotlist(args.override)
+        cfg = OmegaConf.merge(cfg, overrides)
+
+    print("=" * 60)
+    print("S-MSDT Training Configuration")
+    print("=" * 60)
+    print(OmegaConf.to_yaml(cfg))
+    print("=" * 60)
+
     main(cfg)

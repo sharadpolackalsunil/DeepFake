@@ -1,10 +1,13 @@
-# Python
+# ============================================
+# S-MSDT Project .gitignore
+# ============================================
+
+# ── Python ──
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-env/
 build/
 develop-eggs/
 dist/
@@ -23,31 +26,70 @@ var/
 venv/
 ENV/
 
-# PyTorch
+# ── PyTorch / Model Artifacts ──
 *.pt
 *.pth
+*.onnx
+*.engine
+*.plan
+*.trt
+calib_cache.bin
 
-# IDEs
+# ── Data (large files — download via scripts, don't commit) ──
+data/raw/
+data/cache/
+data/splits/*.csv
+!data/raw/.gitkeep
+!data/cache/.gitkeep
+!data/splits/.gitkeep
+
+# ── Outputs ──
+outputs/checkpoints/
+outputs/logs/
+outputs/*.onnx
+outputs/*.engine
+outputs/triton_repo/
+!outputs/.gitkeep
+
+# ── Experiment tracking ──
+wandb/
+mlruns/
+*.wandb
+
+# ── IDEs ──
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
+.project
+.classpath
+.settings/
 
-# Project specific
-data/raw/*
-!data/raw/.gitkeep
-data/cache/*
-!data/cache/.gitkeep
-outputs/checkpoints/*
-!outputs/checkpoints/.gitkeep
-outputs/logs/*
-!outputs/logs/.gitkeep
-outputs/*.onnx
-outputs/*.engine
-outputs/triton_repo/
-
-# MacOS
+# ── OS files ──
 .DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
 
+# ── Jupyter ──
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Claude / Agents ──
+.claude/*
+!.claude/commands/
+.agents/
+
+# ── Docker ──
+*.log
+docker-compose.override.yml
+
+# ── Misc ──
+*.tmp
+*.bak
+*.orig
+.env
+.env.local
 # Claude
 .claude/

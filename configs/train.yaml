@@ -1,12 +1,25 @@
+# Training configuration
 optimizer: adamw
 lr: 3.0e-4
 weight_decay: 0.05
 betas: [0.9, 0.999]
 schedule: cosine
 warmup_steps: 2000
+warmup_pct: 0.05
 total_steps: 150000
 grad_clip: 1.0
 label_smoothing: 0.05
-epochs: 1
-grad_accum: 1
-workers: 0
+epochs: 50
+grad_accum: 8
+workers: 10
+
+# Loss hyperparameters
+alpha: 0.8            # focal loss alpha (0.8 for FF++ 1:4 real:fake ratio)
+gamma: 2.0            # focal loss focusing parameter
+lambda_contrastive: 0.1   # supervised contrastive loss weight
+lambda_align: 0.05        # cross-domain alignment loss weight
+
+# Optional features
+use_wandb: false
+compile: false              # torch.compile (requires sm_121 support)
+gradient_checkpointing: true   # save memory at cost of compute

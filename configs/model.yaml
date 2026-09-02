@@ -1,2 +1,6 @@
+# Model configuration
 embed_dim: 256
 depth: 4
+heads: 8
+num_classes: 1
+grid: 7
