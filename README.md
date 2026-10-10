@@ -76,7 +76,86 @@ pip install insightface    # for face detection (SCRFD)
 
 ---
 
-## Step-by-Step Guide
+## ⚡ Dedicated Guide for RTX 5090 (32 GB VRAM) & 32 GB RAM PC
+
+This setup guide is tailored for running and training S-MSDT locally on an **NVIDIA GeForce RTX 5090 (32 GB GDDR7)** paired with **32 GB of system RAM** on Windows (PowerShell) or Linux.
+
+### Hardware & Configuration Tuning
+
+| Component | Hardware Specification | Consideration | Tuning Applied |
+|---|---|---|---|
+| **GPU VRAM** | 32 GB GDDR7 (~1,792 GB/s) | High VRAM headroom | Increase micro-batch size from `4` → `8` (or `12`). Disable `gradient_checkpointing` for ~25% faster throughput without running out of memory. |
+| **GPU Architecture** | Blackwell (`sm_120`) | Requires modern CUDA | Use PyTorch 2.6+ with CUDA 12.4/12.8. BF16 mixed-precision is natively accelerated on Blackwell Tensor Cores. |
+| **System RAM** | 32 GB DDR4/DDR5 | Windows uses ~6–8 GB; high worker counts cause OOM page thrashing | Cap DataLoader `workers: 4` (default was 10-12 for DGX Spark). Cap preprocessing `workers: 4`. |
+| **Effective Batch** | 32 chunks | `batch_size: 8` × `grad_accum: 4` = 32 | Preserves paper gradient dynamics while training ~2× faster. |
+
+#### Step-by-Step Commands for RTX 5090 PC (PowerShell)
+
+#### 1. Setup Virtual Environment & Blackwell CUDA
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+
+# Install PyTorch with CUDA 12.4+ (or CUDA 12.8)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+# Verify RTX 5090 detection:
+python -c "import torch; print('CUDA:', torch.cuda.is_available()); print('Device:', torch.cuda.get_device_name(0)); print('VRAM (GB):', round(torch.cuda.get_device_properties(0).total_memory / 1e9, 2))"
+
+# Install remaining dependencies:
+pip install timm==1.0.* opencv-python-headless==4.10.* einops webdataset albumentations omegaconf tqdm scikit-learn insightface onnx onnxruntime-gpu
+```
+
+#### 2. Download Dataset
+Use [`download1.py`](file:///e:/DEEPFAKE/Download_ff/download1.py) with the `--server EU2` flag:
+```powershell
+# Optional: Download 20 videos per class first for quick testing
+python Download_ff/download1.py data/raw/ffpp_c23_mini -d all -c c23 -t videos -n 20 --server EU2
+
+# Stage 1: Full FF++ c23 (all manipulations + originals)
+python Download_ff/download1.py data/raw/ffpp_c23 -d all -c c23 -t videos --server EU2
+```
+
+#### 3. Preprocess Shards (Tuned for 32 GB System RAM)
+Limit `--workers` to `4` so concurrent face detector processes stay well within the 32 GB RAM budget:
+```powershell
+python -m smsdt.preprocess.build_shards `
+    --data-root data/raw/ffpp_c23 `
+    --compression c23 `
+    --out data/cache/ffpp `
+    --chunk-length 8 `
+    --chunk-stride 4 `
+    --img-size 224 `
+    --shard-size 500 `
+    --workers 4
+```
+
+#### 4. Train Model (Tuned for 32 GB VRAM + 32 GB RAM)
+Leverage the 32 GB VRAM on the RTX 5090 by bumping `batch_size=8`, disabling `gradient_checkpointing` for higher training speed, and setting `workers=4`:
+```powershell
+python -m smsdt.train `
+    --override `
+    data.batch_size=8 `
+    train.grad_accum=4 `
+    train.workers=4 `
+    train.gradient_checkpointing=false
+```
+
+#### 5. Evaluate and Export
+```powershell
+# Evaluate on validation split
+python -m smsdt.eval --ckpt outputs/checkpoints/best.pt --split val
+
+# Evaluate on test split
+python -m smsdt.eval --ckpt outputs/checkpoints/best.pt --split test
+
+# Export to ONNX
+python -m smsdt.export.to_onnx --ckpt outputs/checkpoints/best.pt --out outputs/smsdt.onnx
+```
+
+---
+
+## Step-by-Step Guide (General / DGX Spark)
 
 ### Step 1: Download FaceForensics++ Dataset
 
