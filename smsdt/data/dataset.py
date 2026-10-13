@@ -8,15 +8,24 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-import webdataset as wds
+try:
+    import webdataset as wds
+except ImportError:
+    wds = None
 import torchvision.transforms.functional as TF
 import random
 import io
-import numpy as np
-try:
-    import cv2
-except ImportError:
-    cv2 = None
+
+MANIP_TYPE_MAP = {
+    "real": 0,
+    "Deepfakes": 1,
+    "Face2Face": 2,
+    "FaceSwap": 3,
+    "NeuralTextures": 4,
+    "FaceShifter": 5,
+    "DeepFakeDetection": 6,
+}
+
 
 def simulate_compression(frames, quality_range=(30, 90)):
     """Simulates video compression artifacts by applying JPEG compression to frames.
@@ -137,9 +146,29 @@ def build_dataloader(cfg, split="train", num_workers=12):
         # Apply augmentation
         augmented_frames = augment_video(frames, split=split)
 
-        # Confs and labels
+        # Confs, labels, and manipulation type
         conf = sample.get("conf.npy", np.ones((8,)))
-        label = sample.get("label.cls", 0)
+        raw_label = sample.get("label.cls", 0)
+        raw_manip = sample.get("manip.txt", b"real")
+
+        if isinstance(raw_label, bytes):
+            try:
+                label_val = float(raw_label.decode("utf-8").strip())
+            except Exception:
+                label_val = 0.0
+        elif isinstance(raw_label, (str, int)):
+            label_val = float(raw_label)
+        elif isinstance(raw_label, np.ndarray):
+            label_val = float(raw_label.item())
+        else:
+            label_val = float(raw_label)
+
+        if isinstance(raw_manip, bytes):
+            manip_str = raw_manip.decode("utf-8").strip()
+        else:
+            manip_str = str(raw_manip)
+
+        manip_id = MANIP_TYPE_MAP.get(manip_str, 0)
 
         if isinstance(conf, np.ndarray):
             conf = torch.from_numpy(conf).float()
@@ -153,8 +182,12 @@ def build_dataloader(cfg, split="train", num_workers=12):
         return {
             "frames": augmented_frames,
             "conf": conf,
-            "label": torch.tensor(label, dtype=torch.float32)
+            "label": torch.tensor(label_val, dtype=torch.float32),
+            "manip_type": torch.tensor(manip_id, dtype=torch.long),
         }
+
+    if wds is None:
+        raise ImportError("webdataset is not installed. Run 'pip install webdataset' to enable WebDataset shard loading.")
 
     # Build WebDataset pipeline
     is_train = (split == "train")
@@ -169,7 +202,7 @@ def build_dataloader(cfg, split="train", num_workers=12):
         dataset,
         batch_size=None,     # WebDataset handles batching internally
         num_workers=num_workers,
-        pin_memory=True,
+        pin_memory=torch.cuda.is_available(),
         persistent_workers=(num_workers > 0),
     )
     return loader

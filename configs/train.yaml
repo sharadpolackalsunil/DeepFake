@@ -11,7 +11,9 @@ grad_clip: 1.0
 label_smoothing: 0.05
 epochs: 50
 grad_accum: 8
-workers: 10
+workers: 4               # 2-4 recommended on Windows to avoid process spawn memory thrashing
+save_interval_steps: 500 # saves latest.pt every 500 steps for crash recovery
+
 
 # Loss hyperparameters
 alpha: 0.8            # focal loss alpha (0.8 for FF++ 1:4 real:fake ratio)
