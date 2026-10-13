@@ -12,9 +12,12 @@ import glob
 import json
 import argparse
 import cv2
-import numpy as np
-import webdataset as wds
+try:
+    import webdataset as wds
+except ImportError:
+    wds = None
 from tqdm import tqdm
+
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from smsdt.preprocess.align_crop import align_face
@@ -141,6 +144,8 @@ def process_single_video(args_tuple):
 
 def write_shard(chunks, shard_path):
     """Write a list of chunk dicts to a webdataset .tar shard."""
+    if wds is None:
+        raise ImportError("webdataset is required to write shards. Run 'pip install webdataset'")
     os.makedirs(os.path.dirname(shard_path), exist_ok=True)
     with wds.TarWriter(shard_path) as sink:
         for c in chunks:

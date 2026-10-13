@@ -9,10 +9,15 @@ from tqdm import tqdm
 
 def create_detector(ctx_id=0, det_size=(320, 320)):
     """Lazily create the SCRFD face detector (avoids import-time CUDA init)."""
+    import torch
     from insightface.app import FaceAnalysis
-    detector = FaceAnalysis(name="scrfd_10g_bnkps", providers=["CUDAExecutionProvider"])
-    detector.prepare(ctx_id=ctx_id, det_size=det_size)
+    has_cuda = torch.cuda.is_available()
+    providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if has_cuda else ["CPUExecutionProvider"]
+    ctx = ctx_id if has_cuda else -1
+    detector = FaceAnalysis(name="scrfd_10g_bnkps", providers=providers)
+    detector.prepare(ctx_id=ctx, det_size=det_size)
     return detector
+
 
 
 def create_tracker(track_thresh=0.5, match_thresh=0.8, frame_rate=30):
