@@ -82,19 +82,21 @@ def compute_metrics(probs, labels):
     }
 
 
-def evaluate(model, loader, device):
-    """Run evaluation and compute all metrics.
+def evaluate(model, loader, device, top_k_ratio=0.5):
+    """Run evaluation and compute frame-level and video-level metrics.
 
     Args:
         model: S-MSDT model
         loader: validation/test DataLoader
         device: "cuda" or "cpu"
+        top_k_ratio: fraction of highest-scoring chunks per video to average for video-level score
 
     Returns:
         dict of metrics
     """
     model.eval()
     all_logits, all_labels, all_manip_types = [], [], []
+    all_video_ids = []
 
     with torch.no_grad():
         autocast_enabled = (device == "cuda")
@@ -107,6 +109,12 @@ def evaluate(model, loader, device):
                 all_labels.append(batch["label"].cpu())
                 if "manip_type" in batch:
                     all_manip_types.append(batch["manip_type"])
+                if "video_id" in batch:
+                    vids = batch["video_id"]
+                    if isinstance(vids, torch.Tensor):
+                        all_video_ids.extend(vids.tolist())
+                    elif isinstance(vids, (list, tuple)):
+                        all_video_ids.extend(list(vids))
 
     if not all_logits:
         print("Warning: No data in evaluation loader")
@@ -121,27 +129,52 @@ def evaluate(model, loader, device):
     # Apply sigmoid to convert logits → probabilities
     probs = 1.0 / (1.0 + np.exp(-logits))
 
-    # Overall metrics
+    # Overall frame/chunk-level metrics
     metrics = compute_metrics(probs, labels)
 
-    # Per-manipulation-type breakdown
+    # Video-level metrics via top-k chunk aggregation
+    if len(all_video_ids) == len(probs):
+        video_dict = {}
+        for vid, p, l in zip(all_video_ids, probs, labels):
+            video_dict.setdefault(vid, {"probs": [], "label": l})
+            video_dict[vid]["probs"].append(float(p))
+
+        v_probs, v_labels = [], []
+        for vid, data in video_dict.items():
+            ps = sorted(data["probs"], reverse=True)
+            k = max(1, int(len(ps) * top_k_ratio))
+            v_probs.append(float(np.mean(ps[:k])))
+            v_labels.append(data["label"])
+
+        v_probs = np.array(v_probs)
+        v_labels = np.array(v_labels)
+        metrics["video_level"] = compute_metrics(v_probs, v_labels)
+        metrics["num_videos"] = len(video_dict)
+
+    # Per-manipulation-type breakdown (each fake type evaluated against ALL real samples)
     if all_manip_types:
         manip_types = torch.cat(all_manip_types).numpy()
         from smsdt.data.dataset import MANIP_TYPE_MAP
         reverse_map = {v: k for k, v in MANIP_TYPE_MAP.items()}
 
+        real_mask = (labels == 0)
         per_manip = {}
         for mt_id in np.unique(manip_types):
-            mask = (manip_types == mt_id)
-            if mask.sum() < 2:
-                continue
             mt_name = reverse_map.get(int(mt_id), f"type_{mt_id}")
-            mt_metrics = compute_metrics(probs[mask], labels[mask])
-            per_manip[mt_name] = {
-                "auc": mt_metrics["auc"],
-                "f1_05": mt_metrics["f1_05"],
-                "count": int(mask.sum()),
-            }
+            if mt_name == "real":
+                continue
+            fake_mask = (manip_types == mt_id)
+            combined_mask = fake_mask | real_mask
+            if fake_mask.sum() > 0 and real_mask.sum() > 0:
+                mt_metrics = compute_metrics(probs[combined_mask], labels[combined_mask])
+                per_manip[mt_name] = {
+                    "auc": mt_metrics["auc"],
+                    "eer": mt_metrics["eer"],
+                    "f1_05": mt_metrics["f1_05"],
+                    "fake_count": int(fake_mask.sum()),
+                    "real_count": int(real_mask.sum()),
+                    "count": int(combined_mask.sum()),
+                }
         metrics["per_manipulation"] = per_manip
 
     return metrics
@@ -152,6 +185,7 @@ def print_metrics(metrics, title="Evaluation Results"):
     print(f"\n{'=' * 60}")
     print(f"  {title}")
     print(f"{'=' * 60}")
+    print(f"  [Frame / Chunk-Level Metrics]")
     print(f"  AUC:              {metrics['auc']:.4f}")
     print(f"  EER:              {metrics['eer']:.4f} (threshold={metrics['eer_threshold']:.4f})")
     print(f"  Accuracy @0.5:    {metrics['accuracy']:.4f}")
@@ -163,13 +197,21 @@ def print_metrics(metrics, title="Evaluation Results"):
     print(f"  Recall @EER:      {metrics['recall_eer']:.4f}")
     print(f"  F1 @EER:          {metrics['f1_eer']:.4f}")
 
+    if "video_level" in metrics:
+        v_m = metrics["video_level"]
+        print(f"\n  [Video-Level Metrics (N={metrics.get('num_videos', '?')})]")
+        print(f"  Video AUC:        {v_m['auc']:.4f}")
+        print(f"  Video EER:        {v_m['eer']:.4f}")
+        print(f"  Video Acc @0.5:   {v_m['accuracy']:.4f}")
+        print(f"  Video F1 @0.5:    {v_m['f1_05']:.4f}")
+
     if "per_manipulation" in metrics:
-        print(f"\n  Per-Manipulation Breakdown:")
-        print(f"  {'Type':<20} {'AUC':>8} {'F1@0.5':>8} {'Count':>8}")
-        print(f"  {'-'*48}")
+        print(f"\n  Per-Manipulation Breakdown (each fake scored vs all real):")
+        print(f"  {'Type':<20} {'AUC':>8} {'EER':>8} {'F1@0.5':>8} {'Fakes':>8}")
+        print(f"  {'-'*56}")
         for mt_name, mt_data in metrics["per_manipulation"].items():
-            print(f"  {mt_name:<20} {mt_data['auc']:>8.4f} "
-                  f"{mt_data['f1_05']:>8.4f} {mt_data['count']:>8d}")
+            print(f"  {mt_name:<20} {mt_data['auc']:>8.4f} {mt_data.get('eer', 0.5):>8.4f} "
+                  f"{mt_data['f1_05']:>8.4f} {mt_data.get('fake_count', mt_data['count']):>8d}")
 
     print(f"{'=' * 60}\n")
 

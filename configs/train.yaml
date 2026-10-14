@@ -1,12 +1,14 @@
 # Training configuration
 optimizer: adamw
 lr: 3.0e-4
+backbone_lr: 3.0e-5
 weight_decay: 0.05
 betas: [0.9, 0.999]
 schedule: cosine
 warmup_steps: 2000
 warmup_pct: 0.05
-total_steps: 150000
+steps_per_epoch: 1000
+total_steps: 50000
 grad_clip: 1.0
 label_smoothing: 0.05
 epochs: 50
@@ -16,10 +18,11 @@ save_interval_steps: 500 # saves latest.pt every 500 steps for crash recovery
 
 
 # Loss hyperparameters
-alpha: 0.8            # focal loss alpha (0.8 for FF++ 1:4 real:fake ratio)
+alpha: 0.2            # focal loss alpha (0.2 for balanced 1:4 real:fake ratio: 4*0.2 = 0.8 vs 1*0.8 = 0.8)
 gamma: 2.0            # focal loss focusing parameter
 lambda_contrastive: 0.1   # supervised contrastive loss weight
 lambda_align: 0.05        # cross-domain alignment loss weight
+align_mode: decorrelate   # decorrelation/orthogonality between RGB and wavelet streams
 
 # Optional features
 use_wandb: false

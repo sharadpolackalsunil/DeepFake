@@ -11,6 +11,7 @@ import sys
 import glob
 import json
 import argparse
+import numpy as np
 import cv2
 try:
     import webdataset as wds
@@ -36,13 +37,15 @@ FFPP_DATASETS = {
 }
 
 
-def extract_aligned_frames(video_path, detector, out_size=224):
-    """Extract aligned face crops from all frames of a video.
+def extract_aligned_frames(video_path, detector, out_size=224, smooth_landmarks=True, smooth_alpha=0.6):
+    """Extract aligned face crops from all frames of a video with temporal landmark smoothing.
 
     Args:
         video_path: path to .mp4 file
         detector: SCRFD detector instance
         out_size: output crop size
+        smooth_landmarks: whether to temporally smooth facial landmarks to eliminate jitter
+        smooth_alpha: weight for previous smoothed landmarks (EMA)
 
     Returns:
         frames: list of (out_size, out_size, 3) uint8 arrays
@@ -54,6 +57,7 @@ def extract_aligned_frames(video_path, detector, out_size=224):
 
     frames = []
     confs = []
+    prev_kps = None
 
     while True:
         ok, frame = cap.read()
@@ -68,7 +72,17 @@ def extract_aligned_frames(video_path, detector, out_size=224):
             kps = best.kps if hasattr(best, 'kps') and best.kps is not None else None
 
             if kps is not None and kps.shape == (5, 2):
-                aligned = align_face(frame, kps, out_size=out_size)
+                if smooth_landmarks:
+                    if prev_kps is not None:
+                        # Smooth landmarks across consecutive frames to prevent jitter artifacts
+                        kps_to_use = smooth_alpha * prev_kps + (1.0 - smooth_alpha) * kps
+                    else:
+                        kps_to_use = kps.copy()
+                    prev_kps = kps_to_use
+                else:
+                    kps_to_use = kps
+
+                aligned = align_face(frame, kps_to_use, out_size=out_size)
                 frames.append(aligned)
                 confs.append(float(best.det_score))
             else:
@@ -81,6 +95,9 @@ def extract_aligned_frames(video_path, detector, out_size=224):
                     crop = cv2.resize(crop, (out_size, out_size))
                     frames.append(crop)
                     confs.append(float(best.det_score))
+                prev_kps = None
+        else:
+            prev_kps = None
         # If no face detected, skip frame (sparse chunks are handled below)
 
     cap.release()
@@ -190,40 +207,82 @@ def discover_ffpp_videos(data_root, compression="c23"):
 
 
 def build_split_manifests(videos, split_file=None):
-    """Split videos into train/val/test.
+    """Split videos into train/val/test without source identity leakage.
 
-    If split_file is provided, use it (CSV with columns: video_id, split).
-    Otherwise, use a default 80/10/10 split.
+    If split_file is provided, use it (CSV or JSON with official FF++ splits:
+    e.g. 720 train / 140 val / 140 test videos, source/target pairs kept together).
+    Otherwise, groups by source identity and splits 80/10/10 so a real video
+    and all fakes created from that identity stay strictly in the same split.
 
     Returns dict: {"train": [...], "val": [...], "test": [...]}
     """
     if split_file and os.path.exists(split_file):
-        import csv
         split_map = {}
-        with open(split_file, "r") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                split_map[row["video_id"]] = row["split"]
+        if split_file.endswith(".json"):
+            with open(split_file, "r") as f:
+                data = json.load(f)
+            # Support {"train": [...], "val": [...], "test": [...]}
+            if isinstance(data, dict):
+                for split_name, id_list in data.items():
+                    for item in id_list:
+                        if isinstance(item, list):
+                            for sub_id in item:
+                                split_map[str(sub_id)] = split_name
+                            split_map["_".join(map(str, item))] = split_name
+                        else:
+                            split_map[str(item)] = split_name
+        else:
+            import csv
+            with open(split_file, "r") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    split_map[str(row["video_id"])] = row["split"]
 
         splits = {"train": [], "val": [], "test": []}
         for v in videos:
-            _, video_id, _, _ = v
-            s = split_map.get(video_id, "train")
-            splits[s].append(v)
+            vpath, full_id, _, _ = v
+            raw_id = os.path.splitext(os.path.basename(vpath))[0]
+            # Match raw_id, source id, or full_id
+            if raw_id in split_map:
+                s = split_map[raw_id]
+            elif "_" in raw_id and raw_id.split("_")[0] in split_map:
+                s = split_map[raw_id.split("_")[0]]
+            elif full_id in split_map:
+                s = split_map[full_id]
+            else:
+                s = "train"
+            splits.setdefault(s, []).append(v)
         return splits
 
-    # Default split: 80/10/10 by index
+    # Default leak-free split: Group videos by source actor/video identity (80/10/10)
+    identity_groups = {}
+    for v in videos:
+        vpath, full_id, label, manip_type = v
+        raw_id = os.path.splitext(os.path.basename(vpath))[0]
+        # For pairs like 042_056, base identity is the source actor (042)
+        base_id = raw_id.split("_")[0]
+        identity_groups.setdefault(base_id, []).append(v)
+
+    unique_identities = sorted(list(identity_groups.keys()))
     np.random.seed(42)
-    indices = np.random.permutation(len(videos))
-    n = len(videos)
+    perm_ids = np.random.permutation(unique_identities)
+    n = len(perm_ids)
     n_train = int(0.8 * n)
     n_val = int(0.1 * n)
 
-    return {
-        "train": [videos[i] for i in indices[:n_train]],
-        "val": [videos[i] for i in indices[n_train:n_train + n_val]],
-        "test": [videos[i] for i in indices[n_train + n_val:]],
-    }
+    train_ids = set(perm_ids[:n_train])
+    val_ids = set(perm_ids[n_train:n_train + n_val])
+
+    splits = {"train": [], "val": [], "test": []}
+    for base_id, v_list in identity_groups.items():
+        if base_id in train_ids:
+            splits["train"].extend(v_list)
+        elif base_id in val_ids:
+            splits["val"].extend(v_list)
+        else:
+            splits["test"].extend(v_list)
+
+    return splits
 
 
 def main():

@@ -70,23 +70,36 @@ def main(cfg):
 
     # --- Gradient checkpointing ---
     if cfg.train.get("gradient_checkpointing", False):
-        for blk in model.blocks:
-            blk.spatial.gradient_checkpointing = True
-            blk.temporal.gradient_checkpointing = True
+        model.set_gradient_checkpointing(True)
         print("Gradient checkpointing enabled for ViT blocks")
 
-    # --- Optimizer & scheduler ---
+    # --- Optimizer & scheduler with differential learning rates ---
+    backbone_params = list(model.rgb_branch.parameters())
+    backbone_param_ids = set(id(p) for p in backbone_params)
+    head_params = [p for p in model.parameters() if id(p) not in backbone_param_ids]
+    backbone_lr = float(cfg.train.get("backbone_lr", 3e-5))
+    head_lr = float(cfg.train.get("lr", 3e-4))
+
+    param_groups = [
+        {"params": backbone_params, "lr": backbone_lr},
+        {"params": head_params, "lr": head_lr},
+    ]
     opt = torch.optim.AdamW(
-        model.parameters(),
-        lr=cfg.train.lr,
+        param_groups,
         weight_decay=cfg.train.weight_decay,
         betas=tuple(cfg.train.get("betas", [0.9, 0.999])),
     )
+
+    steps_per_epoch = cfg.train.get("steps_per_epoch", 1000)
+    total_steps = cfg.train.get("total_steps", cfg.train.epochs * steps_per_epoch)
+    warmup_steps = cfg.train.get("warmup_steps", int(total_steps * 0.05))
+    pct_start = min(0.3, max(0.01, warmup_steps / max(1, total_steps)))
+
     sched = torch.optim.lr_scheduler.OneCycleLR(
         opt,
-        max_lr=cfg.train.lr,
-        total_steps=cfg.train.total_steps,
-        pct_start=cfg.train.get("warmup_pct", 0.05),
+        max_lr=[backbone_lr, head_lr],
+        total_steps=total_steps,
+        pct_start=pct_start,
     )
 
     # --- Data loaders ---
@@ -112,12 +125,14 @@ def main(cfg):
     grad_clip = cfg.train.get("grad_clip", 1.0)
     use_aux_losses = cfg.train.get("lambda_contrastive", 0.1) > 0
 
-    # Loss hyperparameters
+    # Loss hyperparameters with balanced focal loss alpha and label smoothing
     loss_kwargs = {
-        "alpha": cfg.train.get("alpha", 0.8),
+        "alpha": cfg.train.get("alpha", 0.2),
         "gamma": cfg.train.get("gamma", 2.0),
+        "label_smoothing": cfg.train.get("label_smoothing", 0.0),
         "lambda_contrastive": cfg.train.get("lambda_contrastive", 0.1),
         "lambda_align": cfg.train.get("lambda_align", 0.05),
+        "align_mode": cfg.train.get("align_mode", "decorrelate"),
     }
 
     os.makedirs("outputs/checkpoints", exist_ok=True)
@@ -144,6 +159,8 @@ def main(cfg):
         epoch_loss = 0.0
         epoch_steps = 0
         for i, batch in enumerate(train_loader):
+            if steps_per_epoch is not None and i >= steps_per_epoch:
+                break
             frames = batch["frames"].to(device, non_blocking=True)   # (B,T,3,224,224)
             conf = batch["conf"].to(device, non_blocking=True)       # (B,T)
             labels = batch["label"].float().to(device, non_blocking=True)  # (B,)
@@ -171,7 +188,8 @@ def main(cfg):
             if (i + 1) % accum_steps == 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
                 opt.step()
-                sched.step()
+                if step < total_steps:
+                    sched.step()
                 opt.zero_grad(set_to_none=True)
                 step += 1
 

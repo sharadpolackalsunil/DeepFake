@@ -12,10 +12,11 @@ from .nmsss_vit import NMSSSBlock
 
 
 class SMSDT(nn.Module):
-    def __init__(self, embed_dim=256, depth=4, heads=8, num_classes=1, grid=7):
+    def __init__(self, embed_dim=256, depth=4, heads=8, num_classes=1, grid=7,
+                 stem_type="strided_patch", pool_energy=True):
         super().__init__()
         self.rgb_branch = RGBBranch(out_channels=embed_dim)
-        self.wavelet_branch = WaveletBranch(embed_dim=embed_dim)
+        self.wavelet_branch = WaveletBranch(embed_dim=embed_dim, stem_type=stem_type, pool_energy=pool_energy)
         self.psit = PSIT(embed_dim=embed_dim, grid=grid)
         self.freq_stem = FrequencyStem(embed_dim=embed_dim, grid=grid)
         self.fusion = GatedFusion(embed_dim=embed_dim)
@@ -33,6 +34,10 @@ class SMSDT(nn.Module):
             nn.GELU(),
             nn.Linear(embed_dim // 2, num_classes),
         )
+
+    def set_gradient_checkpointing(self, enable=True):
+        for blk in self.blocks:
+            blk.set_gradient_checkpointing(enable)
 
     def forward(self, frames, conf, return_features=False):
         """
