@@ -83,8 +83,20 @@ def extract_aligned_frames(video_path, detector, out_size=224, smooth_landmarks=
                     kps_to_use = kps
 
                 aligned = align_face(frame, kps_to_use, out_size=out_size)
-                frames.append(aligned)
-                confs.append(float(best.det_score))
+                if aligned is not None:
+                    frames.append(aligned)
+                    confs.append(float(best.det_score))
+                else:
+                    x1, y1, x2, y2 = [int(v) for v in best.bbox]
+                    x1, y1 = max(0, x1), max(0, y1)
+                    x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)
+                    crop = frame[y1:y2, x1:x2]
+                    if crop.size > 0:
+                        crop = cv2.resize(crop, (out_size, out_size))
+                        frames.append(crop)
+                        confs.append(float(best.det_score))
+                    prev_kps = None
+
             else:
                 # Fallback: crop from bbox
                 x1, y1, x2, y2 = [int(v) for v in best.bbox]
