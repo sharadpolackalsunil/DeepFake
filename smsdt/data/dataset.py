@@ -92,11 +92,12 @@ def simulate_sbi_blend(frames, blend_prob=0.25):
     return frames * (1.0 - mask) + transformed * mask
 
 
-def augment_video(frames, split="train", target_size=224, target_frames=8):
+def augment_video(frames, conf=None, split="train", target_size=224, target_frames=8):
     """
     Applies spatial, frequency, and temporal augmentations to video frames,
-    followed by standard ImageNet normalization.
+    keeping landmark confidence scores synchronously aligned, followed by ImageNet normalization.
     frames: (T, H, W, C) numpy array or torch tensor
+    conf: (T,) landmark confidence scores (optional)
     """
     if isinstance(frames, np.ndarray):
         frames = torch.from_numpy(frames).float()
@@ -106,6 +107,9 @@ def augment_video(frames, split="train", target_size=224, target_frames=8):
     # Convert to (T, C, H, W)
     if frames.shape[-1] == 3:
         frames = frames.permute(0, 3, 1, 2)
+
+    if conf is not None and isinstance(conf, np.ndarray):
+        conf = torch.from_numpy(conf).float()
 
     T, C, H, W = frames.shape
 
@@ -120,10 +124,15 @@ def augment_video(frames, split="train", target_size=224, target_frames=8):
                 indices = list(range(start_idx, start_idx + target_frames))
             indices = indices[:target_frames]
             frames = frames[indices]
+            if conf is not None:
+                conf = conf[indices]
         elif T < target_frames:
             pad_size = target_frames - T
             padding = frames[-1:].repeat(pad_size, 1, 1, 1)
             frames = torch.cat([frames, padding], dim=0)
+            if conf is not None:
+                conf_pad = conf[-1:].repeat(pad_size)
+                conf = torch.cat([conf, conf_pad], dim=0)
 
         # 2. Simulated Compression & Blur (robustness against lossy codecs)
         if random.random() < 0.4:
@@ -152,16 +161,30 @@ def augment_video(frames, split="train", target_size=224, target_frames=8):
         if T > target_frames:
             start_idx = (T - target_frames) // 2
             frames = frames[start_idx:start_idx + target_frames]
+            if conf is not None:
+                conf = conf[start_idx:start_idx + target_frames]
         elif T < target_frames:
             pad_size = target_frames - T
             padding = frames[-1:].repeat(pad_size, 1, 1, 1)
             frames = torch.cat([frames, padding], dim=0)
+            if conf is not None:
+                conf_pad = conf[-1:].repeat(pad_size)
+                conf = torch.cat([conf, conf_pad], dim=0)
 
         frames = F.interpolate(frames, size=(target_size, target_size), mode='bilinear', align_corners=False)
 
     # 5. Apply ImageNet Normalization
     frames = normalize_imagenet(frames)
+
+    if conf is not None:
+        if conf.shape[0] > target_frames:
+            conf = conf[:target_frames]
+        elif conf.shape[0] < target_frames:
+            conf = F.pad(conf, (0, target_frames - conf.shape[0]), value=1.0)
+        return frames, conf
+
     return frames
+
 
 
 def build_dataloader(cfg, split="train", num_workers=12):
@@ -192,15 +215,15 @@ def build_dataloader(cfg, split="train", num_workers=12):
             # fallback mock data
             frames = np.zeros((16, 224, 224, 3), dtype=np.uint8)
 
-        # Apply augmentation and ImageNet normalization
-        augmented_frames = augment_video(frames, split=split)
-
         # Confs, labels, manipulation type, and video_id
         conf = sample.get("conf.npy", np.ones((8,)))
         raw_label = sample.get("label.cls", 0)
         raw_manip = sample.get("manip.txt", b"real")
         key = sample.get("__key__", "unknown_000000")
         video_id = key.rsplit("_", 1)[0] if "_" in key else key
+
+        # Apply augmentation, synchronized temporal frame/conf alignment, and ImageNet normalization
+        augmented_frames, conf = augment_video(frames, conf=conf, split=split)
 
         if isinstance(raw_label, bytes):
             try:
@@ -221,15 +244,6 @@ def build_dataloader(cfg, split="train", num_workers=12):
 
         manip_id = MANIP_TYPE_MAP.get(manip_str, 0)
 
-        if isinstance(conf, np.ndarray):
-            conf = torch.from_numpy(conf).float()
-
-        # Align confidence length with target frames if necessary
-        if conf.shape[0] > 8:
-            conf = conf[:8]
-        elif conf.shape[0] < 8:
-            conf = F.pad(conf, (0, 8 - conf.shape[0]), value=1.0)
-
         return {
             "frames": augmented_frames,
             "conf": conf,
@@ -244,21 +258,21 @@ def build_dataloader(cfg, split="train", num_workers=12):
     # Build WebDataset pipeline
     is_train = (split == "train")
     dataset = wds.WebDataset(shard_spec, resampled=is_train)
-    if is_train:
-        # Prevent infinite loops by bounding the epoch length
-        epoch_length = getattr(cfg, "epoch_length", None)
-        if hasattr(cfg, "get"):
-            epoch_length = cfg.get("epoch_length", None)
-        if epoch_length is None:
-            epoch_length = 1000
-        dataset = dataset.with_epoch(epoch_length)
-
     dataset = (
         dataset
         .decode()
         .map(decode_and_format)
         .batched(batch_size)
     )
+
+    if is_train:
+        # If epoch_length is specified, bound the number of batches per epoch
+        epoch_length = getattr(cfg, "epoch_length", None)
+        if hasattr(cfg, "get"):
+            epoch_length = cfg.get("epoch_length", None)
+        if epoch_length is not None:
+            dataset = dataset.with_epoch(epoch_length)
+
 
     loader = DataLoader(
         dataset,

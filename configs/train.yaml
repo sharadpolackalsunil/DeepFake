@@ -12,7 +12,7 @@ total_steps: 50000
 grad_clip: 1.0
 label_smoothing: 0.05
 epochs: 50
-grad_accum: 8
+grad_accum: 4            # 8 micro-batch * 4 accum = 32 effective batch size
 workers: 4               # 2-4 recommended on Windows to avoid process spawn memory thrashing
 save_interval_steps: 500 # saves latest.pt every 500 steps for crash recovery
 
@@ -26,5 +26,6 @@ align_mode: decorrelate   # decorrelation/orthogonality between RGB and wavelet 
 
 # Optional features
 use_wandb: false
-compile: false              # torch.compile (requires sm_121 support)
-gradient_checkpointing: true   # save memory at cost of compute
+compile: false              # torch.compile
+gradient_checkpointing: false  # False on RTX 5090 (32GB VRAM fits all activations; ~25% faster)
+

@@ -1,6 +1,7 @@
 # Data configuration
 dataset: ffpp
-batch_size: 4
+batch_size: 8
+
 cache_root: data/cache
 data_root: data/raw/ffpp_c23
 compression: c23

@@ -10,5 +10,8 @@ REF_5PT = np.array([
 def align_face(frame, kps, out_size=224):
     dst = REF_5PT * (out_size / 112.0)
     M, _ = cv2.estimateAffinePartial2D(kps.astype(np.float32), dst, method=cv2.LMEDS)
+    if M is None:
+        return None
     aligned = cv2.warpAffine(frame, M, (out_size, out_size), borderValue=0.0)
+
     return aligned

@@ -22,7 +22,9 @@ def export_to_onnx(ckpt_path, out_path, model=None):
     dummy_frames = torch.randn(1, 8, 3, 224, 224, device=device)
     dummy_conf = torch.ones(1, 8, device=device)
 
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    dirname = os.path.dirname(out_path)
+    if dirname:
+        os.makedirs(dirname, exist_ok=True)
 
     torch.onnx.export(
         model, (dummy_frames, dummy_conf), out_path,

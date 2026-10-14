@@ -55,7 +55,10 @@ def main(cfg):
         heads=cfg.model.get("heads", 8),
         num_classes=cfg.model.get("num_classes", 1),
         grid=cfg.model.get("grid", 7),
+        stem_type=cfg.model.get("stem_type", "strided_patch"),
+        pool_energy=cfg.model.get("pool_energy", True),
     ).to(device)
+
 
     param_count = sum(p.numel() for p in model.parameters()) / 1e6
     print(f"Model parameters: {param_count:.1f}M")
@@ -149,7 +152,8 @@ def main(cfg):
         model.load_state_dict(checkpoint_data["model_state_dict"])
         opt.load_state_dict(checkpoint_data["optimizer_state_dict"])
         sched.load_state_dict(checkpoint_data["scheduler_state_dict"])
-        start_epoch = checkpoint_data.get("epoch", 0) + 1
+        is_epoch_end = checkpoint_data.get("is_epoch_end", True)
+        start_epoch = checkpoint_data.get("epoch", 0) + 1 if is_epoch_end else checkpoint_data.get("epoch", 0)
         step = checkpoint_data.get("step", 0)
         best_auc = checkpoint_data.get("best_auc", 0.0)
         print(f"Resuming training from epoch {start_epoch}, step {step} (Best AUC: {best_auc:.4f})")
@@ -158,9 +162,10 @@ def main(cfg):
     for epoch in range(start_epoch, cfg.train.epochs):
         epoch_loss = 0.0
         epoch_steps = 0
+        epoch_opt_steps = 0
+        last_batch_idx = 0
         for i, batch in enumerate(train_loader):
-            if steps_per_epoch is not None and i >= steps_per_epoch:
-                break
+            last_batch_idx = i
             frames = batch["frames"].to(device, non_blocking=True)   # (B,T,3,224,224)
             conf = batch["conf"].to(device, non_blocking=True)       # (B,T)
             labels = batch["label"].float().to(device, non_blocking=True)  # (B,)
@@ -192,6 +197,7 @@ def main(cfg):
                     sched.step()
                 opt.zero_grad(set_to_none=True)
                 step += 1
+                epoch_opt_steps += 1
 
                 # Periodic step-based checkpointing (so progress is saved mid-epoch)
                 if save_interval_steps > 0 and step % save_interval_steps == 0:
@@ -202,9 +208,13 @@ def main(cfg):
                         "optimizer_state_dict": opt.state_dict(),
                         "scheduler_state_dict": sched.state_dict(),
                         "best_auc": best_auc,
+                        "is_epoch_end": False,
                     }
                     torch.save(periodic_data, checkpoint_path)
                     print(f"  [Checkpoint] Periodic save at step {step} -> {checkpoint_path}")
+
+                if steps_per_epoch is not None and epoch_opt_steps >= steps_per_epoch:
+                    break
 
             epoch_loss += loss_dict["total"]
             epoch_steps += 1
@@ -230,6 +240,15 @@ def main(cfg):
                         "train/loss_alignment": loss_dict.get("alignment", 0),
                         "train/lr": lr,
                     }, step=step)
+
+        # Flush any remaining unaccumulated gradients if loop ended on partial accumulation
+        if (last_batch_idx + 1) % accum_steps != 0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+            opt.step()
+            if step < total_steps:
+                sched.step()
+            opt.zero_grad(set_to_none=True)
+            step += 1
 
         # --- Validation ---
         print(f"\nEpoch {epoch} finished. Running validation...")
@@ -260,10 +279,12 @@ def main(cfg):
             "scheduler_state_dict": sched.state_dict(),
             "val_auc": auc,
             "best_auc": best_auc,
+            "is_epoch_end": True,
         }
         torch.save(epoch_save_data, f"outputs/checkpoints/epoch{epoch}.pt")
         torch.save(epoch_save_data, checkpoint_path)
         print(f"  [Checkpoint] Saved epoch {epoch} -> {checkpoint_path}")
+
 
         # Save best
         if auc > best_auc:
