@@ -9,17 +9,21 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def focal_bce(logits, targets, alpha=0.8, gamma=2.0):
-    """Focal binary cross-entropy loss.
+def focal_bce(logits, targets, alpha=0.2, gamma=2.0, label_smoothing=0.0):
+    """Focal binary cross-entropy loss with class-balancing and optional label smoothing.
 
     Args:
         logits: (B,) raw model output (before sigmoid)
         targets: (B,) binary labels (0=real, 1=fake)
-        alpha: weight for the positive (fake) class. Set to 0.8 for FF++'s 1:4
+        alpha: weight for the positive (fake) class. Set to 0.2 for FF++'s 1:4
                real:fake ratio so effective per-sample weight is balanced:
-               fake gets alpha/4 ≈ 0.2, real gets (1-alpha)/1 = 0.2
+               4 fakes * 0.2 = 0.8 effective weight vs 1 real * (1 - 0.2) = 0.8 effective weight.
         gamma: focusing parameter — downweights easy/well-classified examples
+        label_smoothing: fraction of label smoothing to apply
     """
+    if label_smoothing > 0.0:
+        targets = targets * (1.0 - label_smoothing) + 0.5 * label_smoothing
+
     p = torch.sigmoid(logits)
     ce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
     pt = p * targets + (1 - p) * (1 - targets)
@@ -33,15 +37,13 @@ def supervised_contrastive_loss(features, labels, manipulation_types=None,
     """Supervised contrastive loss on wavelet tokens.
 
     Pulls same-manipulation-type fakes together and pushes real/fake apart.
-    Helps the frequency branch specialize instead of being drowned out
-    by the (usually stronger) RGB gradient.
+    Falls back gracefully to binary labels when batch size or class diversity
+    yields no positive pairs in small batches.
 
     Args:
         features: (B, D) pooled wavelet features
         labels: (B,) binary labels
         manipulation_types: (B,) integer manipulation type IDs (optional).
-                           If provided, positive pairs require same manipulation type.
-                           If None, falls back to same binary label.
         temperature: softmax temperature
     """
     features = F.normalize(features, dim=-1)
@@ -52,16 +54,23 @@ def supervised_contrastive_loss(features, labels, manipulation_types=None,
     sim = features @ features.T / temperature  # (B, B)
 
     # Build positive pair mask
+    mask = None
     if manipulation_types is not None:
-        # Same manipulation type (or both real) = positive pair
-        mask = (manipulation_types.unsqueeze(0) == manipulation_types.unsqueeze(1)).float()
-    else:
-        # Fallback: same binary label = positive pair
-        mask = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
+        cand_mask = (manipulation_types.unsqueeze(0) == manipulation_types.unsqueeze(1)).float()
+        cand_mask.fill_diagonal_(0)
+        if cand_mask.sum(1).gt(0).any():
+            mask = cand_mask
 
-    mask.fill_diagonal_(0)  # exclude self-pairs
+    if mask is None:
+        # Fallback: same binary label (real-real or fake-fake) = positive pair
+        cand_mask = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
+        cand_mask.fill_diagonal_(0)
+        if cand_mask.sum(1).gt(0).any():
+            mask = cand_mask
 
-    # Check if there are any positive pairs
+    if mask is None:
+        return torch.tensor(0.0, device=features.device, requires_grad=True)
+
     pos_count = mask.sum(1)
     valid = (pos_count > 0)
     if not valid.any():
@@ -69,7 +78,6 @@ def supervised_contrastive_loss(features, labels, manipulation_types=None,
 
     # Log-softmax over all pairs (excluding self)
     self_mask = torch.eye(B, device=features.device, dtype=torch.bool)
-    # Set self-similarity to large negative so it's excluded from softmax
     sim = sim.masked_fill(self_mask, -1e9)
     log_prob = sim - torch.logsumexp(sim, dim=1, keepdim=True)
 
@@ -79,26 +87,34 @@ def supervised_contrastive_loss(features, labels, manipulation_types=None,
     return loss.mean()
 
 
-def alignment_loss(z_rgb, z_dwt):
-    """Cross-domain alignment loss (CAL).
+def alignment_loss(z_rgb, z_dwt, mode="decorrelate"):
+    """Cross-domain feature alignment / decorrelation loss.
 
-    Encourages RGB and wavelet features to learn complementary representations
-    while maintaining shared structure for deepfake artifact localization.
+    Modes:
+        - "decorrelate" / "orthogonality": Penalizes correlation between RGB and
+          wavelet representations so the frequency branch specializes rather
+          than mimicking RGB features.
+        - "cosine": Original pulling loss (2 - 2*cos).
 
     Args:
         z_rgb: (B, D) pooled RGB features
         z_dwt: (B, D) pooled wavelet features
+        mode: "decorrelate" (default) or "cosine"
     """
     z_rgb_n = F.normalize(z_rgb, dim=-1)
     z_dwt_n = F.normalize(z_dwt, dim=-1)
-    # Cosine similarity → alignment = 2 - 2*cos_sim
-    return 2 - 2 * (z_rgb_n * z_dwt_n).sum(dim=-1).mean()
+
+    if mode in ("decorrelate", "orthogonality"):
+        return (z_rgb_n * z_dwt_n).sum(dim=-1).abs().mean()
+    else:
+        return 2 - 2 * (z_rgb_n * z_dwt_n).sum(dim=-1).mean()
 
 
 def total_loss(logits, targets, z_rgb=None, z_dwt=None,
-               manipulation_types=None, alpha=0.8, gamma=2.0,
-               lambda_contrastive=0.1, lambda_align=0.05):
-    """Combined loss: focal BCE + supervised contrastive + alignment.
+               manipulation_types=None, alpha=0.2, gamma=2.0,
+               label_smoothing=0.0, lambda_contrastive=0.1, lambda_align=0.05,
+               align_mode="decorrelate"):
+    """Combined loss: balanced focal BCE + supervised contrastive + decorrelation alignment.
 
     Args:
         logits: (B,) raw model output
@@ -106,11 +122,14 @@ def total_loss(logits, targets, z_rgb=None, z_dwt=None,
         z_rgb: (B, D) pooled RGB features (optional, for alignment loss)
         z_dwt: (B, D) pooled wavelet features (optional, for contrastive + alignment)
         manipulation_types: (B,) manipulation type IDs (optional)
-        alpha, gamma: focal loss hyperparameters
+        alpha, gamma: focal loss hyperparameters (default alpha=0.2 for 1:4 real:fake ratio)
+        label_smoothing: label smoothing factor
         lambda_contrastive: weight for contrastive loss
         lambda_align: weight for alignment loss
+        align_mode: "decorrelate" or "cosine"
     """
-    L_focal = focal_bce(logits, targets, alpha=alpha, gamma=gamma)
+    L_focal = focal_bce(logits, targets, alpha=alpha, gamma=gamma,
+                        label_smoothing=label_smoothing)
 
     L_total = L_focal
     loss_dict = {"focal": L_focal.item()}
@@ -121,7 +140,7 @@ def total_loss(logits, targets, z_rgb=None, z_dwt=None,
         loss_dict["contrastive"] = L_con.item()
 
     if z_rgb is not None and z_dwt is not None and lambda_align > 0:
-        L_align = alignment_loss(z_rgb, z_dwt)
+        L_align = alignment_loss(z_rgb, z_dwt, mode=align_mode)
         L_total = L_total + lambda_align * L_align
         loss_dict["alignment"] = L_align.item()
 
