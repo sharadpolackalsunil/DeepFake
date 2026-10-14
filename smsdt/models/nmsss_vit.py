@@ -1,10 +1,12 @@
 import torch
 import torch.nn as nn
+from torch.utils.checkpoint import checkpoint
 from einops import rearrange
 
 class TransformerBlock(nn.Module):
     def __init__(self, dim=256, heads=8, mlp_ratio=4.0, drop=0.1):
         super().__init__()
+        self.gradient_checkpointing = False
         self.norm1 = nn.LayerNorm(dim)
         self.attn = nn.MultiheadAttention(dim, heads, dropout=drop, batch_first=True)
         self.norm2 = nn.LayerNorm(dim)
@@ -13,19 +15,30 @@ class TransformerBlock(nn.Module):
             nn.Linear(int(dim * mlp_ratio), dim), nn.Dropout(drop),
         )
 
-    def forward(self, x):
+    def _forward(self, x):
         h = self.norm1(x)
         x = x + self.attn(h, h, h, need_weights=False)[0]
         x = x + self.mlp(self.norm2(x))
         return x
 
+    def forward(self, x):
+        if self.gradient_checkpointing and self.training and x.requires_grad:
+            return checkpoint(self._forward, x, use_reentrant=False)
+        return self._forward(x)
+
 class NMSSSBlock(nn.Module):
     """One spatial-attn -> temporal-diff -> temporal-attn stage."""
     def __init__(self, dim=256, heads=8):
         super().__init__()
+        self.gradient_checkpointing = False
         self.spatial = TransformerBlock(dim, heads)
         self.diff_proj = nn.Conv1d(dim * 2, dim, 1)   # applied per-token across the concat([f_t, f_t - f_{t-1}])
         self.temporal = TransformerBlock(dim, heads)
+
+    def set_gradient_checkpointing(self, enable=True):
+        self.gradient_checkpointing = enable
+        self.spatial.gradient_checkpointing = enable
+        self.temporal.gradient_checkpointing = enable
 
     def forward(self, x, conf):
         """
@@ -33,6 +46,11 @@ class NMSSSBlock(nn.Module):
         conf: (B, T)        SCRFD landmark confidence per frame
         """
         B, T, N, D = x.shape
+
+        # Sync gradient checkpointing flag if modified directly on block
+        if self.gradient_checkpointing:
+            self.spatial.gradient_checkpointing = True
+            self.temporal.gradient_checkpointing = True
 
         # --- Spatial self-attention: intra-frame ---
         x = rearrange(x, "b t n d -> (b t) n d")

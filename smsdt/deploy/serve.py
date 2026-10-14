@@ -50,12 +50,15 @@ class TensorRTEngine:
             else:
                 self.outputs.append({'host': host_mem, 'device': device_mem})
 
-    def infer(self, input_data):
-        # Copy input data to pagelocked memory
-        np.copyto(self.inputs[0]['host'], input_data.ravel())
-
-        # Transfer input data to the GPU
+    def infer(self, frames, conf=None):
+        # Copy frames data to pagelocked memory
+        np.copyto(self.inputs[0]['host'], frames.ravel())
         cuda.memcpy_htod_async(self.inputs[0]['device'], self.inputs[0]['host'], self.stream)
+
+        # Copy conf data if engine expects 2 inputs
+        if len(self.inputs) > 1 and conf is not None:
+            np.copyto(self.inputs[1]['host'], conf.ravel())
+            cuda.memcpy_htod_async(self.inputs[1]['device'], self.inputs[1]['host'], self.stream)
 
         # Run inference
         self.context.execute_async_v2(bindings=self.bindings, stream_handle=self.stream.handle)
@@ -67,6 +70,10 @@ class TensorRTEngine:
         self.stream.synchronize()
 
         return self.outputs[0]['host']
+
+
+IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(3, 1, 1)
+IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(3, 1, 1)
 
 
 def main(args):
@@ -92,7 +99,7 @@ def main(args):
     T = 8 # Number of frames per chunk
 
     # Pre-allocate dummy conf array for the pipeline
-    dummy_conf = np.ones((1, T, 1), dtype=np.float32)
+    dummy_conf = np.ones((1, T), dtype=np.float32)
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -108,11 +115,11 @@ def main(args):
         crop = frame[start_y:start_y+min_dim, start_x:start_x+min_dim]
         resized = cv2.resize(crop, (224, 224))
 
-        # Convert to RGB and normalize
+        # Convert to RGB and apply standard ImageNet normalization
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         normalized = (rgb.astype(np.float32) / 255.0)
-        # HWC to CHW
         chw = np.transpose(normalized, (2, 0, 1))
+        chw = (chw - IMAGENET_MEAN) / IMAGENET_STD
 
         frames_buffer.append(chw)
 
@@ -121,18 +128,14 @@ def main(args):
             batch = np.stack(frames_buffer, axis=0)
             batch = np.expand_dims(batch, axis=0)
 
-            # The TRT engine expects inputs: x (1, T, C, H, W), conf (1, T, 1)
-            # Actually, depending on ONNX export, it might just take x. Let's assume just x for now
-            # if we exported with conf, we'd need to pack them or have multiple bindings.
-
             start_time = time.time()
             if engine is not None:
-                output = engine.infer(batch)
-                score = output[0]
+                output = engine.infer(batch, dummy_conf)
+                score = float(output[0])
             else:
                 # Mock inference
                 time.sleep(0.01) # Simulate ~10ms inference
-                score = np.random.rand()
+                score = float(np.random.rand())
 
             latency = (time.time() - start_time) * 1000
 

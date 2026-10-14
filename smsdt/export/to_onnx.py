@@ -2,13 +2,20 @@ import torch
 import os
 from smsdt.models.smsdt import SMSDT
 
-def export_to_onnx(ckpt_path, out_path):
+def export_to_onnx(ckpt_path, out_path, model=None):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Exporting to ONNX on {device}...")
-    model = SMSDT().eval().to(device)
+    if model is None:
+        model = SMSDT()
+    model = model.eval().to(device)
     if os.path.exists(ckpt_path):
-        model.load_state_dict(torch.load(ckpt_path, map_location=device))
-        print(f"Loaded checkpoint from {ckpt_path}")
+        ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
+        if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
+            model.load_state_dict(ckpt["model_state_dict"])
+            print(f"Loaded checkpoint from {ckpt_path} (epoch {ckpt.get('epoch', '?')})")
+        else:
+            model.load_state_dict(ckpt)
+            print(f"Loaded checkpoint from {ckpt_path}")
     else:
         print(f"Warning: Checkpoint {ckpt_path} not found. Exporting random weights.")
 
