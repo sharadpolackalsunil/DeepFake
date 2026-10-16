@@ -341,6 +341,10 @@ def main():
     for split_name, split_videos in splits.items():
         print(f"  {split_name}: {len(split_videos)} videos")
 
+    # Ensure SCRFD detection model is downloaded once on main thread before worker spawning
+    from smsdt.preprocess.detect_track import create_detector
+    _ = create_detector(ctx_id=0, det_size=(320, 320))
+
     # Process each split
     for split_name, split_videos in splits.items():
         print(f"\n{'='*60}")
