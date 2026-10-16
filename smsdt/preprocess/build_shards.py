@@ -350,6 +350,8 @@ def main():
                         help="Number of parallel workers (set >1 for multi-GPU preprocessing)")
     parser.add_argument("--splits", type=str, default="train,val,test",
                         help="Comma-separated splits to process (e.g. 'val,test')")
+    parser.add_argument("--split-file", type=str, default=None,
+                        help="CSV file with video_id,split columns")
     parser.add_argument("--force", action="store_true",
                         help="Force overwrite existing shards")
     args = parser.parse_args()
