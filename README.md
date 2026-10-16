@@ -69,22 +69,31 @@ This repository is optimized specifically for the **NVIDIA GeForce RTX 5090 (32 
 Open **PowerShell** and navigate to the project directory:
 
 ```powershell
-# 1. Create a Python virtual environment (Python 3.10+ recommended)
+# 1. Enable script execution if restricted
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+# 2. Create and activate a Python virtual environment
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 
-# 2. Upgrade pip and build tools
+# 3. Upgrade pip and build tools
 python -m pip install --upgrade pip setuptools wheel
 
-# 3. Install PyTorch with Blackwell (sm_120) compatible CUDA 12.8
+# 4. Install PyTorch with Blackwell (sm_120) compatible CUDA 12.8
 pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
 
-# 4. Verify RTX 5090 detection and VRAM in PowerShell:
-python -c "import torch; print('CUDA Available:', torch.cuda.is_available()); print('Device Name:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None'); print('VRAM (GB):', round(torch.cuda.get_device_properties(0).total_memory / 1e9, 2) if torch.cuda.is_available() else 0)"
+# 5. Verify RTX 5090 detection and sm_120 compute capability:
+python -c "import torch; print('CUDA Available:', torch.cuda.is_available()); print('Device Name:', torch.cuda.get_device_name(0)); print('Compute Capability:', torch.cuda.get_device_capability(0)); print('VRAM (GB):', round(torch.cuda.get_device_properties(0).total_memory / 1e9, 2))"
 
-# 5. Install all required dependencies
-pip install timm==1.0.* opencv-python-headless==4.10.* einops webdataset albumentations omegaconf tqdm scikit-learn insightface
+# 6. Install all dependencies (pin onnxruntime-gpu==1.20.2 for CUDA 12.x compatibility)
+pip install timm==1.0.* opencv-python-headless==4.10.* einops webdataset albumentations omegaconf tqdm scikit-learn insightface onnx "onnxruntime-gpu==1.20.2"
+
+# 7. Verify ONNX Runtime GPU provider loads cleanly:
+python -c "import torch, os; p = os.path.join(os.path.dirname(torch.__file__), 'lib'); os.add_dll_directory(p); import onnxruntime as ort; print('Available Providers:', ort.get_available_providers())"
 ```
+
+> [!TIP]
+> **Why `onnxruntime-gpu==1.20.2`?** Unpinned `pip install onnxruntime-gpu` pulls newer releases compiled for CUDA 13 (requiring `cublasLt64_13.dll`), whereas PyTorch cu128 provides CUDA 12.8 runtime libraries (`cublasLt64_12.dll`). Version `1.20.2` targets CUDA 12.x directly and seamlessly executes SCRFD face detection on the RTX 5090.
 
 ---
 
@@ -108,37 +117,32 @@ python Download_ff/download1.py data/raw/ffpp_c40 -d all -c c40 -t videos --serv
 **Expected Raw Folder Structure:**
 ```
 data/raw/ffpp_c23/
-├── original_sequences/youtube/c23/videos/*.mp4
-├── manipulated_sequences/Deepfakes/c23/videos/*.mp4
-├── manipulated_sequences/Face2Face/c23/videos/*.mp4
-├── manipulated_sequences/FaceSwap/c23/videos/*.mp4
-├── manipulated_sequences/NeuralTextures/c23/videos/*.mp4
-├── manipulated_sequences/FaceShifter/c23/videos/*.mp4
-└── manipulated_sequences/DeepFakeDetection/c23/videos/*.mp4
+├── original_sequences/
+│   ├── youtube/c23/videos/*.mp4
+│   └── actors/c23/videos/*.mp4
+└── manipulated_sequences/
+    ├── Deepfakes/c23/videos/*.mp4
+    ├── Face2Face/c23/videos/*.mp4
+    ├── FaceSwap/c23/videos/*.mp4
+    ├── NeuralTextures/c23/videos/*.mp4
+    ├── FaceShifter/c23/videos/*.mp4
+    └── DeepFakeDetection/c23/videos/*.mp4
 ```
 
 ---
 
 ### Step 3: Preprocess Videos into WebDataset Shards
 
-The preprocessing pipeline performs:
-1. **Face Detection & Tracking:** SCRFD extracts face bounding boxes and 5-point facial landmarks per frame.
-2. **Alignment & Normalization:** Standard ArcFace 5-point affine transformation aligns and crops each face to 224×224 pixels.
-3. **Temporal Chunking:** Aligned faces are grouped into sequences of length $T = 8$ with stride 4.
-4. **WebDataset Sharding:** Chunks and landmark confidence scores are serialized into `.tar` archive shards for high-throughput I/O.
+The preprocessing pipeline in `smsdt.preprocess.build_shards` features:
+1. **GPU-Accelerated Face Detection:** Uses SCRFD (`det_10g.onnx` from `buffalo_l`) via `CUDAExecutionProvider` on the RTX 5090.
+2. **Worker Model Caching:** The face detector ONNX session is created once per worker process and reused across all videos, eliminating session reload overhead.
+3. **Alignment & Normalization:** Standard ArcFace 5-point affine transformation aligns and crops each face to 224×224 pixels with temporal landmark smoothing.
+4. **Streaming Shard Writing (Memory-Safe):** Chunks are streamed to disk in 500-chunk `.tar` shards as videos finish. RAM usage is strictly bounded (<1 GB), preventing memory exhaustion on massive video collections.
 
-On Windows, use backticks (`` ` ``) for line continuation in PowerShell:
+Run in PowerShell as a single command:
 
 ```powershell
-python -m smsdt.preprocess.build_shards `
-    --data-root data/raw/ffpp_c23 `
-    --compression c23 `
-    --out data/cache/ffpp `
-    --chunk-length 8 `
-    --chunk-stride 4 `
-    --img-size 224 `
-    --shard-size 500 `
-    --workers 4
+python -m smsdt.preprocess.build_shards --data-root "data/raw/ffpp_c23" --compression c23 --out "data/cache/ffpp" --chunk-length 8 --chunk-stride 4 --img-size 224 --shard-size 500 --workers 4
 ```
 
 **Output Shard Files:**
