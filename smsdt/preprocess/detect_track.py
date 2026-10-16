@@ -14,7 +14,7 @@ def create_detector(ctx_id=0, det_size=(320, 320)):
     has_cuda = torch.cuda.is_available()
     providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if has_cuda else ["CPUExecutionProvider"]
     ctx = ctx_id if has_cuda else -1
-    detector = FaceAnalysis(name="scrfd_10g_bnkps", providers=providers)
+    detector = FaceAnalysis(name="buffalo_l", allowed_modules=['detection'], providers=providers)
     detector.prepare(ctx_id=ctx, det_size=det_size)
     return detector
 
