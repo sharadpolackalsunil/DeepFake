@@ -143,6 +143,18 @@ def make_chunks(frames, confs, chunk_length=8, stride=4):
     return chunks
 
 
+_WORKER_DETECTOR = None
+
+
+def get_worker_detector():
+    """Returns a process-local SCRFD detector instance, created once per worker process."""
+    global _WORKER_DETECTOR
+    if _WORKER_DETECTOR is None:
+        from smsdt.preprocess.detect_track import create_detector
+        _WORKER_DETECTOR = create_detector(ctx_id=0, det_size=(320, 320))
+    return _WORKER_DETECTOR
+
+
 def process_single_video(args_tuple):
     """Process one video: detect → align → chunk. (Worker function for multiprocessing.)
 
@@ -150,9 +162,7 @@ def process_single_video(args_tuple):
     """
     video_path, video_id, label, manip_type, out_size, chunk_length, stride = args_tuple
 
-    # Each worker creates its own detector (can't pickle CUDA objects)
-    from smsdt.preprocess.detect_track import create_detector
-    detector = create_detector(ctx_id=0, det_size=(320, 320))
+    detector = get_worker_detector()
 
     frames, confs = extract_aligned_frames(video_path, detector, out_size)
     chunks = make_chunks(frames, confs, chunk_length, stride)
@@ -351,19 +361,39 @@ def main():
         print(f"Processing {split_name} split ({len(split_videos)} videos)...")
         print(f"{'='*60}")
 
-        all_chunks = []
+        # For training, shuffle video order so classes are evenly distributed across shards
+        split_video_list = list(split_videos)
+        if split_name == "train":
+            np.random.seed(42)
+            np.random.shuffle(split_video_list)
+
+        shard_idx = 0
+        chunk_buffer = []
+        total_chunks = 0
+
+        def flush_buffer(force=False):
+            nonlocal shard_idx, chunk_buffer
+            while len(chunk_buffer) >= args.shard_size or (force and chunk_buffer):
+                n_take = min(args.shard_size, len(chunk_buffer))
+                shard_chunks = chunk_buffer[:n_take]
+                chunk_buffer = chunk_buffer[n_take:]
+                if split_name == "train":
+                    np.random.shuffle(shard_chunks)
+                shard_path = os.path.join(args.out, f"{split_name}-{shard_idx:06d}.tar")
+                write_shard(shard_chunks, shard_path)
+                shard_idx += 1
 
         if args.workers <= 1:
             # Sequential processing (simpler, works with single GPU)
             from smsdt.preprocess.detect_track import create_detector
             detector = create_detector(ctx_id=0, det_size=(320, 320))
 
-            for vpath, video_id, label, manip_type in tqdm(split_videos, desc=split_name):
+            for vpath, video_id, label, manip_type in tqdm(split_video_list, desc=split_name):
                 frames, confs = extract_aligned_frames(vpath, detector, args.img_size)
                 chunks = make_chunks(frames, confs, args.chunk_length, args.chunk_stride)
 
                 for i, (chunk_f, chunk_c) in enumerate(chunks):
-                    all_chunks.append({
+                    chunk_buffer.append({
                         "video_id": video_id,
                         "start_frame": i * args.chunk_stride,
                         "frames": chunk_f,
@@ -371,38 +401,32 @@ def main():
                         "label": label,
                         "manipulation_type": manip_type,
                     })
+                    total_chunks += 1
+                flush_buffer(force=False)
         else:
-            # Parallel processing (CPU-bound parts)
+            # Parallel processing (multi-worker with process-cached detector)
             tasks = [
                 (vpath, video_id, label, manip_type,
                  args.img_size, args.chunk_length, args.chunk_stride)
-                for vpath, video_id, label, manip_type in split_videos
+                for vpath, video_id, label, manip_type in split_video_list
             ]
             with ProcessPoolExecutor(max_workers=args.workers) as executor:
                 futures = {executor.submit(process_single_video, t): t for t in tasks}
                 for future in tqdm(as_completed(futures), total=len(futures), desc=split_name):
                     try:
                         results = future.result()
-                        all_chunks.extend(results)
+                        if results:
+                            chunk_buffer.extend(results)
+                            total_chunks += len(results)
+                            flush_buffer(force=False)
                     except Exception as e:
                         task = futures[future]
                         print(f"Error processing {task[0]}: {e}")
 
-        print(f"  Total chunks: {len(all_chunks)}")
+        # Flush any trailing chunks in the final shard
+        flush_buffer(force=True)
 
-        # Shuffle training data
-        if split_name == "train":
-            np.random.seed(42)
-            np.random.shuffle(all_chunks)
-
-        # Write to shards
-        shard_idx = 0
-        for start in range(0, len(all_chunks), args.shard_size):
-            shard_chunks = all_chunks[start:start + args.shard_size]
-            shard_path = os.path.join(args.out, f"{split_name}-{shard_idx:06d}.tar")
-            write_shard(shard_chunks, shard_path)
-            shard_idx += 1
-
+        print(f"  Total chunks: {total_chunks}")
         print(f"  Written {shard_idx} shards to {args.out}")
 
     print(f"\nPreprocessing complete!")
