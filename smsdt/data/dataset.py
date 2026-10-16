@@ -11,7 +11,10 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 try:
     import webdataset as wds
-except ImportError:
+    from webdataset.gopen import gopen_schemes, gopen_file
+    for _letter in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ":
+        gopen_schemes[_letter] = gopen_file
+except Exception:
     wds = None
 import torchvision.transforms.functional as TF
 import random
