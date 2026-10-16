@@ -23,6 +23,13 @@ def create_detector(ctx_id=0, det_size=(320, 320)):
                 pass
             os.environ["PATH"] = torch_lib + os.pathsep + os.environ.get("PATH", "")
 
+    try:
+        import onnxruntime as ort
+        if hasattr(ort, "preload_dlls"):
+            ort.preload_dlls()
+    except Exception:
+        pass
+
     from insightface.app import FaceAnalysis
     has_cuda = torch.cuda.is_available()
     providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if has_cuda else ["CPUExecutionProvider"]
