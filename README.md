@@ -76,8 +76,8 @@ python -m venv venv
 # 2. Upgrade pip and build tools
 python -m pip install --upgrade pip setuptools wheel
 
-# 3. Install PyTorch with Blackwell-compatible CUDA 12.4+
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+# 3. Install PyTorch with Blackwell (sm_120) compatible CUDA 12.8
+pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
 
 # 4. Verify RTX 5090 detection and VRAM in PowerShell:
 python -c "import torch; print('CUDA Available:', torch.cuda.is_available()); print('Device Name:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None'); print('VRAM (GB):', round(torch.cuda.get_device_properties(0).total_memory / 1e9, 2) if torch.cuda.is_available() else 0)"
