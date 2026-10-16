@@ -15,7 +15,12 @@ import numpy as np
 import cv2
 try:
     import webdataset as wds
-except ImportError:
+    from webdataset.gopen import gopen_schemes, gopen_file
+    # On Windows, drive letters (e.g. E:\) get parsed as unknown URL schemes by gopen.
+    # Map all drive letters to the local file opener.
+    for _letter in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ":
+        gopen_schemes[_letter] = gopen_file
+except Exception:
     wds = None
 from tqdm import tqdm
 
@@ -51,69 +56,75 @@ def extract_aligned_frames(video_path, detector, out_size=224, smooth_landmarks=
         frames: list of (out_size, out_size, 3) uint8 arrays
         confs: list of float confidence values
     """
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        return [], []
+    try:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            return [], []
 
-    frames = []
-    confs = []
-    prev_kps = None
+        frames = []
+        confs = []
+        prev_kps = None
 
-    while True:
-        ok, frame = cap.read()
-        if not ok:
-            break
+        while True:
+            ok, frame = cap.read()
+            if not ok or frame is None or not isinstance(frame, np.ndarray) or frame.size == 0:
+                break
+            if frame.ndim != 3 or frame.shape[2] != 3:
+                continue
 
-        faces = detector.get(frame)
+            try:
+                faces = detector.get(frame)
+            except Exception:
+                faces = []
 
-        if len(faces) > 0:
-            # Take the highest-confidence face
-            best = max(faces, key=lambda f: f.det_score)
-            kps = best.kps if hasattr(best, 'kps') and best.kps is not None else None
+            if len(faces) > 0:
+                # Take highest-confidence face
+                best = max(faces, key=lambda f: float(getattr(f, 'det_score', 0.0)))
+                kps = best.kps if hasattr(best, 'kps') and best.kps is not None else None
 
-            if kps is not None and kps.shape == (5, 2):
-                if smooth_landmarks:
-                    if prev_kps is not None:
-                        # Smooth landmarks across consecutive frames to prevent jitter artifacts
-                        kps_to_use = smooth_alpha * prev_kps + (1.0 - smooth_alpha) * kps
+                if kps is not None and kps.shape == (5, 2):
+                    if smooth_landmarks:
+                        if prev_kps is not None:
+                            kps_to_use = smooth_alpha * prev_kps + (1.0 - smooth_alpha) * kps
+                        else:
+                            kps_to_use = kps.copy()
+                        prev_kps = kps_to_use
                     else:
-                        kps_to_use = kps.copy()
-                    prev_kps = kps_to_use
-                else:
-                    kps_to_use = kps
+                        kps_to_use = kps
 
-                aligned = align_face(frame, kps_to_use, out_size=out_size)
-                if aligned is not None:
-                    frames.append(aligned)
-                    confs.append(float(best.det_score))
+                    aligned = align_face(frame, kps_to_use, out_size=out_size)
+                    if aligned is not None:
+                        frames.append(aligned)
+                        confs.append(float(getattr(best, 'det_score', 0.9)))
+                    else:
+                        h, w = frame.shape[:2]
+                        x1, y1, x2, y2 = [int(v) for v in best.bbox]
+                        x1, y1 = max(0, min(w - 1, x1)), max(0, min(h - 1, y1))
+                        x2, y2 = max(x1 + 1, min(w, x2)), max(y1 + 1, min(h, y2))
+                        crop = frame[y1:y2, x1:x2]
+                        if crop.size > 0:
+                            crop = cv2.resize(crop, (out_size, out_size))
+                            frames.append(crop)
+                            confs.append(float(getattr(best, 'det_score', 0.9)))
+                        prev_kps = None
                 else:
+                    h, w = frame.shape[:2]
                     x1, y1, x2, y2 = [int(v) for v in best.bbox]
-                    x1, y1 = max(0, x1), max(0, y1)
-                    x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)
+                    x1, y1 = max(0, min(w - 1, x1)), max(0, min(h - 1, y1))
+                    x2, y2 = max(x1 + 1, min(w, x2)), max(y1 + 1, min(h, y2))
                     crop = frame[y1:y2, x1:x2]
                     if crop.size > 0:
                         crop = cv2.resize(crop, (out_size, out_size))
                         frames.append(crop)
-                        confs.append(float(best.det_score))
+                        confs.append(float(getattr(best, 'det_score', 0.9)))
                     prev_kps = None
-
             else:
-                # Fallback: crop from bbox
-                x1, y1, x2, y2 = [int(v) for v in best.bbox]
-                x1, y1 = max(0, x1), max(0, y1)
-                x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)
-                crop = frame[y1:y2, x1:x2]
-                if crop.size > 0:
-                    crop = cv2.resize(crop, (out_size, out_size))
-                    frames.append(crop)
-                    confs.append(float(best.det_score))
                 prev_kps = None
-        else:
-            prev_kps = None
-        # If no face detected, skip frame (sparse chunks are handled below)
 
-    cap.release()
-    return frames, confs
+        cap.release()
+        return frames, confs
+    except Exception:
+        return [], []
 
 
 def make_chunks(frames, confs, chunk_length=8, stride=4):
@@ -160,25 +171,33 @@ def process_single_video(args_tuple):
 
     Returns list of chunk dicts ready for shard writing.
     """
+    try:
+        cv2.setNumThreads(0)
+    except Exception:
+        pass
+
     video_path, video_id, label, manip_type, out_size, chunk_length, stride = args_tuple
 
-    detector = get_worker_detector()
+    try:
+        detector = get_worker_detector()
+        frames, confs = extract_aligned_frames(video_path, detector, out_size)
+        chunks = make_chunks(frames, confs, chunk_length, stride)
 
-    frames, confs = extract_aligned_frames(video_path, detector, out_size)
-    chunks = make_chunks(frames, confs, chunk_length, stride)
+        results = []
+        for i, (chunk_f, chunk_c) in enumerate(chunks):
+            results.append({
+                "video_id": video_id,
+                "start_frame": i * stride,
+                "frames": chunk_f,        # (T, H, W, 3) uint8
+                "conf": chunk_c,           # (T,) float32
+                "label": label,            # 0 or 1
+                "manipulation_type": manip_type,
+            })
 
-    results = []
-    for i, (chunk_f, chunk_c) in enumerate(chunks):
-        results.append({
-            "video_id": video_id,
-            "start_frame": i * stride,
-            "frames": chunk_f,        # (T, H, W, 3) uint8
-            "conf": chunk_c,           # (T,) float32
-            "label": label,            # 0 or 1
-            "manipulation_type": manip_type,
-        })
-
-    return results
+        return results
+    except Exception as e:
+        print(f"Warning: skipped {video_path}: {e}")
+        return []
 
 
 def write_shard(chunks, shard_path):
@@ -186,15 +205,17 @@ def write_shard(chunks, shard_path):
     if wds is None:
         raise ImportError("webdataset is required to write shards. Run 'pip install webdataset'")
     os.makedirs(os.path.dirname(shard_path), exist_ok=True)
-    with wds.TarWriter(shard_path) as sink:
-        for c in chunks:
-            sink.write({
-                "__key__": f"{c['video_id']}_{c['start_frame']:06d}",
-                "frames.npy": c["frames"].astype(np.uint8),
-                "conf.npy": c["conf"].astype(np.float32),
-                "label.cls": str(c["label"]).encode("utf-8"),
-                "manip.txt": c["manipulation_type"].encode("utf-8"),
-            })
+    # Open binary file stream directly to bypass webdataset gopen Windows drive-letter bug
+    with open(shard_path, "wb") as stream:
+        with wds.TarWriter(stream) as sink:
+            for c in chunks:
+                sink.write({
+                    "__key__": f"{c['video_id']}_{c['start_frame']:06d}",
+                    "frames.npy": c["frames"].astype(np.uint8),
+                    "conf.npy": c["conf"].astype(np.float32),
+                    "label.cls": str(c["label"]).encode("utf-8"),
+                    "manip.txt": c["manipulation_type"].encode("utf-8"),
+                })
 
 
 def discover_ffpp_videos(data_root, compression="c23"):
@@ -415,13 +436,15 @@ def main():
                 for future in tqdm(as_completed(futures), total=len(futures), desc=split_name):
                     try:
                         results = future.result()
-                        if results:
-                            chunk_buffer.extend(results)
-                            total_chunks += len(results)
-                            flush_buffer(force=False)
                     except Exception as e:
                         task = futures[future]
                         print(f"Error processing {task[0]}: {e}")
+                        results = None
+
+                    if results:
+                        chunk_buffer.extend(results)
+                        total_chunks += len(results)
+                        flush_buffer(force=False)
 
         # Flush any trailing chunks in the final shard
         flush_buffer(force=True)
