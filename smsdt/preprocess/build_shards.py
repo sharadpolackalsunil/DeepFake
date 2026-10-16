@@ -24,7 +24,8 @@ except Exception:
     wds = None
 from tqdm import tqdm
 
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed, wait, FIRST_COMPLETED
+import gc
 
 from smsdt.preprocess.align_crop import align_face
 
@@ -347,8 +348,10 @@ def main():
                         help="Max chunks per shard .tar file")
     parser.add_argument("--workers", type=int, default=1,
                         help="Number of parallel workers (set >1 for multi-GPU preprocessing)")
-    parser.add_argument("--split-file", type=str, default=None,
-                        help="CSV file with video_id,split columns")
+    parser.add_argument("--splits", type=str, default="train,val,test",
+                        help="Comma-separated splits to process (e.g. 'val,test')")
+    parser.add_argument("--force", action="store_true",
+                        help="Force overwrite existing shards")
     args = parser.parse_args()
 
     print(f"Discovering FF++ videos in {args.data_root} (compression={args.compression})...")
@@ -376,8 +379,22 @@ def main():
     from smsdt.preprocess.detect_track import create_detector
     _ = create_detector(ctx_id=0, det_size=(320, 320))
 
+    target_splits = [s.strip() for s in args.splits.split(",") if s.strip()]
+
     # Process each split
     for split_name, split_videos in splits.items():
+        if split_name not in target_splits:
+            print(f"\nSkipping {split_name} split (not in --splits {args.splits})")
+            continue
+
+        existing_shards = glob.glob(os.path.join(args.out, f"{split_name}-*.tar"))
+        if existing_shards and not args.force:
+            print(f"\n{'='*60}")
+            print(f"Found {len(existing_shards)} existing {split_name} shards in {args.out}.")
+            print(f"Skipping {split_name} split (use --force to overwrite).")
+            print(f"{'='*60}")
+            continue
+
         print(f"\n{'='*60}")
         print(f"Processing {split_name} split ({len(split_videos)} videos)...")
         print(f"{'='*60}")
@@ -403,6 +420,7 @@ def main():
                 shard_path = os.path.join(args.out, f"{split_name}-{shard_idx:06d}.tar")
                 write_shard(shard_chunks, shard_path)
                 shard_idx += 1
+                gc.collect()
 
         if args.workers <= 1:
             # Sequential processing (simpler, works with single GPU)
@@ -425,29 +443,50 @@ def main():
                     total_chunks += 1
                 flush_buffer(force=False)
         else:
-            # Parallel processing (multi-worker with process-cached detector)
+            # Parallel processing with bounded in-flight tasks to prevent RAM leak
             tasks = [
                 (vpath, video_id, label, manip_type,
                  args.img_size, args.chunk_length, args.chunk_stride)
                 for vpath, video_id, label, manip_type in split_video_list
             ]
-            with ProcessPoolExecutor(max_workers=args.workers) as executor:
-                futures = {executor.submit(process_single_video, t): t for t in tasks}
-                for future in tqdm(as_completed(futures), total=len(futures), desc=split_name):
-                    try:
-                        results = future.result()
-                    except Exception as e:
-                        task = futures[future]
-                        print(f"Error processing {task[0]}: {e}")
-                        results = None
+            task_iter = iter(tasks)
+            futures = set()
+            max_in_flight = max(2, args.workers * 2)
 
-                    if results:
-                        chunk_buffer.extend(results)
-                        total_chunks += len(results)
-                        flush_buffer(force=False)
+            with ProcessPoolExecutor(max_workers=args.workers) as executor:
+                for _ in range(min(max_in_flight, len(tasks))):
+                    try:
+                        futures.add(executor.submit(process_single_video, next(task_iter)))
+                    except StopIteration:
+                        break
+
+                pbar = tqdm(total=len(tasks), desc=split_name)
+                while futures:
+                    done, futures = wait(futures, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        try:
+                            results = future.result()
+                        except Exception as e:
+                            print(f"Warning: task failed: {e}")
+                            results = None
+
+                        if results:
+                            chunk_buffer.extend(results)
+                            total_chunks += len(results)
+                            flush_buffer(force=False)
+
+                        pbar.update(1)
+
+                        try:
+                            futures.add(executor.submit(process_single_video, next(task_iter)))
+                        except StopIteration:
+                            pass
+                pbar.close()
 
         # Flush any trailing chunks in the final shard
         flush_buffer(force=True)
+        chunk_buffer = []
+        gc.collect()
 
         print(f"  Total chunks: {total_chunks}")
         print(f"  Written {shard_idx} shards to {args.out}")
