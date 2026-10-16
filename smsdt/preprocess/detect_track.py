@@ -9,7 +9,20 @@ from tqdm import tqdm
 
 def create_detector(ctx_id=0, det_size=(320, 320)):
     """Lazily create the SCRFD face detector (avoids import-time CUDA init)."""
+    import os
+    import sys
     import torch
+
+    # On Windows, link PyTorch's bundled CUDA/cuDNN DLLs so onnxruntime-gpu finds them
+    if sys.platform == "win32":
+        torch_lib = os.path.join(os.path.dirname(torch.__file__), "lib")
+        if os.path.isdir(torch_lib):
+            try:
+                os.add_dll_directory(torch_lib)
+            except Exception:
+                pass
+            os.environ["PATH"] = torch_lib + os.pathsep + os.environ.get("PATH", "")
+
     from insightface.app import FaceAnalysis
     has_cuda = torch.cuda.is_available()
     providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if has_cuda else ["CPUExecutionProvider"]
