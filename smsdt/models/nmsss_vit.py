@@ -59,8 +59,8 @@ class NMSSSBlock(nn.Module):
 
         # --- L2-normalized temporal subtraction (N-MSSS) ---
         x_norm = nn.functional.normalize(x, dim=-1)
-        prev = torch.cat([x_norm[:, :1], x_norm[:, :-1]], dim=1)   # shift; first frame diffs against itself
-        delta = x_norm - prev                                       # (B, T, N, D)
+        prev = torch.cat([torch.zeros_like(x_norm[:, :1]), x_norm[:, :-1]], dim=1)   # zero-pad at t=0 so frame 0 isn't wiped out
+        delta = x_norm - prev                                                          # (B, T, N, D)
         cat = torch.cat([x_norm, delta], dim=-1)                    # (B, T, N, 2D)
         cat = rearrange(cat, "b t n d2 -> (b n) d2 t")
         gated = self.diff_proj(cat)                                  # (B*N, D, T)

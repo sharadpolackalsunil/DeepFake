@@ -142,10 +142,7 @@ def augment_video(frames, conf=None, split="train", target_size=224, target_fram
             frames = simulate_compression(frames)
         frames = simulate_blur(frames, blur_prob=0.3)
 
-        # 3. SBI-style synthetic boundary artifacts
-        frames = simulate_sbi_blend(frames, blend_prob=0.25)
-
-        # 4. Spatial Augmentation (Random Resize + Re-crop)
+        # 3. Spatial Augmentation (Random Resize + Re-crop)
         scale = random.uniform(1.0, 1.25)
         new_h, new_w = int(target_size * scale), int(target_size * scale)
         frames = F.interpolate(frames, size=(new_h, new_w), mode='bilinear', align_corners=False)
@@ -267,6 +264,13 @@ def build_dataloader(cfg, split="train", num_workers=12):
     # Build WebDataset pipeline
     is_train = (split == "train")
     dataset = wds.WebDataset(shard_spec, resampled=is_train, shardshuffle=is_train)
+    if is_train:
+        shuffle_buf = getattr(cfg, "shuffle_buf", 1000)
+        if hasattr(cfg, "get"):
+            shuffle_buf = cfg.get("shuffle_buf", 1000)
+        if shuffle_buf > 0:
+            dataset = dataset.shuffle(shuffle_buf)
+
     dataset = (
         dataset
         .decode()

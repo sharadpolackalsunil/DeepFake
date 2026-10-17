@@ -71,7 +71,7 @@ def test_wavelet_branch_strided_patch_stem_and_energy():
     # Test backward pass
     loss = out.sum()
     loss.backward()
-    assert wv_patch.proj.weight.grad is not None
+    assert wv_patch.proj[0].weight.grad is not None
 
 
 def test_video_level_evaluation_scoring():
