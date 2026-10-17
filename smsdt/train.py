@@ -18,29 +18,7 @@ from smsdt.eval import evaluate
 
 import torch.nn.functional as F
 
-def video_level_loss(chunk_logits, video_labels, k=3, alpha=0.25, gamma=2.0):
-    """
-    Computes loss at the video level using Top-K aggregation of chunk logits.
-    chunk_logits: (B, num_chunks)
-    video_labels: (B,)
-    """
-    if chunk_logits.dim() == 1:
-        chunk_logits = chunk_logits.unsqueeze(0)
-    # Get top K highest scoring chunks (most likely to be fake)
-    k = min(k, chunk_logits.size(1))
-    topk_logits, _ = torch.topk(chunk_logits, k, dim=1)
-    # Aggregate to a single video-level logit
-    video_logits = topk_logits.mean(dim=1)
-    # Use focal BCE
-    p = torch.sigmoid(video_logits)
-    ce = F.binary_cross_entropy_with_logits(video_logits, video_labels, reduction="none")
-    pt = p * video_labels + (1 - p) * (1 - video_labels)
-    focal = ((1 - pt) ** gamma) * ce
-    alpha_w = alpha * video_labels + (1 - alpha) * (1 - video_labels)
-    return (alpha_w * focal).mean()
-
-
-def main(cfg):
+def main(cfg, resume=True):
     # --- Device setup ---
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
@@ -146,7 +124,7 @@ def main(cfg):
     best_auc = 0.0
     save_interval_steps = cfg.train.get("save_interval_steps", 500)
 
-    if os.path.exists(checkpoint_path):
+    if resume and os.path.exists(checkpoint_path):
         print(f"Loading checkpoint from {checkpoint_path}")
         checkpoint_data = torch.load(checkpoint_path, map_location=device, weights_only=False)
         model.load_state_dict(checkpoint_data["model_state_dict"])
@@ -157,9 +135,12 @@ def main(cfg):
         step = checkpoint_data.get("step", 0)
         best_auc = checkpoint_data.get("best_auc", 0.0)
         print(f"Resuming training from epoch {start_epoch}, step {step} (Best AUC: {best_auc:.4f})")
+    elif not resume:
+        print("Training from scratch (--from-scratch specified). Existing checkpoints ignored.")
 
     model.train()
     for epoch in range(start_epoch, cfg.train.epochs):
+        model.train()
         epoch_loss = 0.0
         epoch_steps = 0
         epoch_opt_steps = 0
@@ -174,12 +155,18 @@ def main(cfg):
             use_autocast = (device == "cuda")
             with torch.autocast("cuda", dtype=torch.bfloat16, enabled=use_autocast):
                 if use_aux_losses:
-                    logits, z_rgb, z_dwt = model(frames, conf, return_features=True)
+                    features_out = model(frames, conf, return_features=True)
+                    if len(features_out) == 4:
+                        logits, z_rgb, z_dwt, z_post_vit = features_out
+                    else:
+                        logits, z_rgb, z_dwt = features_out
+                        z_post_vit = None
                     manip_types = batch.get("manip_type")
                     if manip_types is not None:
                         manip_types = manip_types.to(device, non_blocking=True)
                     loss, loss_dict = total_loss(
-                        logits, labels, z_rgb, z_dwt, manip_types, **loss_kwargs
+                        logits, labels, z_rgb=z_rgb, z_dwt=z_dwt, z_post_vit=z_post_vit,
+                        manipulation_types=manip_types, **loss_kwargs
                     )
                 else:
                     logits = model(frames, conf, return_features=False)
@@ -304,6 +291,8 @@ if __name__ == "__main__":
                         help="Directory containing YAML config files")
     parser.add_argument("--override", nargs="*", default=[],
                         help="Override config values (e.g. train.lr=1e-4)")
+    parser.add_argument("--from-scratch", action="store_true",
+                        help="Start training from scratch, ignoring existing checkpoints")
     args = parser.parse_args()
 
     # Load configs from YAML files
@@ -328,4 +317,4 @@ if __name__ == "__main__":
     print(OmegaConf.to_yaml(cfg))
     print("=" * 60)
 
-    main(cfg)
+    main(cfg, resume=(not args.from_scratch))

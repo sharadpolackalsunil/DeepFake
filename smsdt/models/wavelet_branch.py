@@ -29,11 +29,19 @@ class WaveletBranch(nn.Module):
         if stem_type == "strided_patch":
             # Strided patch stem: 9 channels -> embed_dim with 16x16 kernel, stride 16 (for 112 -> 7x7)
             # ~60x cheaper (~0.03 GMAC vs 1.92 GMAC) and directly aligns with 7x7 token grid
-            self.proj = nn.Conv2d(9, embed_dim, kernel_size=16, stride=16)
+            self.proj = nn.Sequential(
+                nn.Conv2d(9, embed_dim, kernel_size=16, stride=16),
+                nn.BatchNorm2d(embed_dim),
+                nn.GELU(),
+            )
         else:
             self.proj = nn.Sequential(
-                nn.Conv2d(9, 64, 3, padding=1), nn.GELU(),
+                nn.Conv2d(9, 64, 3, padding=1),
+                nn.BatchNorm2d(64),
+                nn.GELU(),
                 nn.Conv2d(64, embed_dim, 3, padding=1),
+                nn.BatchNorm2d(embed_dim),
+                nn.GELU(),
             )
 
     def forward(self, x):

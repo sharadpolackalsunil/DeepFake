@@ -32,6 +32,7 @@ class SMSDT(nn.Module):
             nn.LayerNorm(embed_dim),
             nn.Linear(embed_dim, embed_dim // 2),
             nn.GELU(),
+            nn.Dropout(0.1),
             nn.Linear(embed_dim // 2, num_classes),
         )
 
@@ -77,11 +78,12 @@ class SMSDT(nn.Module):
         logit = self.head(pooled).squeeze(-1)  # (B,)
 
         if return_features:
-            # Pool intermediate features for auxiliary losses
+            # Pool intermediate pre-fusion features for alignment loss
             z_rgb_r = rearrange(z_rgb, "(b t) n d -> b t n d", b=B, t=T)
             z_dwt_r = rearrange(z_dwt, "(b t) n d -> b t n d", b=B, t=T)
             z_rgb_pooled = z_rgb_r.mean(dim=2).mean(dim=1)  # (B, D)
             z_dwt_pooled = z_dwt_r.mean(dim=2).mean(dim=1)  # (B, D)
-            return logit, z_rgb_pooled, z_dwt_pooled
+            # pooled is post-ViT fused features (B, D) for contrastive loss
+            return logit, z_rgb_pooled, z_dwt_pooled, pooled
 
         return logit

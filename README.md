@@ -162,8 +162,11 @@ data/cache/ffpp/
 `configs/data.yaml` and `configs/train.yaml` are pre-tuned for the RTX 5090. Simply launch training:
 
 ```powershell
-# Train with default RTX 5090 configuration
+# Resume training from latest checkpoint (default behavior)
 python -m smsdt.train
+
+# Start a fresh training run from scratch (ignores existing checkpoints)
+python -m smsdt.train --from-scratch
 ```
 
 #### Training with Custom Overrides
@@ -172,6 +175,9 @@ You can pass custom overrides directly from PowerShell without editing YAML file
 ```powershell
 # Example: Fast fine-tune / quick run with 30 epochs and custom learning rate
 python -m smsdt.train --override train.epochs=30 train.lr=1e-4
+
+# Start clean from scratch with overrides
+python -m smsdt.train --from-scratch --override train.epochs=30
 ```
 
 
@@ -273,8 +279,8 @@ Input: (B, T=8, 3, 224, 224) aligned face chunk + (B, T) SCRFD confidence scores
   │            Adaptive pooling across scales → (B*T, 49, 256) spatial tokens
   │
   ├──► [Wavelet Frequency Guard]
-  │      Single-Level 2D Haar DWT (LH, HL, HH subbands, discarding low-pass LL)
-  │      └─► FrequencyStem Conv2D + Adaptive Pool → (B*T, 49, 256) frequency tokens
+  │      Single-Level 2D Haar DWT (LH, HL, HH energy subbands, discarding low-pass LL)
+  │      └─► Strided Patch Stem (Conv2D 16×16 → BatchNorm2D → GELU) → (B*T, 49, 256) frequency tokens
   │
   ├──► [Gated Cross-Domain Fusion]
   │      σ(Gate([z_rgb, z_dwt])) · z_rgb + (1 - σ(Gate)) · z_dwt → (B*T, 49, 256)
@@ -282,12 +288,12 @@ Input: (B, T=8, 3, 224, 224) aligned face chunk + (B, T) SCRFD confidence scores
   │
   ├──► [N-MSSS ViT Backbone] (×4 Stages)
   │      ├─ 1. Spatial Self-Attention (intra-frame multi-head self-attention)
-  │      ├─ 2. L2-Normalized Temporal Differencing:
-  │      │     Δ = Norm(x_t) - Norm(x_{t-1}), projected and gated by SCRFD confidence
+  │      ├─ 2. L2-Normalized Temporal Differencing (Zero-padded at t=0):
+  │      │     Δ_t = Norm(x_t) - Norm(x_{t-1}) with Δ_0 = Norm(x_0), projected & SCRFD gated
   │      └─ 3. Temporal Self-Attention (inter-frame attention across time T)
   │
   └──► [Pooling & Head]
-         Spatial Mean-Pool → Temporal Mean-Pool → LayerNorm → GELU → Linear → Logit
+         Spatial Mean-Pool → Temporal Mean-Pool → LayerNorm → Linear → GELU → Dropout(0.1) → Linear → Logit
 ```
 
 ---
@@ -301,8 +307,8 @@ $$L_{\text{total}} = L_{\text{focal}} + \lambda_{\text{contrastive}} L_{\text{co
 | Loss Component | Weight | Formulation & Purpose |
 |---|---|---|
 | **Focal BCE ($L_{\text{focal}}$)** | $1.0$ | $\alpha = 0.2$, $\gamma = 2.0$. Down-weights easy background samples while properly balancing FF++ 1:4 real-to-fake class ratio ($4 \times 0.2 = 0.8$ vs $1 \times 0.8 = 0.8$). |
-| **Supervised Contrastive ($L_{\text{contrastive}}$)** | $0.1$ | Applied to pooled wavelet features. Pulls fakes of the same manipulation method together and separates real vs. fake in frequency space. |
-| **Cross-Domain Alignment ($L_{\text{align}}$)** | $0.05$ | Minimizes cosine redundancy between RGB tokens and wavelet tokens, forcing frequency and RGB branches to learn orthogonal, complementary cues. |
+| **Supervised Contrastive ($L_{\text{contrastive}}$)** | $0.1$ | Applied to **post-ViT learned representations** ($z_{\text{post\_vit}}$). Directly guides the 4 transformer blocks to cluster genuine faces together and separate distinct manipulation methods in latent space. |
+| **Cross-Domain Alignment ($L_{\text{align}}$)** | $0.05$ | Decorrelation / orthogonality penalty on pre-fusion tokens ($z_{\text{rgb}}$, $z_{\text{dwt}}$). Penalizes redundancy so the frequency branch specializes in high-frequency spectral artifacts rather than mimicking RGB features. |
 
 ---
 

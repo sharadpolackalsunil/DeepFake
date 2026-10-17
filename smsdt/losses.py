@@ -110,7 +110,7 @@ def alignment_loss(z_rgb, z_dwt, mode="decorrelate"):
         return 2 - 2 * (z_rgb_n * z_dwt_n).sum(dim=-1).mean()
 
 
-def total_loss(logits, targets, z_rgb=None, z_dwt=None,
+def total_loss(logits, targets, z_rgb=None, z_dwt=None, z_post_vit=None,
                manipulation_types=None, alpha=0.2, gamma=2.0,
                label_smoothing=0.0, lambda_contrastive=0.1, lambda_align=0.05,
                align_mode="decorrelate"):
@@ -120,7 +120,8 @@ def total_loss(logits, targets, z_rgb=None, z_dwt=None,
         logits: (B,) raw model output
         targets: (B,) binary labels
         z_rgb: (B, D) pooled RGB features (optional, for alignment loss)
-        z_dwt: (B, D) pooled wavelet features (optional, for contrastive + alignment)
+        z_dwt: (B, D) pooled wavelet features (optional, for alignment or fallback contrastive)
+        z_post_vit: (B, D) post-ViT pooled features for contrastive loss
         manipulation_types: (B,) manipulation type IDs (optional)
         alpha, gamma: focal loss hyperparameters (default alpha=0.2 for 1:4 real:fake ratio)
         label_smoothing: label smoothing factor
@@ -134,8 +135,9 @@ def total_loss(logits, targets, z_rgb=None, z_dwt=None,
     L_total = L_focal
     loss_dict = {"focal": L_focal.item()}
 
-    if z_dwt is not None and lambda_contrastive > 0:
-        L_con = supervised_contrastive_loss(z_dwt, targets, manipulation_types)
+    feat_con = z_post_vit if z_post_vit is not None else z_dwt
+    if feat_con is not None and lambda_contrastive > 0:
+        L_con = supervised_contrastive_loss(feat_con, targets, manipulation_types)
         L_total = L_total + lambda_contrastive * L_con
         loss_dict["contrastive"] = L_con.item()
 
