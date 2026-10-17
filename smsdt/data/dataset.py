@@ -190,29 +190,12 @@ def augment_video(frames, conf=None, split="train", target_size=224, target_fram
 
 
 
-def build_dataloader(cfg, split="train", num_workers=12):
-    """
-    Builds a PyTorch DataLoader reading from webdataset shards.
-    """
-    cache_root = getattr(cfg, "cache_root", "data/cache")
-    if hasattr(cfg, "get"):
-        cache_root = cfg.get("cache_root", "data/cache")
-    dataset_name = getattr(cfg, "dataset", "ffpp")
-    if hasattr(cfg, "get"):
-        dataset_name = cfg.get("dataset", dataset_name)
-    batch_size = getattr(cfg, "batch_size", 4)
-    if hasattr(cfg, "get"):
-        batch_size = cfg.get("batch_size", 4)
+class SampleDecoder:
+    """Top-level picklable sample transformer for WebDataset on Windows multiprocessing."""
+    def __init__(self, split="train"):
+        self.split = split
 
-    shard_dir = os.path.join(cache_root, dataset_name)
-    shard_files = sorted(glob.glob(os.path.join(shard_dir, f"{split}-*.tar")))
-    if shard_files:
-        shard_spec = shard_files
-    else:
-        # WebDataset brace expansion format
-        shard_spec = os.path.join(shard_dir, f"{split}-{{000000..000099}}.tar")
-
-    def decode_and_format(sample):
+    def __call__(self, sample):
         frames = sample.get("frames.npy", None)
         if frames is None:
             # fallback mock data
@@ -226,7 +209,7 @@ def build_dataloader(cfg, split="train", num_workers=12):
         video_id = key.rsplit("_", 1)[0] if "_" in key else key
 
         # Apply augmentation, synchronized temporal frame/conf alignment, and ImageNet normalization
-        augmented_frames, conf = augment_video(frames, conf=conf, split=split)
+        augmented_frames, conf = augment_video(frames, conf=conf, split=self.split)
 
         if isinstance(raw_label, bytes):
             try:
@@ -255,16 +238,39 @@ def build_dataloader(cfg, split="train", num_workers=12):
             "video_id": video_id,
         }
 
+
+def build_dataloader(cfg, split="train", num_workers=12):
+    """
+    Builds a PyTorch DataLoader reading from webdataset shards.
+    """
+    cache_root = getattr(cfg, "cache_root", "data/cache")
+    if hasattr(cfg, "get"):
+        cache_root = cfg.get("cache_root", "data/cache")
+    dataset_name = getattr(cfg, "dataset", "ffpp")
+    if hasattr(cfg, "get"):
+        dataset_name = cfg.get("dataset", dataset_name)
+    batch_size = getattr(cfg, "batch_size", 4)
+    if hasattr(cfg, "get"):
+        batch_size = cfg.get("batch_size", 4)
+
+    shard_dir = os.path.join(cache_root, dataset_name)
+    shard_files = sorted(glob.glob(os.path.join(shard_dir, f"{split}-*.tar")))
+    if shard_files:
+        shard_spec = shard_files
+    else:
+        # WebDataset brace expansion format
+        shard_spec = os.path.join(shard_dir, f"{split}-{{000000..000099}}.tar")
+
     if wds is None:
         raise ImportError("webdataset is not installed. Run 'pip install webdataset' to enable WebDataset shard loading.")
 
     # Build WebDataset pipeline
     is_train = (split == "train")
-    dataset = wds.WebDataset(shard_spec, resampled=is_train)
+    dataset = wds.WebDataset(shard_spec, resampled=is_train, shardshuffle=is_train)
     dataset = (
         dataset
         .decode()
-        .map(decode_and_format)
+        .map(SampleDecoder(split=split))
         .batched(batch_size)
     )
 
