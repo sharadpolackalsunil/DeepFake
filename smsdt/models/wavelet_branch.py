@@ -78,23 +78,24 @@ class WaveletBranch(nn.Module):
         self.pool_energy = pool_energy
         self.embed_dim = embed_dim
 
-        # 3-stage DW-SE stem: (112x112) -> (56x56) -> (28x28) -> (14x14)
-        # Input has 12 channels (9 spatial LH,HL,HH + 3 temporal high-pass)
-        self.stage1 = nn.Sequential(
-            nn.Conv2d(12, 64, kernel_size=3, stride=2, padding=1, bias=False),  # 112 -> 56
-            nn.BatchNorm2d(64),
-            nn.GELU(),
-            SqueezeExcitation(64),
-        )
-        self.stage2 = DepthwiseSeparableBlock(64, 128, stride=2)                 # 56 -> 28
-        self.stage3 = DepthwiseSeparableBlock(128, embed_dim, stride=2)           # 28 -> 14
-
-        # Strided patch stem (9 channels -> embed_dim with 16x16 stride 16 for 112 -> 7x7)
-        self.proj = nn.Sequential(
-            nn.Conv2d(9, embed_dim, kernel_size=16, stride=16),
-            nn.BatchNorm2d(embed_dim),
-            nn.GELU(),
-        )
+        if self.stem_type == "strided_patch":
+            # Strided patch stem (9 channels -> embed_dim with 16x16 stride 16 for 112 -> 7x7)
+            self.proj = nn.Sequential(
+                nn.Conv2d(9, embed_dim, kernel_size=16, stride=16),
+                nn.BatchNorm2d(embed_dim),
+                nn.GELU(),
+            )
+        else:
+            # 3-stage DW-SE stem: (112x112) -> (56x56) -> (28x28) -> (14x14)
+            # Input has 12 channels (9 spatial LH,HL,HH + 3 temporal high-pass)
+            self.stage1 = nn.Sequential(
+                nn.Conv2d(12, 64, kernel_size=3, stride=2, padding=1, bias=False),  # 112 -> 56
+                nn.BatchNorm2d(64),
+                nn.GELU(),
+                SqueezeExcitation(64),
+            )
+            self.stage2 = DepthwiseSeparableBlock(64, 128, stride=2)                 # 56 -> 28
+            self.stage3 = DepthwiseSeparableBlock(128, embed_dim, stride=2)           # 28 -> 14
 
     def forward(self, x, num_frames=None, return_rho=False):
         """

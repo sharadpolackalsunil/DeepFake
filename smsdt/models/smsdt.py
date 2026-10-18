@@ -36,6 +36,12 @@ class SharpAttentionalReadout(nn.Module):
             nn.Linear(embed_dim // 4, 1),
         )
 
+        # Zero-init last projection so readout starts as uniform pooling and smoothly sharpens
+        nn.init.zeros_(self.spatial_attn[-1].weight)
+        nn.init.zeros_(self.spatial_attn[-1].bias)
+        nn.init.zeros_(self.temporal_attn[-1].weight)
+        nn.init.zeros_(self.temporal_attn[-1].bias)
+
     def forward(self, z):
         """
         Args:
