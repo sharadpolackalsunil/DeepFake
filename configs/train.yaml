@@ -16,16 +16,16 @@ grad_accum: 4            # 8 micro-batch * 4 accum = 32 effective batch size
 workers: 4               # 2-4 recommended on Windows to avoid process spawn memory thrashing
 save_interval_steps: 500 # saves latest.pt every 500 steps for crash recovery
 
-
 # Loss hyperparameters
-alpha: 0.2            # focal loss alpha (0.2 for balanced 1:4 real:fake ratio: 4*0.2 = 0.8 vs 1*0.8 = 0.8)
-gamma: 2.0            # focal loss focusing parameter
-lambda_contrastive: 0.1   # supervised contrastive loss weight
-lambda_align: 0.05        # cross-domain alignment loss weight
-align_mode: decorrelate   # decorrelation/orthogonality between RGB and wavelet streams
+alpha: 0.2                  # focal loss alpha (0.2 for balanced 1:4 real:fake ratio: 4*0.2 = 0.8 vs 1*0.8 = 0.8)
+gamma: 2.0                  # focal loss focusing parameter
+lambda_contrastive: 0.1     # contrastive loss weight
+lambda_align: 0.05          # cross-domain alignment loss weight
+align_mode: decorrelate     # decorrelation/orthogonality between RGB and wavelet streams
+contrastive_mode: asymmetric # Asymmetric Real-Center Contrastive Loss
+real_margin: 0.25           # Margin for fakes
 
 # Optional features
 use_wandb: false
 compile: false              # torch.compile
 gradient_checkpointing: false  # False on RTX 5090 (32GB VRAM fits all activations; ~25% faster)
-
