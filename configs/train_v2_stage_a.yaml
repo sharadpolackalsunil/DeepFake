@@ -1,0 +1,45 @@
+# S-MSDTv2 Phase 2: Stage A Frame-Level PEFT Training
+# Objective: Pre-tune CLIP ViT-L/14 LayerNorm affine parameters (<0.03% params)
+# Target: Reproduce LNCLIP-DF baseline (Celeb-DF v2 video AUC >= 0.93)
+
+stage: stage_a
+model:
+  backbone: openai/clip-vit-large-patch14
+  tune: layernorm
+  grad_ckpt: true
+  dim: 384
+  depth: 2
+  heads: 6
+  max_frames: 16
+  grid: 16
+  topk_frac: 0.05
+
+data:
+  store: data/store
+  index: data/splits/index.csv
+  frames_per_clip: 1         # T=1 for frame-level training
+  frame_stride: 1
+  crop_size: 224
+  norm: clip                 # Uses CLIP_MEAN and CLIP_STD
+  p_sbi: 0.5
+  jpeg_quality: [50, 100]
+  p_jpeg: 0.3
+
+train:
+  epochs: 30
+  batch_pairs: 32            # 64 frames per optimizer step
+  grad_accum: 1
+  lr_backbone_ln: 1.0e-4     # LayerNorm parameter learning rate
+  lr_head: 5.0e-4            # CLS projection head learning rate
+  weight_decay: 0.05
+  warmup_frac: 0.03
+  min_lr_ratio: 0.01
+  grad_clip: 1.0
+  label_smoothing: 0.05
+  lambda_mask: 0.0           # Mask loss inactive during Stage A CLS pre-tuning
+  ema_decay: 0.999
+  precision: bfloat16
+  num_workers: 8
+  pin_memory: true
+
+output_dir: outputs/checkpoints_v2_stage_a

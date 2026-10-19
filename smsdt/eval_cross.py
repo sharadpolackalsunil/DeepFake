@@ -1,0 +1,215 @@
+"""Cross-dataset evaluation runner for S-MSDT (v1 and v2 architectures).
+
+Evaluates checkpoints across multiple benchmarks (FF++ test, Celeb-DF v2, DFD, DFDC, FFIW)
+using standardized clip-level (K=8) deterministic center crops and fixed aggregation rules
+(Mean clip probability and Top-50% mean), reporting Video AUC, Frame/Clip AUC, and EER.
+"""
+import argparse
+import csv
+import json
+import os
+import sys
+import numpy as np
+import torch
+from sklearn.metrics import roc_auc_score, log_loss
+from torch.utils.data import DataLoader
+
+from smsdt.data.video_dataset import EvalClipDataset
+from smsdt.models.clip_encoder import CLIPFrameEncoder, CLIP_MEAN, CLIP_STD
+from smsdt.models.smsdt import SMSDT
+from smsdt.models.smsdt_v2 import SMSDTv2
+from smsdt.train_v2 import get_clip_normalize
+
+
+def compute_eer(y_true, y_scores):
+    """Compute Equal Error Rate (EER) and optimal threshold."""
+    from sklearn.metrics import roc_curve
+    fpr, tpr, thresholds = roc_curve(y_true, y_scores)
+    fnr = 1.0 - tpr
+    idx = np.nanargmin(np.absolute(fnr - fpr))
+    eer = (fpr[idx] + fnr[idx]) / 2.0
+    return float(eer), float(thresholds[idx])
+
+
+def load_model(ckpt_path: str, device: torch.device):
+    """Load S-MSDT v1 or v2 model from checkpoint."""
+    ckpt = torch.load(ckpt_path, map_location="cpu")
+    cfg = ckpt.get("cfg", {})
+    state_dict = ckpt.get("model_ema", ckpt.get("model", ckpt))
+
+    # Detect v1 vs v2 architecture
+    is_v2 = any("encoder.vit" in k for k in state_dict.keys()) or cfg.get("stage") is not None
+
+    if is_v2:
+        model_cfg = cfg.get("model", {})
+        enc = CLIPFrameEncoder(
+            name=model_cfg.get("backbone", "openai/clip-vit-large-patch14"),
+            tune="layernorm",
+            grad_ckpt=False,
+        )
+        model = SMSDTv2(
+            encoder=enc,
+            dim=model_cfg.get("dim", 384),
+            depth=model_cfg.get("depth", 2),
+            heads=model_cfg.get("heads", 6),
+            max_frames=model_cfg.get("max_frames", 16),
+            grid=model_cfg.get("grid", 16),
+            topk_frac=model_cfg.get("topk_frac", 0.05),
+        )
+        norm_fn = get_clip_normalize()
+        model_type = "v2"
+    else:
+        # S-MSDT v1 (EfficientNet-B4 + DensePSIT)
+        model = SMSDT(
+            embed_dim=cfg.get("model", {}).get("embed_dim", 256),
+            depth=cfg.get("model", {}).get("depth", 4),
+            heads=cfg.get("model", {}).get("heads", 8),
+            max_frames=16,
+            grid=14,
+        )
+        from torchvision import transforms
+        norm_fn = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        model_type = "v1"
+
+    model.load_state_dict(state_dict, strict=False)
+    model.to(device)
+    model.eval()
+    return model, model_type, norm_fn
+
+
+def evaluate_dataset(model, ds, device, batch_size=4):
+    loader = DataLoader(ds, batch_size=batch_size, shuffle=False, num_workers=0)
+    video_ids, labels, methods = [], [], []
+    video_scores_mean, video_scores_top50 = [], []
+    clip_scores_all, clip_labels_all = [], []
+
+    with torch.no_grad():
+        for batch in loader:
+            frames = batch["frames"].to(device)  # (B, K, T, 3, H, W)
+            y = batch["label"].cpu().numpy()
+            vids = batch["video_id"]
+            meths = batch["method"]
+
+            B, K, T, C, H, W = frames.shape
+            frames_flat = frames.view(B * K, T, C, H, W)
+
+            logits, _ = model(frames_flat)
+            probs = torch.sigmoid(logits).view(B, K).cpu().numpy()
+
+            for b in range(B):
+                p_clips = probs[b]
+                p_mean = float(np.mean(p_clips))
+                # Top-50% clip score
+                k_top = max(1, K // 2)
+                p_top50 = float(np.mean(np.partition(p_clips, -k_top)[-k_top:]))
+
+                video_scores_mean.append(p_mean)
+                video_scores_top50.append(p_top50)
+                labels.append(float(y[b]))
+                video_ids.append(vids[b])
+                methods.append(meths[b])
+
+                clip_scores_all.extend(p_clips.tolist())
+                clip_labels_all.extend([float(y[b])] * K)
+
+    labels = np.array(labels)
+    scores_mean = np.array(video_scores_mean)
+    scores_top50 = np.array(video_scores_top50)
+
+    # Calculate overall metrics
+    vid_auc_mean = float(roc_auc_score(labels, scores_mean))
+    vid_auc_top50 = float(roc_auc_score(labels, scores_top50))
+    clip_auc = float(roc_auc_score(clip_labels_all, clip_scores_all))
+    eer, eer_thresh = compute_eer(labels, scores_mean)
+
+    # Breakdown per method
+    per_method_auc = {}
+    real_mask = (labels == 0.0)
+    for m in sorted(set(methods)):
+        if m == "real":
+            continue
+        m_mask = (np.array(methods) == m)
+        eval_mask = real_mask | m_mask
+        if eval_mask.sum() > 0 and len(set(labels[eval_mask])) > 1:
+            per_method_auc[m] = float(roc_auc_score(labels[eval_mask], scores_mean[eval_mask]))
+
+    return {
+        "num_videos": len(labels),
+        "num_reals": int((labels == 0).sum()),
+        "num_fakes": int((labels == 1).sum()),
+        "video_auc_mean": vid_auc_mean,
+        "video_auc_top50": vid_auc_top50,
+        "clip_auc": clip_auc,
+        "eer": eer,
+        "eer_thresh": eer_thresh,
+        "per_method_auc": per_method_auc,
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Evaluate deepfake model across datasets")
+    parser.add_argument("--ckpt", type=str, required=True, help="Path to checkpoint (.pt)")
+    parser.add_argument("--index", type=str, default="data/splits/index.csv", help="Split index manifest")
+    parser.add_argument("--store", type=str, default="data/store", help="Offline frame store directory")
+    parser.add_argument("--split", type=str, default="test", help="Split name to evaluate (default: test)")
+    parser.add_argument("--dataset-name", type=str, default="FF++ c23", help="Dataset display name")
+    parser.add_argument("--out-csv", type=str, default="outputs/benchmark_results.csv", help="Output CSV path")
+    parser.add_argument("--K", type=int, default=8, help="Clips per video")
+    parser.add_argument("--T", type=int, default=8, help="Frames per clip")
+    args = parser.parse_args()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Loading checkpoint: {args.ckpt} on {device}")
+    model, model_type, norm_fn = load_model(args.ckpt, device)
+    print(f"Loaded model architecture: {model_type.upper()}")
+
+    ds = EvalClipDataset(
+        index_csv=args.index,
+        store_root=args.store,
+        split=args.split,
+        K=args.K,
+        T=args.T,
+        stride=1,
+        normalize=norm_fn,
+    )
+    print(f"Evaluating {args.dataset_name} ({args.split} split) with {len(ds)} videos...")
+    res = evaluate_dataset(model, ds, device)
+
+    print("\n" + "=" * 60)
+    print(f"RESULTS: {args.dataset_name} [{args.split.upper()}] (N={res['num_videos']} videos)")
+    print(f"  * Video AUC (Mean):   {res['video_auc_mean']:.4f}")
+    print(f"  * Video AUC (Top-50%): {res['video_auc_top50']:.4f}")
+    print(f"  * Clip-level AUC:     {res['clip_auc']:.4f}")
+    print(f"  * Equal Error Rate:   {res['eer']:.4f} (thresh: {res['eer_thresh']:.4f})")
+    if res["per_method_auc"]:
+        print("  * Per-Method Video AUC:")
+        for m, a in res["per_method_auc"].items():
+            print(f"      - {m:18s}: {a:.4f}")
+    print("=" * 60)
+
+    # Append to output CSV
+    os.makedirs(os.path.dirname(args.out_csv), exist_ok=True)
+    file_exists = os.path.exists(args.out_csv)
+    with open(args.out_csv, "a", newline="") as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(["checkpoint", "model_type", "dataset", "split", "videos", "reals", "fakes", "video_auc_mean", "video_auc_top50", "clip_auc", "eer", "per_method_json"])
+        writer.writerow([
+            os.path.basename(args.ckpt),
+            model_type,
+            args.dataset_name,
+            args.split,
+            res["num_videos"],
+            res["num_reals"],
+            res["num_fakes"],
+            f"{res['video_auc_mean']:.4f}",
+            f"{res['video_auc_top50']:.4f}",
+            f"{res['clip_auc']:.4f}",
+            f"{res['eer']:.4f}",
+            json.dumps(res["per_method_auc"]),
+        ])
+    print(f"Appended results row to {args.out_csv}")
+
+
+if __name__ == "__main__":
+    main()
