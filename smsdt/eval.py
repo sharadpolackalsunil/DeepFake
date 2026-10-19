@@ -82,7 +82,7 @@ def compute_metrics(probs, labels):
     }
 
 
-def evaluate(model, loader, device, top_k_ratio=0.5):
+def evaluate(model, loader, device, top_k_ratio=0.5, max_batches=None):
     """Run evaluation and compute frame-level and video-level metrics.
 
     Args:
@@ -90,6 +90,7 @@ def evaluate(model, loader, device, top_k_ratio=0.5):
         loader: validation/test DataLoader
         device: "cuda" or "cpu"
         top_k_ratio: fraction of highest-scoring chunks per video to average for video-level score
+        max_batches: optional cap on number of batches to evaluate (None for full split)
 
     Returns:
         dict of metrics
@@ -101,14 +102,16 @@ def evaluate(model, loader, device, top_k_ratio=0.5):
     with torch.no_grad():
         autocast_enabled = (device == "cuda")
         with torch.autocast("cuda", dtype=torch.bfloat16, enabled=autocast_enabled):
-            for batch in loader:
-                frames = batch["frames"].to(device)
-                conf = batch["conf"].to(device)
+            for batch_idx, batch in enumerate(loader):
+                if max_batches is not None and batch_idx >= max_batches:
+                    break
+                frames = batch["frames"].to(device, non_blocking=True)
+                conf = batch["conf"].to(device, non_blocking=True)
                 logits = model(frames, conf, return_features=False)
-                all_logits.append(logits.float().cpu())
-                all_labels.append(batch["label"].cpu())
+                all_logits.append(logits.float())
+                all_labels.append(batch["label"].to(device, non_blocking=True))
                 if "manip_type" in batch:
-                    all_manip_types.append(batch["manip_type"])
+                    all_manip_types.append(batch["manip_type"].to(device, non_blocking=True))
                 if "video_id" in batch:
                     vids = batch["video_id"]
                     if isinstance(vids, torch.Tensor):
@@ -123,8 +126,8 @@ def evaluate(model, loader, device, top_k_ratio=0.5):
                 "precision_eer": 0.0, "recall_eer": 0.0, "f1_eer": 0.0,
                 "precision_05": 0.0, "recall_05": 0.0, "f1_05": 0.0}
 
-    logits = torch.cat(all_logits).numpy()
-    labels = torch.cat(all_labels).numpy()
+    logits = torch.cat(all_logits).cpu().numpy()
+    labels = torch.cat(all_labels).cpu().numpy()
 
     # Apply sigmoid to convert logits → probabilities
     probs = 1.0 / (1.0 + np.exp(-logits))
@@ -153,7 +156,7 @@ def evaluate(model, loader, device, top_k_ratio=0.5):
 
     # Per-manipulation-type breakdown (each fake type evaluated against ALL real samples)
     if all_manip_types:
-        manip_types = torch.cat(all_manip_types).numpy()
+        manip_types = torch.cat(all_manip_types).cpu().numpy()
         from smsdt.data.dataset import MANIP_TYPE_MAP
         reverse_map = {v: k for k, v in MANIP_TYPE_MAP.items()}
 
@@ -224,8 +227,12 @@ def main():
                         choices=["val", "test"], help="Evaluation split")
     parser.add_argument("--config-dir", type=str, default="configs",
                         help="Directory containing YAML config files")
-    parser.add_argument("--workers", type=int, default=6,
-                        help="Number of dataloader workers")
+    parser.add_argument("--batch-size", type=int, default=32,
+                        help="Batch size for evaluation (default: 32)")
+    parser.add_argument("--workers", type=int, default=8,
+                        help="Number of dataloader workers (default: 8)")
+    parser.add_argument("--max-batches", type=int, default=None,
+                        help="Optional maximum number of batches to evaluate")
     args = parser.parse_args()
 
     # Load configs
@@ -259,8 +266,12 @@ def main():
         print(f"WARNING: Checkpoint {args.ckpt} not found. Evaluating random weights.")
 
     # Build loader and evaluate
-    loader = build_dataloader(cfg.data, split=args.split, num_workers=args.workers)
-    metrics = evaluate(model, loader, device)
+    loader = build_dataloader(
+        cfg.data, split=args.split,
+        num_workers=args.workers,
+        batch_size=args.batch_size,
+    )
+    metrics = evaluate(model, loader, device, max_batches=args.max_batches)
     print_metrics(metrics, title=f"{args.split.upper()} Set Results")
 
 
