@@ -1,10 +1,13 @@
 """
-S-MSDT v2 Loss Functions
-=======================
+S-MSDT v3 Loss Functions
+========================
 - Class-Balanced Focal BCE (alpha=0.2, gamma=2.0) for 1:4 real:fake ratio.
-- Asymmetric Real-Center Contrastive Loss: compacts genuine faces around a prototype
-  and pushes fakes outside a hyperspherical margin m=0.25.
+- Supervised Contrastive Loss with same-manipulation-type clustering.
 - Cross-Domain Decorrelation / Orthogonality Alignment Loss.
+
+V3 changes from v2:
+  - Removed contrastive_mode / real_margin from total_loss (always supervised contrastive).
+  - Kept asymmetric_real_compactness_loss function for future ablation experiments.
 """
 import torch
 import torch.nn as nn
@@ -35,10 +38,9 @@ def focal_bce(logits, targets, alpha=0.2, gamma=2.0, label_smoothing=0.0):
 
 
 def asymmetric_real_compactness_loss(features, targets, margin=0.25):
-    """Asymmetric Real-Center Contrastive Loss:
+    """Asymmetric Real-Center Contrastive Loss (kept for future ablation):
     Compacts authentic face representations around a real-domain centroid while
-    pushing fake representations outside a margin m. Prevents heterogeneous
-    fake methods from being forced into an unnatural single cluster.
+    pushing fake representations outside a margin m.
 
     Args:
         features: (B, D) post-ViT learned representations
@@ -125,14 +127,14 @@ def alignment_loss(z_rgb, z_dwt, mode="decorrelate"):
 def total_loss(logits, targets, z_rgb=None, z_dwt=None, z_post_vit=None,
                manipulation_types=None, alpha=0.2, gamma=2.0,
                label_smoothing=0.0, lambda_contrastive=0.1, lambda_align=0.05,
-               align_mode="decorrelate", contrastive_mode="asymmetric", real_margin=0.25):
-    """Combined loss: balanced focal BCE + contrastive + decorrelation alignment.
+               align_mode="decorrelate"):
+    """Combined loss: balanced focal BCE + supervised contrastive + decorrelation alignment.
 
     Args:
         logits: (B,) raw model output
         targets: (B,) binary labels
-        z_rgb: (B, D) pooled RGB features (for alignment loss)
-        z_dwt: (B, D) pooled wavelet features (for alignment loss)
+        z_rgb: (B, D) pooled RGB features (optional, for alignment loss)
+        z_dwt: (B, D) pooled wavelet features (optional, for alignment or fallback contrastive)
         z_post_vit: (B, D) post-ViT pooled features for contrastive loss
         manipulation_types: (B,) manipulation type IDs (optional)
         alpha, gamma: focal loss hyperparameters (default alpha=0.2 for 1:4 real:fake ratio)
@@ -140,8 +142,6 @@ def total_loss(logits, targets, z_rgb=None, z_dwt=None, z_post_vit=None,
         lambda_contrastive: weight for contrastive loss
         lambda_align: weight for alignment loss
         align_mode: "decorrelate" or "cosine"
-        contrastive_mode: "asymmetric" (default in v2) or "supervised"
-        real_margin: margin for asymmetric real-center loss (default 0.25)
     """
     L_focal = focal_bce(logits, targets, alpha=alpha, gamma=gamma,
                         label_smoothing=label_smoothing)
@@ -151,10 +151,7 @@ def total_loss(logits, targets, z_rgb=None, z_dwt=None, z_post_vit=None,
 
     feat_con = z_post_vit if z_post_vit is not None else z_dwt
     if feat_con is not None and lambda_contrastive > 0:
-        if contrastive_mode == "asymmetric":
-            L_con = asymmetric_real_compactness_loss(feat_con, targets, margin=real_margin)
-        else:
-            L_con = supervised_contrastive_loss(feat_con, targets, manipulation_types)
+        L_con = supervised_contrastive_loss(feat_con, targets, manipulation_types)
         L_total = L_total + lambda_contrastive * L_con
         loss_dict["contrastive"] = L_con.item()
 

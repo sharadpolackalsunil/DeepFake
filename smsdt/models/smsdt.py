@@ -1,11 +1,18 @@
 """
-S-MSDT v2: Scale-Invariance + Multi-Scale Feature Differences + Spatio-Temporal Wavelet Guard.
+S-MSDT v3: Scale-Invariance + Multi-Scale Feature Differences + Spatio-Temporal Wavelet Guard.
 Full assembled model combining:
-- EfficientNet-B4 FPN RGB branch with High-Res PSIT (14x14 = 196 tokens)
-- Spatio-temporal Wavelet branch with 3-stage DW-SE stem & temporal high-pass
-- Compression-Aware Spectral Gating (CASG) with local cross-attention
-- Temporal-First N-MSSS ViT with asymmetric Q/K temporal attention
-- Sharp Attentional Readout (temperature-scaled spatial-temporal pooling)
+- EfficientNet-B4 FPN RGB branch with PSIT (7x7 = 49 tokens)
+- Spatio-temporal Wavelet branch with 3-stage DW-SE stem & spectral ratio rho
+- rho-Conditioned Gated Fusion (no cross-attention)
+- Spatial-First N-MSSS ViT with asymmetric Q/K temporal attention
+- Sharp Attentional Readout (temperature=1.0, trunc_normal init)
+
+V3 changes from v2:
+  - Grid 7x7 (49 tokens) instead of 14x14 (196) — matched to ViT capacity
+  - Spatial-first ViT execution order (proven in TimeSFormer/ViViT)
+  - Attentional readout with trunc_normal init + tau=1.0 (healthy gradients)
+  - Wavelet branch: 9ch input, 7x7 output (no temporal LL-diff)
+  - Fusion: rho conditioning kept, cross-attention removed
 """
 import torch
 import torch.nn as nn
@@ -17,12 +24,16 @@ from .nmsss_vit import NMSSSBlock
 
 
 class SharpAttentionalReadout(nn.Module):
-    """Temperature-scaled Softmax Attentional Pooling:
-    Replaces uniform mean-pooling with learned attention weights across patches
-    and frames, preventing localized forgeries (e.g. mouth in NeuralTextures)
-    from being diluted by authentic facial skin.
+    """Learned attention pooling with proper initialization (v3).
+
+    Starts near-uniform (like mean pooling) but can LEARN to focus
+    on forgery-relevant patches and frames during training.
+
+    V3 fixes from v2:
+      - trunc_normal_(std=0.02) init on final projection weights (NOT zero-init)
+      - temperature=1.0 (NOT 0.2) — gradient-friendly, softmax not over-sharpened
     """
-    def __init__(self, embed_dim=256, temperature=0.2):
+    def __init__(self, embed_dim=256, temperature=1.0):
         super().__init__()
         self.temperature = temperature
         self.spatial_attn = nn.Sequential(
@@ -36,11 +47,10 @@ class SharpAttentionalReadout(nn.Module):
             nn.Linear(embed_dim // 4, 1),
         )
 
-        # Zero-init last projection so readout starts as uniform pooling and smoothly sharpens
-        nn.init.zeros_(self.spatial_attn[-1].weight)
-        nn.init.zeros_(self.spatial_attn[-1].bias)
-        nn.init.zeros_(self.temporal_attn[-1].weight)
-        nn.init.zeros_(self.temporal_attn[-1].bias)
+        # Small random init — gradient-friendly near-uniform start that CAN differentiate
+        for m in [self.spatial_attn, self.temporal_attn]:
+            nn.init.trunc_normal_(m[-1].weight, std=0.02)
+            nn.init.zeros_(m[-1].bias)  # bias=0 is fine (scores start ~0 -> uniform softmax)
 
     def forward(self, z):
         """
@@ -49,12 +59,12 @@ class SharpAttentionalReadout(nn.Module):
         Returns:
             z_video: (B, D) aggregated video representation
         """
-        # 1. Spatial sharp attention across N patches
+        # 1. Spatial attention across N patches
         s_scores = self.spatial_attn(z) / self.temperature      # (B, T, N, 1)
         s_weights = torch.softmax(s_scores, dim=2)               # (B, T, N, 1)
         z_frame = (z * s_weights).sum(dim=2)                     # (B, T, D)
 
-        # 2. Temporal sharp attention across T frames
+        # 2. Temporal attention across T frames
         t_scores = self.temporal_attn(z_frame) / self.temperature # (B, T, 1)
         t_weights = torch.softmax(t_scores, dim=1)                 # (B, T, 1)
         z_video = (z_frame * t_weights).sum(dim=1)                 # (B, D)
@@ -63,8 +73,8 @@ class SharpAttentionalReadout(nn.Module):
 
 
 class SMSDT(nn.Module):
-    def __init__(self, embed_dim=256, depth=4, heads=8, num_classes=1, grid=14,
-                 stem_type="dw_separable_se", pool_energy=True, pool_temperature=0.2):
+    def __init__(self, embed_dim=256, depth=4, heads=8, num_classes=1, grid=7,
+                 stem_type="dw_separable_se", pool_energy=True, pool_temperature=1.0):
         super().__init__()
         self.grid = grid
         self.embed_dim = embed_dim
@@ -73,16 +83,16 @@ class SMSDT(nn.Module):
         self.rgb_branch = RGBBranch(out_channels=embed_dim)
         self.wavelet_branch = WaveletBranch(embed_dim=embed_dim, stem_type=stem_type, pool_energy=pool_energy)
 
-        # High-res tokenizers (14x14 = 196 tokens)
+        # Tokenizers
         self.psit = PSIT(embed_dim=embed_dim, grid=grid)
         self.freq_stem = FrequencyStem(embed_dim=embed_dim, grid=grid)
-        self.fusion = GatedFusion(embed_dim=embed_dim, use_cross_attn=True)
+        self.fusion = GatedFusion(embed_dim=embed_dim)
 
         num_tokens = grid * grid
         self.pos_embed = nn.Parameter(torch.zeros(1, 1, num_tokens, embed_dim))
         nn.init.trunc_normal_(self.pos_embed, std=0.02)
 
-        # Temporal-First Decomposed ViT Blocks
+        # Spatial-First Decomposed ViT Blocks
         self.blocks = nn.ModuleList([
             NMSSSBlock(dim=embed_dim, heads=heads) for _ in range(depth)
         ])
@@ -118,18 +128,18 @@ class SMSDT(nn.Module):
 
         # --- Dual-stream feature extraction ---
         fpn = self.rgb_branch(x)                    # list of (B*T, D, h, w)
-        z_rgb = self.psit(fpn)                      # (B*T, N=196, D)
+        z_rgb = self.psit(fpn)                      # (B*T, N=49, D)
 
-        # Spatio-Temporal Wavelet Frequency Guard with spectral ratio rho
-        wv, rho = self.wavelet_branch(frames, return_rho=True)  # (B*T, D, 14, 14), (B*T, 1)
-        z_dwt = self.freq_stem(wv)                              # (B*T, N=196, D)
+        # Wavelet branch with spectral ratio rho
+        wv, rho = self.wavelet_branch(x, return_rho=True)  # (B*T, D, 7, 7), (B*T, 1)
+        z_dwt = self.freq_stem(wv)                          # (B*T, N=49, D)
 
-        # --- Compression-Aware Cross-Domain Fusion ---
-        z = self.fusion(z_rgb, z_dwt, rho=rho)                  # (B*T, N=196, D)
+        # --- rho-Conditioned Cross-Domain Fusion ---
+        z = self.fusion(z_rgb, z_dwt, rho=rho)              # (B*T, N=49, D)
         z = rearrange(z, "(b t) n d -> b t n d", b=B, t=T)
         z = z + self.pos_embed
 
-        # --- Temporal-First N-MSSS ViT Backbone ---
+        # --- Spatial-First N-MSSS ViT Backbone ---
         for blk in self.blocks:
             z = blk(z, conf)
 

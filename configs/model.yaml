@@ -1,9 +1,9 @@
-# S-MSDT v2 Model Configuration
+# S-MSDT v3 Model Configuration
 embed_dim: 256
 depth: 4
 heads: 8
 num_classes: 1
-grid: 14                      # Upgraded to 14x14 grid (196 tokens) for fine-grained localized detection
-stem_type: dw_separable_se    # 3-stage DW-SE frequency stem
+grid: 7                        # 7x7 = 49 tokens (matched to ViT depth)
+stem_type: dw_separable_se     # 3-stage DW-SE frequency stem (v3 upgrade over v1's strided_patch)
 pool_energy: true
-pool_temperature: 0.2         # Temperature for Sharp Attentional Readout
+pool_temperature: 1.0          # Attentional readout temperature (1.0 = gradient-friendly)

@@ -22,7 +22,7 @@ gamma: 2.0                  # focal loss focusing parameter
 lambda_contrastive: 0.1     # contrastive loss weight
 lambda_align: 0.05          # cross-domain alignment loss weight
 align_mode: decorrelate     # decorrelation/orthogonality between RGB and wavelet streams
-contrastive_mode: supervised # Supervised Contrastive Loss with temperature=0.07 (active on all batches)
+# v3: always uses supervised contrastive loss (temperature=0.07)
 
 # Optional features
 use_wandb: false

@@ -114,8 +114,6 @@ def main(cfg, resume=True):
         "lambda_contrastive": cfg.train.get("lambda_contrastive", 0.1),
         "lambda_align": cfg.train.get("lambda_align", 0.05),
         "align_mode": cfg.train.get("align_mode", "decorrelate"),
-        "contrastive_mode": cfg.train.get("contrastive_mode", "asymmetric"),
-        "real_margin": cfg.train.get("real_margin", 0.25),
     }
 
     os.makedirs("outputs/checkpoints", exist_ok=True)
