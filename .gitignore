@@ -91,5 +91,7 @@ docker-compose.override.yml
 *.orig
 .env
 .env.local
-# Claude
+# Claude / Reference docs
 .claude/
+architecture.md
+claude.md
