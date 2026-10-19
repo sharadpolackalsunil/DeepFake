@@ -38,6 +38,7 @@ calib_cache.bin
 # ── Data (large files — download via scripts, don't commit) ──
 data/raw/
 data/cache/
+data/store/
 data/splits/*.csv
 !data/raw/.gitkeep
 !data/cache/.gitkeep
