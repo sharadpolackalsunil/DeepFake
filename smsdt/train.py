@@ -7,6 +7,7 @@ and multi-term loss (focal BCE + contrastive + alignment).
 """
 import os
 import argparse
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -148,14 +149,21 @@ def main(cfg, resume=True):
     if resume and os.path.exists(checkpoint_path):
         print(f"Loading checkpoint from {checkpoint_path}")
         checkpoint_data = torch.load(checkpoint_path, map_location=device, weights_only=False)
-        model.load_state_dict(checkpoint_data["model_state_dict"])
-        opt.load_state_dict(checkpoint_data["optimizer_state_dict"])
-        sched.load_state_dict(checkpoint_data["scheduler_state_dict"])
-        is_epoch_end = checkpoint_data.get("is_epoch_end", True)
-        start_epoch = checkpoint_data.get("epoch", 0) + 1 if is_epoch_end else checkpoint_data.get("epoch", 0)
-        step = checkpoint_data.get("step", 0)
-        best_auc = checkpoint_data.get("best_auc", 0.0)
-        print(f"Resuming training from epoch {start_epoch}, step {step} (Best AUC: {best_auc:.4f})")
+        try:
+            model.load_state_dict(checkpoint_data["model_state_dict"])
+            opt.load_state_dict(checkpoint_data["optimizer_state_dict"])
+            sched.load_state_dict(checkpoint_data["scheduler_state_dict"])
+            is_epoch_end = checkpoint_data.get("is_epoch_end", True)
+            start_epoch = checkpoint_data.get("epoch", 0) + 1 if is_epoch_end else checkpoint_data.get("epoch", 0)
+            step = checkpoint_data.get("step", 0)
+            best_auc = checkpoint_data.get("best_auc", 0.0)
+            print(f"Resuming training from epoch {start_epoch}, step {step} (Best AUC: {best_auc:.4f})")
+        except RuntimeError as e:
+            print(f"[Warning] Incompatible checkpoint architecture in {checkpoint_path}:")
+            print(f"  {e}")
+            print("  -> Ignoring incompatible checkpoint and starting from scratch.")
+            start_epoch = 0
+            step = 0
     elif not resume:
         print("Training from scratch (--from-scratch specified). Existing checkpoints ignored.")
 
