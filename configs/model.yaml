@@ -1,6 +1,11 @@
-# Model configuration
+# S-MSDT Model Configuration (Phase 1)
+# ====================================
+
 embed_dim: 256
 depth: 4
 heads: 8
 num_classes: 1
-grid: 7
+grid: 14                # 14x14 token grid (196 tokens)
+use_dense_psit: true    # DensePSIT learned convs instead of 7x7 avg pooling blur
+pool_energy: false       # Signed Haar wavelet coefficients (preserves edge polarity)
+stem_type: strided_patch

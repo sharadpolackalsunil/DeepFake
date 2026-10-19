@@ -1,11 +1,20 @@
-# Data configuration
-dataset: ffpp
-batch_size: 8
+# S-MSDT Data Configuration (Phase 0 & Phase 1)
+# ===============================================
 
+dataset: ffpp
+store_root: data/store
+index_csv: data/splits/index.csv
+raw_root: data/raw/ffpp_c23
 cache_root: data/cache
-data_root: data/raw/ffpp_c23
 compression: c23
-chunk_length: 8
-chunk_stride: 4
-img_size: 224
-shuffle_buf: 1000
+
+# Clip & Resolution Parameters
+chunk_length: 8       # T=8 frames per clip
+chunk_stride: 1       # stride 1 contiguous frames
+img_size: 224         # 224x224 crop input to model
+store_size: 256       # 256x256 stored frame resolution
+margin: 1.3           # 1.3x loose crop margin preserving boundary context
+
+# Pairing & SBI
+p_sbi: 0.5            # 50% probability of online clip-level SBI
+mask_grid: 14         # 14x14 mask grid matching DensePSIT tokens

@@ -78,21 +78,7 @@ def simulate_blur(frames, blur_prob=0.3):
     return torch.from_numpy(blurred_arr).float().permute(0, 3, 1, 2) / 255.0
 
 
-def simulate_sbi_blend(frames, blend_prob=0.25):
-    """Simulates self-blended image (SBI) boundary artifacts.
-    Generates a feathered central mask and blends slightly altered face colors/textures.
-    """
-    if random.random() > blend_prob:
-        return frames
-    T, C, H, W = frames.shape
-    y = torch.linspace(-1, 1, H, dtype=frames.dtype).view(1, 1, H, 1).repeat(T, 1, 1, W)
-    x = torch.linspace(-1, 1, W, dtype=frames.dtype).view(1, 1, 1, W).repeat(T, 1, H, 1)
-    radius = (x ** 2 + (y * 1.2) ** 2)
-    mask = torch.clamp(1.0 - (radius - 0.2) / 0.35, 0.0, 1.0)
-
-    color_shift = (torch.rand(1, C, 1, 1, dtype=frames.dtype) - 0.5) * 0.15
-    transformed = torch.clamp(frames + color_shift, 0.0, 1.0)
-    return frames * (1.0 - mask) + transformed * mask
+# Note: Legacy simulate_sbi_blend removed; replaced by smsdt.data.sbi_video.sbi_clip
 
 
 def augment_video(frames, conf=None, split="train", target_size=224, target_frames=8):

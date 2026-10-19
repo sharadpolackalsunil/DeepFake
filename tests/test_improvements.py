@@ -61,17 +61,20 @@ def test_wavelet_branch_strided_patch_stem_and_energy():
     """Verify WaveletBranch with strided patch stem directly outputs (B, embed_dim, 7, 7)."""
     B = 2
     embed_dim = 128
-    wv_patch = WaveletBranch(embed_dim=embed_dim, stem_type="strided_patch", pool_energy=True)
+    wv_patch_7 = WaveletBranch(embed_dim=embed_dim, stem_type="strided_patch", pool_energy=True, grid=7)
     x = torch.randn(B, 3, 224, 224)
-    out = wv_patch(x)
+    out7 = wv_patch_7(x)
+    assert out7.shape == (B, embed_dim, 7, 7)
 
-    # 112 // 16 = 7, so output is directly (B, embed_dim, 7, 7)
-    assert out.shape == (B, embed_dim, 7, 7)
+    # Dense 14x14 grid
+    wv_patch_14 = WaveletBranch(embed_dim=embed_dim, stem_type="strided_patch", pool_energy=False, grid=14)
+    out14 = wv_patch_14(x)
+    assert out14.shape == (B, embed_dim, 14, 14)
 
     # Test backward pass
-    loss = out.sum()
+    loss = out14.sum()
     loss.backward()
-    assert wv_patch.proj[0].weight.grad is not None
+    assert wv_patch_14.proj[0].weight.grad is not None
 
 
 def test_video_level_evaluation_scoring():

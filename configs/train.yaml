@@ -1,34 +1,49 @@
-# Training configuration
+# S-MSDT Training Configuration (Phase 1: Anti-Overfitting & Model Fixes)
+# =========================================================================
+
+# Architecture & Modality
+grid: 14                      # 14x14 token grid (196 tokens) via DensePSIT
+use_dense_psit: true
+pool_energy: false            # signed Haar wavelet coefficients (preserves edge polarity)
+
+# Optimizer & Differential Learning Rates
 optimizer: adamw
-lr: 3.0e-4
-backbone_lr: 3.0e-5
-weight_decay: 0.05
+lr: 5.0e-4                    # transformer head & readout
+backbone_lr: 5.0e-5           # EfficientNet-B4 spatial backbone
+weight_decay: 0.05            # applied to 2D+ weights; 0.0 on biases, LayerNorms, embeddings
 betas: [0.9, 0.999]
-schedule: cosine
-warmup_steps: 2000
-warmup_pct: 0.05
-steps_per_epoch: 1000
-total_steps: 50000
 grad_clip: 1.0
-label_smoothing: 0.05
-epochs: 50
-grad_accum: 4            # 8 micro-batch * 4 accum = 32 effective batch size
-workers: 8               # 8 workers on 24-core Intel Core Ultra 9 285K to prevent GPU starvation
-val_workers: 8           # 8 workers during validation for parallel disk reads and decoding
-val_batch_size: 32       # 32 chunks per batch for inference on 32GB RTX 5090 (no gradients needed)
-max_val_batches: null    # null for full validation sweep, or integer (e.g. 200) for fast checks
-save_interval_steps: 500 # saves latest.pt every 500 steps for crash recovery
 
+# Exact-Epoch Scheduler (Cosine with Linear Warmup)
+schedule: cosine
+epochs: 60                    # 60 epochs x 90 batches (720 pairs / 8) = 5,400 optimizer steps
+batch_pairs: 8                # 8 pairs = 16 video clips per step
+grad_accum: 1                 # 1 step accumulation on 32GB RTX 5090
+warmup_frac: 0.03             # 3% linear warmup
+min_lr_ratio: 0.01            # decays to 1% of peak LR
 
-# Loss hyperparameters
-alpha: 0.2            # focal loss alpha (0.2 for balanced 1:4 real:fake ratio: 4*0.2 = 0.8 vs 1*0.8 = 0.8)
-gamma: 2.0            # focal loss focusing parameter
-lambda_contrastive: 0.1   # supervised contrastive loss weight
-lambda_align: 0.05        # cross-domain alignment loss weight
-align_mode: decorrelate   # decorrelation/orthogonality between RGB and wavelet streams
+# Hardware & Multiprocessing (RTX 5090 + Intel Core Ultra 9 285K)
+workers: 8                    # 8 DataLoader workers
+val_workers: 8
+val_batch_size: 32            # 32 clips per inference batch under torch.no_grad()
+pin_memory: true
+persistent_workers: true
+prefetch_factor: 4
 
-# Optional features
+# Loss Configuration
+label_smoothing: 0.05         # BCE label smoothing
+lambda_mask: 0.5              # patch-level mask loss weight (supervised by SBI & FF++ masks)
+
+# Augmentations
+p_sbi: 0.5                    # 50% probability of online clip-level SBI synthesis
+jpeg_quality: [50, 100]       # safe JPEG range (does NOT erase NeuralTextures subtle signals)
+p_jpeg: 0.3
+p_blur: 0.1
+p_flip: 0.5
+
+# Model EMA & Checkpointing
+ema_decay: 0.999              # Exponential Moving Average model weights
+save_interval_steps: 500
 use_wandb: false
-compile: false              # torch.compile
-gradient_checkpointing: false  # False on RTX 5090 (32GB VRAM fits all activations; ~25% faster)
-
+compile: false
+gradient_checkpointing: false # false on 32GB RTX 5090 (comfortably fits in VRAM)
