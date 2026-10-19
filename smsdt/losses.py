@@ -124,11 +124,28 @@ def alignment_loss(z_rgb, z_dwt, mode="decorrelate"):
         return 2 - 2 * (z_rgb_n * z_dwt_n).sum(dim=-1).mean()
 
 
+def bce_with_pos_weight(logits, targets, pos_weight=0.25, label_smoothing=0.0):
+    """Numerically stable BCE with positive class weighting and optional label smoothing.
+
+    Args:
+        logits: (B,) raw logits
+        targets: (B,) binary targets (0=real, 1=fake)
+        pos_weight: weight for fake class (0.25 balances 1:4 real:fake ratio in FF++)
+        label_smoothing: fraction of label smoothing
+    """
+    if label_smoothing > 0.0:
+        targets = targets * (1.0 - label_smoothing) + 0.5 * label_smoothing
+
+    pw = torch.tensor(pos_weight, device=logits.device, dtype=logits.dtype)
+    return F.binary_cross_entropy_with_logits(logits, targets, pos_weight=pw)
+
+
 def total_loss(logits, targets, z_rgb=None, z_dwt=None, z_post_vit=None,
-               manipulation_types=None, alpha=0.2, gamma=2.0,
-               label_smoothing=0.0, lambda_contrastive=0.1, lambda_align=0.05,
-               align_mode="decorrelate"):
-    """Combined loss: balanced focal BCE + supervised contrastive + decorrelation alignment.
+               manipulation_types=None, loss_type="bce", pos_weight=0.25,
+               alpha=0.2, gamma=2.0, label_smoothing=0.0,
+               lambda_contrastive=0.0, lambda_align=0.0,
+               align_mode="decorrelate", **kwargs):
+    """Combined loss: stable BCE/Focal + optional contrastive + optional alignment.
 
     Args:
         logits: (B,) raw model output
@@ -137,17 +154,24 @@ def total_loss(logits, targets, z_rgb=None, z_dwt=None, z_post_vit=None,
         z_dwt: (B, D) pooled wavelet features (optional, for alignment or fallback contrastive)
         z_post_vit: (B, D) post-ViT pooled features for contrastive loss
         manipulation_types: (B,) manipulation type IDs (optional)
-        alpha, gamma: focal loss hyperparameters (default alpha=0.2 for 1:4 real:fake ratio)
+        loss_type: "bce" (recommended for baseline) or "focal"
+        pos_weight: weight for fake class in BCE (default 0.25 for 1:4 real:fake)
+        alpha, gamma: focal loss hyperparameters (if loss_type="focal")
         label_smoothing: label smoothing factor
-        lambda_contrastive: weight for contrastive loss
-        lambda_align: weight for alignment loss
+        lambda_contrastive: weight for contrastive loss (0.0 to disable)
+        lambda_align: weight for alignment loss (0.0 to disable)
         align_mode: "decorrelate" or "cosine"
     """
-    L_focal = focal_bce(logits, targets, alpha=alpha, gamma=gamma,
-                        label_smoothing=label_smoothing)
+    if loss_type == "bce":
+        L_main = bce_with_pos_weight(logits, targets, pos_weight=pos_weight,
+                                     label_smoothing=label_smoothing)
+        loss_dict = {"bce": L_main.item()}
+    else:
+        L_main = focal_bce(logits, targets, alpha=alpha, gamma=gamma,
+                           label_smoothing=label_smoothing)
+        loss_dict = {"focal": L_main.item()}
 
-    L_total = L_focal
-    loss_dict = {"focal": L_focal.item()}
+    L_total = L_main
 
     feat_con = z_post_vit if z_post_vit is not None else z_dwt
     if feat_con is not None and lambda_contrastive > 0:

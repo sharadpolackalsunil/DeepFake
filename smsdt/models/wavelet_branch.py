@@ -90,13 +90,13 @@ class WaveletBranch(nn.Module):
                 nn.GELU(),
             )
         else:
-            # 3-stage DW-SE stem: 9ch @ 112x112 -> 7x7
-            # Stage 1: stride=4 downsamples 112 -> 28
+            # 4-stage anti-aliased stem: 9ch @ 112x112 -> 56 -> 28 -> 14 -> 7x7
+            # Stage 1: anti-aliased downsampling (112 -> 56 -> 28) avoids stride-4 frequency aliasing
             self.stage1 = nn.Sequential(
-                nn.Conv2d(9, 64, kernel_size=3, stride=4, padding=1, bias=False),
-                nn.BatchNorm2d(64),
+                nn.Conv2d(9, 32, kernel_size=3, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(32),
                 nn.GELU(),
-                SqueezeExcitation(64),
+                DepthwiseSeparableBlock(32, 64, stride=2),
             )
             # Stage 2: stride=2 downsamples 28 -> 14
             self.stage2 = DepthwiseSeparableBlock(64, 128, stride=2)

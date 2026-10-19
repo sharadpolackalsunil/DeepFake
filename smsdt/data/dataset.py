@@ -43,7 +43,7 @@ def normalize_imagenet(frames):
 
 def simulate_compression(frames, quality_range=(15, 80)):
     """Simulates video compression artifacts by applying JPEG compression to frames.
-    frames: (T, C, H, W) tensor, values in [0, 1]
+    frames: (T, C, H, W) tensor, values in [0, 1] in RGB
     """
     q = random.randint(quality_range[0], quality_range[1])
     compressed_frames = []
@@ -52,16 +52,18 @@ def simulate_compression(frames, quality_range=(15, 80)):
     frames_np = (frames.permute(0, 2, 3, 1).numpy() * 255).astype(np.uint8)
 
     for i in range(frames_np.shape[0]):
-        # Encode to JPEG
+        # frames is in RGB, cv2 expects BGR
+        bgr_frame = cv2.cvtColor(frames_np[i], cv2.COLOR_RGB2BGR)
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), q]
-        result, encimg = cv2.imencode('.jpg', frames_np[i], encode_param)
+        result, encimg = cv2.imencode('.jpg', bgr_frame, encode_param)
         if result:
-            decimg = cv2.imdecode(encimg, 1)
-            compressed_frames.append(decimg)
+            dec_bgr = cv2.imdecode(encimg, 1)
+            dec_rgb = cv2.cvtColor(dec_bgr, cv2.COLOR_BGR2RGB)
+            compressed_frames.append(dec_rgb)
         else:
             compressed_frames.append(frames_np[i])
 
-    # Convert back to (T, C, H, W) float32 [0, 1]
+    # Convert back to (T, C, H, W) float32 [0, 1] RGB
     compressed_frames = np.stack(compressed_frames, axis=0)
     compressed_tensor = torch.from_numpy(compressed_frames).float() / 255.0
     return compressed_tensor.permute(0, 3, 1, 2)
@@ -189,14 +191,19 @@ def augment_video(frames, conf=None, split="train", target_size=224, target_fram
 
 class SampleDecoder:
     """Top-level picklable sample transformer for WebDataset on Windows multiprocessing."""
-    def __init__(self, split="train"):
+    def __init__(self, split="train", bgr_to_rgb=True):
         self.split = split
+        self.bgr_to_rgb = bgr_to_rgb
 
     def __call__(self, sample):
         frames = sample.get("frames.npy", None)
         if frames is None:
             # fallback mock data
             frames = np.zeros((16, 224, 224, 3), dtype=np.uint8)
+
+        # Convert OpenCV BGR to RGB on-the-fly for existing preprocessed shards
+        if self.bgr_to_rgb and isinstance(frames, np.ndarray) and frames.ndim == 4 and frames.shape[-1] == 3:
+            frames = frames[..., [2, 1, 0]]
 
         # Confs, labels, manipulation type, and video_id
         conf = sample.get("conf.npy", np.ones((8,)))
@@ -249,6 +256,9 @@ def build_dataloader(cfg, split="train", num_workers=12):
     batch_size = getattr(cfg, "batch_size", 4)
     if hasattr(cfg, "get"):
         batch_size = cfg.get("batch_size", 4)
+    bgr_to_rgb = getattr(cfg, "bgr_to_rgb", True)
+    if hasattr(cfg, "get"):
+        bgr_to_rgb = cfg.get("bgr_to_rgb", True)
 
     shard_dir = os.path.join(cache_root, dataset_name)
     shard_files = sorted(glob.glob(os.path.join(shard_dir, f"{split}-*.tar")))
@@ -274,7 +284,7 @@ def build_dataloader(cfg, split="train", num_workers=12):
     dataset = (
         dataset
         .decode()
-        .map(SampleDecoder(split=split))
+        .map(SampleDecoder(split=split, bgr_to_rgb=bgr_to_rgb))
         .batched(batch_size)
     )
 

@@ -34,6 +34,7 @@ class AsymmetricTemporalAttention(nn.Module):
         self.dropout = nn.Dropout(drop)
         self.norm_diff = nn.LayerNorm(dim)
         self.norm_val = nn.LayerNorm(dim)
+        self.gradient_checkpointing = False
 
     def forward(self, x, delta_gated):
         """
@@ -67,6 +68,7 @@ class SpatialTransformerBlock(nn.Module):
     """Intra-frame spatial self-attention block across patch tokens."""
     def __init__(self, dim=256, heads=8, mlp_ratio=4.0, drop=0.1):
         super().__init__()
+        self.gradient_checkpointing = False
         self.norm1 = nn.LayerNorm(dim)
         self.attn = nn.MultiheadAttention(dim, heads, dropout=drop, batch_first=True)
 
@@ -74,6 +76,10 @@ class SpatialTransformerBlock(nn.Module):
         h = self.norm1(x)
         out, _ = self.attn(h, h, h, need_weights=False)
         return x + out
+
+
+# Backwards compatibility alias for tests and previous checkpoints
+TransformerBlock = SpatialTransformerBlock
 
 
 class FeedForward(nn.Module):
@@ -131,6 +137,8 @@ class NMSSSBlock(nn.Module):
 
     def set_gradient_checkpointing(self, enable=True):
         self.gradient_checkpointing = enable
+        self.spatial.gradient_checkpointing = enable
+        self.temporal.gradient_checkpointing = enable
 
     def _forward_block(self, x, conf):
         B, T, N, D = x.shape

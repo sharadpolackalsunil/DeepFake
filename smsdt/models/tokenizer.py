@@ -16,13 +16,47 @@ import torch.nn as nn
 class PSIT(nn.Module):
     """Pyramidal Scale-Invariant Tokenizer (PSIT).
 
-    Adaptive-pools each FPN level to a fixed grid, sums across scales,
-    and projects to a token sequence.
+    Projects each FPN level to grid x grid using anti-aliased / strided
+    convolutions for higher-resolution feature maps (avoiding destructive box blur),
+    sums across scales with learned weighting, and projects to a token sequence.
     """
     def __init__(self, embed_dim=256, grid=7):
         super().__init__()
         self.grid = grid
-        self.pool = nn.AdaptiveAvgPool2d((grid, grid))
+        self.embed_dim = embed_dim
+
+        # Level 0 (28x28 -> 7x7): two 3x3 depthwise-separable convs with stride 2
+        self.down_lvl0 = nn.Sequential(
+            nn.Conv2d(embed_dim, embed_dim, 3, stride=2, padding=1, groups=embed_dim, bias=False),
+            nn.BatchNorm2d(embed_dim),
+            nn.GELU(),
+            nn.Conv2d(embed_dim, embed_dim, 1, bias=False),
+            nn.BatchNorm2d(embed_dim),
+            nn.GELU(),
+            nn.Conv2d(embed_dim, embed_dim, 3, stride=2, padding=1, groups=embed_dim, bias=False),
+            nn.BatchNorm2d(embed_dim),
+            nn.GELU(),
+            nn.Conv2d(embed_dim, embed_dim, 1, bias=False),
+            nn.BatchNorm2d(embed_dim),
+            nn.GELU(),
+        )
+        # Level 1 (14x14 -> 7x7): one 3x3 depthwise-separable conv with stride 2
+        self.down_lvl1 = nn.Sequential(
+            nn.Conv2d(embed_dim, embed_dim, 3, stride=2, padding=1, groups=embed_dim, bias=False),
+            nn.BatchNorm2d(embed_dim),
+            nn.GELU(),
+            nn.Conv2d(embed_dim, embed_dim, 1, bias=False),
+            nn.BatchNorm2d(embed_dim),
+            nn.GELU(),
+        )
+        # Level 2 (7x7 -> 7x7): 1x1 conv
+        self.down_lvl2 = nn.Sequential(
+            nn.Conv2d(embed_dim, embed_dim, 1, bias=False),
+            nn.BatchNorm2d(embed_dim),
+            nn.GELU(),
+        )
+        self.fallback_pool = nn.AdaptiveAvgPool2d((grid, grid))
+        self.scale_weights = nn.Parameter(torch.ones(3))
         self.merge = nn.Conv2d(embed_dim, embed_dim, 1)
 
     def forward(self, fpn_feats):
@@ -32,8 +66,22 @@ class PSIT(nn.Module):
         Returns:
             tokens: (B, grid*grid, D)
         """
-        pooled = [self.pool(f) for f in fpn_feats]       # each (B, D, grid, grid)
-        summed = torch.stack(pooled, dim=0).sum(0)        # (B, D, grid, grid)
+        weights = torch.softmax(self.scale_weights, dim=0)
+        downsampled = []
+        for i, f in enumerate(fpn_feats):
+            h, w = f.shape[-2:]
+            if self.grid == 7 and i == 0 and h == 28 and w == 28:
+                d = self.down_lvl0(f)
+            elif self.grid == 7 and i == 1 and h == 14 and w == 14:
+                d = self.down_lvl1(f)
+            elif self.grid == 7 and i == 2 and h == 7 and w == 7:
+                d = self.down_lvl2(f)
+            else:
+                d = self.fallback_pool(f)
+            w_idx = min(i, len(weights) - 1)
+            downsampled.append(d * weights[w_idx])
+
+        summed = torch.stack(downsampled, dim=0).sum(0)        # (B, D, grid, grid)
         tokens = self.merge(summed).flatten(2).transpose(1, 2)  # (B, grid*grid, D)
         return tokens
 

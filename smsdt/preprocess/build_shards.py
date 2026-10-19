@@ -95,7 +95,8 @@ def extract_aligned_frames(video_path, detector, out_size=224, smooth_landmarks=
 
                     aligned = align_face(frame, kps_to_use, out_size=out_size)
                     if aligned is not None:
-                        frames.append(aligned)
+                        aligned_rgb = cv2.cvtColor(aligned, cv2.COLOR_BGR2RGB)
+                        frames.append(aligned_rgb)
                         confs.append(float(getattr(best, 'det_score', 0.9)))
                     else:
                         h, w = frame.shape[:2]
@@ -251,15 +252,18 @@ def discover_ffpp_videos(data_root, compression="c23"):
 
 
 def build_split_manifests(videos, split_file=None):
-    """Split videos into train/val/test without source identity leakage.
+    """Split videos into train/val/test without source/target identity leakage.
 
-    If split_file is provided, use it (CSV or JSON with official FF++ splits:
-    e.g. 720 train / 140 val / 140 test videos, source/target pairs kept together).
-    Otherwise, groups by source identity and splits 80/10/10 so a real video
-    and all fakes created from that identity stay strictly in the same split.
+    If split_file is provided (or data/splits/ffpp_official.json exists), use it
+    (official FF++ splits: 720 train / 140 val / 140 test videos).
+    Otherwise, builds connected component identity clusters so a real video
+    and all fakes involving those actors stay strictly in the same split.
 
     Returns dict: {"train": [...], "val": [...], "test": [...]}
     """
+    if split_file is None and os.path.exists("data/splits/ffpp_official.json"):
+        split_file = "data/splits/ffpp_official.json"
+
     if split_file and os.path.exists(split_file):
         split_map = {}
         if split_file.endswith(".json"):
@@ -286,11 +290,13 @@ def build_split_manifests(videos, split_file=None):
         for v in videos:
             vpath, full_id, _, _ = v
             raw_id = os.path.splitext(os.path.basename(vpath))[0]
-            # Match raw_id, source id, or full_id
+            # Match raw_id, source id, target id, or full_id
             if raw_id in split_map:
                 s = split_map[raw_id]
             elif "_" in raw_id and raw_id.split("_")[0] in split_map:
                 s = split_map[raw_id.split("_")[0]]
+            elif "_" in raw_id and len(raw_id.split("_")) > 1 and raw_id.split("_")[1] in split_map:
+                s = split_map[raw_id.split("_")[1]]
             elif full_id in split_map:
                 s = split_map[full_id]
             else:
@@ -298,30 +304,51 @@ def build_split_manifests(videos, split_file=None):
             splits.setdefault(s, []).append(v)
         return splits
 
-    # Default leak-free split: Group videos by source actor/video identity (80/10/10)
-    identity_groups = {}
+    # Default leak-free split: Group videos by connected identity components (80/10/10)
+    # If 042_056 exists, 042 and 056 are grouped into the same cluster
+    parent = {}
+    def find(x):
+        parent.setdefault(x, x)
+        if parent[x] != x:
+            parent[x] = find(parent[x])
+        return parent[x]
+
+    def union(x, y):
+        rx, ry = find(x), find(y)
+        if rx != ry:
+            parent[rx] = ry
+
     for v in videos:
         vpath, full_id, label, manip_type = v
         raw_id = os.path.splitext(os.path.basename(vpath))[0]
-        # For pairs like 042_056, base identity is the source actor (042)
-        base_id = raw_id.split("_")[0]
-        identity_groups.setdefault(base_id, []).append(v)
+        parts = raw_id.split("_")
+        find(parts[0])
+        if len(parts) > 1:
+            union(parts[0], parts[1])
 
-    unique_identities = sorted(list(identity_groups.keys()))
+    cluster_videos = {}
+    for v in videos:
+        vpath, full_id, label, manip_type = v
+        raw_id = os.path.splitext(os.path.basename(vpath))[0]
+        base_id = raw_id.split("_")[0]
+        root = find(base_id)
+        cluster_videos.setdefault(root, []).append(v)
+
+    unique_clusters = sorted(list(cluster_videos.keys()))
     np.random.seed(42)
-    perm_ids = np.random.permutation(unique_identities)
-    n = len(perm_ids)
+    perm_clusters = np.random.permutation(unique_clusters)
+    n = len(perm_clusters)
     n_train = int(0.8 * n)
     n_val = int(0.1 * n)
 
-    train_ids = set(perm_ids[:n_train])
-    val_ids = set(perm_ids[n_train:n_train + n_val])
+    train_clusters = set(perm_clusters[:n_train])
+    val_clusters = set(perm_clusters[n_train:n_train + n_val])
 
     splits = {"train": [], "val": [], "test": []}
-    for base_id, v_list in identity_groups.items():
-        if base_id in train_ids:
+    for c_id, v_list in cluster_videos.items():
+        if c_id in train_clusters:
             splits["train"].extend(v_list)
-        elif base_id in val_ids:
+        elif c_id in val_clusters:
             splits["val"].extend(v_list)
         else:
             splits["test"].extend(v_list)

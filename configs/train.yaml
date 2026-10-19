@@ -17,12 +17,13 @@ workers: 4               # 2-4 recommended on Windows to avoid process spawn mem
 save_interval_steps: 500 # saves latest.pt every 500 steps for crash recovery
 
 # Loss hyperparameters
-alpha: 0.2                  # focal loss alpha (0.2 for balanced 1:4 real:fake ratio: 4*0.2 = 0.8 vs 1*0.8 = 0.8)
+loss_type: bce               # "bce" (recommended baseline floor) or "focal"
+pos_weight: 0.25             # balances 1:4 real:fake ratio in FF++ (4 * 0.25 = 1.0)
+alpha: 0.2                  # focal loss alpha (used if loss_type: focal)
 gamma: 2.0                  # focal loss focusing parameter
-lambda_contrastive: 0.1     # contrastive loss weight
-lambda_align: 0.05          # cross-domain alignment loss weight
+lambda_contrastive: 0.0     # contrastive loss weight (set >0 during Phase 3 ablation)
+lambda_align: 0.0           # cross-domain alignment loss weight (set >0 during Phase 3 ablation)
 align_mode: decorrelate     # decorrelation/orthogonality between RGB and wavelet streams
-# v3: always uses supervised contrastive loss (temperature=0.07)
 
 # Optional features
 use_wandb: false

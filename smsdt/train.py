@@ -27,16 +27,25 @@ def main(cfg, resume=True):
         print(f"GPU compute capability: {cap}")
 
     # --- Model ---
-    model = SMSDT(
-        embed_dim=cfg.model.embed_dim,
-        depth=cfg.model.depth,
-        heads=cfg.model.get("heads", 8),
-        num_classes=cfg.model.get("num_classes", 1),
-        grid=cfg.model.get("grid", 7),
-        stem_type=cfg.model.get("stem_type", "strided_patch"),
-        pool_energy=cfg.model.get("pool_energy", True),
-    ).to(device)
-
+    model_type = cfg.model.get("type", "smsdt")
+    if model_type == "baseline_b4":
+        from smsdt.models.baseline_b4 import BaselineB4
+        model = BaselineB4(
+            pretrained=cfg.model.get("pretrained", True),
+            drop_rate=cfg.model.get("drop_rate", 0.2),
+        ).to(device)
+        print("Initialized stripped baseline: BaselineB4 (EfficientNet-B4 + frame mean)")
+    else:
+        model = SMSDT(
+            embed_dim=cfg.model.embed_dim,
+            depth=cfg.model.depth,
+            heads=cfg.model.get("heads", 8),
+            num_classes=cfg.model.get("num_classes", 1),
+            grid=cfg.model.get("grid", 7),
+            stem_type=cfg.model.get("stem_type", "dw_separable_se"),
+            pool_energy=cfg.model.get("pool_energy", True),
+        ).to(device)
+        print("Initialized full architecture: S-MSDT v3")
 
     param_count = sum(p.numel() for p in model.parameters()) / 1e6
     print(f"Model parameters: {param_count:.1f}M")
@@ -54,31 +63,42 @@ def main(cfg, resume=True):
         model.set_gradient_checkpointing(True)
         print("Gradient checkpointing enabled for ViT blocks")
 
-    # --- Optimizer & scheduler with differential learning rates ---
-    backbone_params = list(model.rgb_branch.parameters())
-    backbone_param_ids = set(id(p) for p in backbone_params)
-    head_params = [p for p in model.parameters() if id(p) not in backbone_param_ids]
-    backbone_lr = float(cfg.train.get("backbone_lr", 3e-5))
-    head_lr = float(cfg.train.get("lr", 3e-4))
+    # --- Optimizer & scheduler ---
+    if model_type == "baseline_b4":
+        lr = float(cfg.train.get("lr", 3e-4))
+        opt = torch.optim.AdamW(
+            model.parameters(),
+            lr=lr,
+            weight_decay=float(cfg.train.get("weight_decay", 0.01)),
+            betas=tuple(cfg.train.get("betas", [0.9, 0.999])),
+        )
+        max_lr = lr
+    else:
+        backbone_params = list(model.rgb_branch.parameters())
+        backbone_param_ids = set(id(p) for p in backbone_params)
+        head_params = [p for p in model.parameters() if id(p) not in backbone_param_ids]
+        backbone_lr = float(cfg.train.get("backbone_lr", 3e-5))
+        head_lr = float(cfg.train.get("lr", 3e-4))
 
-    param_groups = [
-        {"params": backbone_params, "lr": backbone_lr},
-        {"params": head_params, "lr": head_lr},
-    ]
-    opt = torch.optim.AdamW(
-        param_groups,
-        weight_decay=cfg.train.weight_decay,
-        betas=tuple(cfg.train.get("betas", [0.9, 0.999])),
-    )
+        param_groups = [
+            {"params": backbone_params, "lr": backbone_lr},
+            {"params": head_params, "lr": head_lr},
+        ]
+        opt = torch.optim.AdamW(
+            param_groups,
+            weight_decay=float(cfg.train.get("weight_decay", 0.05)),
+            betas=tuple(cfg.train.get("betas", [0.9, 0.999])),
+        )
+        max_lr = [backbone_lr, head_lr]
 
     steps_per_epoch = cfg.train.get("steps_per_epoch", 1000)
-    total_steps = cfg.train.get("total_steps", cfg.train.epochs * steps_per_epoch)
+    total_steps = cfg.train.get("total_steps") or (cfg.train.epochs * steps_per_epoch)
     warmup_steps = cfg.train.get("warmup_steps", int(total_steps * 0.05))
     pct_start = min(0.3, max(0.01, warmup_steps / max(1, total_steps)))
 
     sched = torch.optim.lr_scheduler.OneCycleLR(
         opt,
-        max_lr=[backbone_lr, head_lr],
+        max_lr=max_lr,
         total_steps=total_steps,
         pct_start=pct_start,
     )
@@ -104,15 +124,16 @@ def main(cfg, resume=True):
     # --- Training state ---
     accum_steps = cfg.train.get("grad_accum", 8)
     grad_clip = cfg.train.get("grad_clip", 1.0)
-    use_aux_losses = cfg.train.get("lambda_contrastive", 0.1) > 0
+    use_aux_losses = cfg.train.get("lambda_contrastive", 0.0) > 0 or cfg.train.get("lambda_align", 0.0) > 0
 
-    # Loss hyperparameters with balanced focal loss alpha and label smoothing
     loss_kwargs = {
-        "alpha": cfg.train.get("alpha", 0.2),
-        "gamma": cfg.train.get("gamma", 2.0),
-        "label_smoothing": cfg.train.get("label_smoothing", 0.0),
-        "lambda_contrastive": cfg.train.get("lambda_contrastive", 0.1),
-        "lambda_align": cfg.train.get("lambda_align", 0.05),
+        "loss_type": cfg.train.get("loss_type", "bce"),
+        "pos_weight": float(cfg.train.get("pos_weight", 0.25)),
+        "alpha": float(cfg.train.get("alpha", 0.2)),
+        "gamma": float(cfg.train.get("gamma", 2.0)),
+        "label_smoothing": float(cfg.train.get("label_smoothing", 0.0)),
+        "lambda_contrastive": float(cfg.train.get("lambda_contrastive", 0.0)),
+        "lambda_align": float(cfg.train.get("lambda_align", 0.0)),
         "align_mode": cfg.train.get("align_mode", "decorrelate"),
     }
 
@@ -145,6 +166,7 @@ def main(cfg, resume=True):
         epoch_steps = 0
         epoch_opt_steps = 0
         last_batch_idx = 0
+        train_epoch_logits, train_epoch_labels = [], []
         for i, batch in enumerate(train_loader):
             last_batch_idx = i
             frames = batch["frames"].to(device, non_blocking=True)   # (B,T,3,224,224)
@@ -176,6 +198,9 @@ def main(cfg, resume=True):
 
             # Backward
             loss.backward()
+
+            train_epoch_logits.append(logits.detach().float().cpu())
+            train_epoch_labels.append(labels.detach().cpu())
 
             if (i + 1) % accum_steps == 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
@@ -210,8 +235,9 @@ def main(cfg, resume=True):
             if step > 0 and step % 50 == 0:
                 avg_loss = epoch_loss / max(1, epoch_steps)
                 lr = sched.get_last_lr()[0]
+                main_loss_key = "bce" if "bce" in loss_dict else "focal"
                 log_msg = (f"Epoch {epoch} | Step {step} | "
-                           f"Loss: {loss_dict['total']:.4f} | "
+                           f"Loss: {loss_dict['total']:.4f} ({main_loss_key}: {loss_dict.get(main_loss_key, 0):.4f}) | "
                            f"Avg: {avg_loss:.4f} | LR: {lr:.2e}")
                 if "contrastive" in loss_dict:
                     log_msg += f" | Con: {loss_dict['contrastive']:.4f}"
@@ -222,7 +248,7 @@ def main(cfg, resume=True):
                 if use_wandb:
                     wandb.log({
                         "train/loss_total": loss_dict["total"],
-                        "train/loss_focal": loss_dict["focal"],
+                        "train/loss_main": loss_dict.get(main_loss_key, 0),
                         "train/loss_contrastive": loss_dict.get("contrastive", 0),
                         "train/loss_alignment": loss_dict.get("alignment", 0),
                         "train/lr": lr,
@@ -237,11 +263,26 @@ def main(cfg, resume=True):
             opt.zero_grad(set_to_none=True)
             step += 1
 
+        # --- Compute Epoch Training Diagnostics ---
+        train_auc = 0.5
+        avg_train_loss = epoch_loss / max(1, epoch_steps)
+        if train_epoch_logits:
+            tr_logits = torch.cat(train_epoch_logits).numpy()
+            tr_labels = torch.cat(train_epoch_labels).numpy()
+            tr_probs = 1.0 / (1.0 + np.exp(-tr_logits))
+            from sklearn.metrics import roc_auc_score
+            try:
+                train_auc = float(roc_auc_score(tr_labels, tr_probs))
+            except Exception:
+                train_auc = 0.5
+            print(f"\n--- Epoch {epoch} Training Summary ---")
+            print(f"Train Loss: {avg_train_loss:.4f} | Train AUC: {train_auc:.4f}")
+
         # --- Validation ---
-        print(f"\nEpoch {epoch} finished. Running validation...")
+        print(f"Running validation...")
         metrics = evaluate(model, val_loader, device)
         auc = metrics["auc"]
-        print(f"Epoch {epoch} | Val AUC: {auc:.4f} | "
+        print(f"Epoch {epoch} | Train AUC: {train_auc:.4f} | Val AUC: {auc:.4f} | "
               f"EER: {metrics['eer']:.4f} | "
               f"F1@0.5: {metrics['f1_05']:.4f} | "
               f"FPR@0.5: {metrics['fpr_at_05']:.4f}")
@@ -287,24 +328,37 @@ def main(cfg, resume=True):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train S-MSDT")
+    parser.add_argument("--config", type=str, default=None,
+                        help="Path to single unified YAML config file (e.g. configs/baseline.yaml)")
     parser.add_argument("--config-dir", type=str, default="configs",
-                        help="Directory containing YAML config files")
+                        help="Directory containing YAML config files (data.yaml, model.yaml, train.yaml)")
+    parser.add_argument("--baseline", action="store_true",
+                        help="Train stripped EfficientNet-B4 baseline with plain BCE")
     parser.add_argument("--override", nargs="*", default=[],
                         help="Override config values (e.g. train.lr=1e-4)")
     parser.add_argument("--from-scratch", action="store_true",
                         help="Start training from scratch, ignoring existing checkpoints")
     args = parser.parse_args()
 
-    # Load configs from YAML files
-    data_cfg = OmegaConf.load(os.path.join(args.config_dir, "data.yaml"))
-    model_cfg = OmegaConf.load(os.path.join(args.config_dir, "model.yaml"))
-    train_cfg = OmegaConf.load(os.path.join(args.config_dir, "train.yaml"))
+    # Load configs
+    if args.config and os.path.exists(args.config):
+        cfg = OmegaConf.load(args.config)
+    else:
+        data_cfg = OmegaConf.load(os.path.join(args.config_dir, "data.yaml"))
+        model_cfg = OmegaConf.load(os.path.join(args.config_dir, "model.yaml"))
+        train_cfg = OmegaConf.load(os.path.join(args.config_dir, "train.yaml"))
+        cfg = OmegaConf.create({
+            "data": data_cfg,
+            "model": model_cfg,
+            "train": train_cfg,
+        })
 
-    cfg = OmegaConf.create({
-        "data": data_cfg,
-        "model": model_cfg,
-        "train": train_cfg,
-    })
+    # Apply --baseline flag overrides
+    if args.baseline:
+        cfg.model.type = "baseline_b4"
+        cfg.train.loss_type = "bce"
+        cfg.train.lambda_contrastive = 0.0
+        cfg.train.lambda_align = 0.0
 
     # Apply CLI overrides
     if args.override:

@@ -1,0 +1,39 @@
+# Stripped EfficientNet-B4 Baseline Configuration
+model:
+  type: baseline_b4
+  pretrained: true
+  drop_rate: 0.2
+
+train:
+  optimizer: adamw
+  lr: 3.0e-4
+  weight_decay: 0.01
+  betas: [0.9, 0.999]
+  schedule: cosine
+  warmup_steps: 500
+  steps_per_epoch: 1000
+  epochs: 5
+  grad_accum: 4
+  grad_clip: 1.0
+  loss_type: bce
+  pos_weight: 0.25
+  label_smoothing: 0.05
+  lambda_contrastive: 0.0
+  lambda_align: 0.0
+  workers: 4
+  save_interval_steps: 500
+  use_wandb: false
+  compile: false
+  gradient_checkpointing: false
+
+data:
+  dataset: ffpp
+  batch_size: 8
+  cache_root: data/cache
+  data_root: data/raw/ffpp_c23
+  compression: c23
+  chunk_length: 8
+  chunk_stride: 4
+  img_size: 224
+  shuffle_buf: 2000
+  bgr_to_rgb: true
