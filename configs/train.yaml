@@ -13,7 +13,10 @@ grad_clip: 1.0
 label_smoothing: 0.05
 epochs: 50
 grad_accum: 4            # 8 micro-batch * 4 accum = 32 effective batch size
-workers: 4               # 2-4 recommended on Windows to avoid process spawn memory thrashing
+workers: 8               # 8 workers on 24-core Intel Core Ultra 9 285K to prevent GPU starvation
+val_workers: 8           # 8 workers during validation for parallel disk reads and decoding
+val_batch_size: 32       # 32 chunks per batch for inference on 32GB RTX 5090 (no gradients needed)
+max_val_batches: null    # null for full validation sweep, or integer (e.g. 200) for fast checks
 save_interval_steps: 500 # saves latest.pt every 500 steps for crash recovery
 
 

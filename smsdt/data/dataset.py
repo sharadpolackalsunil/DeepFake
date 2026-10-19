@@ -236,7 +236,7 @@ class SampleDecoder:
         }
 
 
-def build_dataloader(cfg, split="train", num_workers=12):
+def build_dataloader(cfg, split="train", num_workers=12, batch_size=None):
     """
     Builds a PyTorch DataLoader reading from webdataset shards.
     """
@@ -246,9 +246,10 @@ def build_dataloader(cfg, split="train", num_workers=12):
     dataset_name = getattr(cfg, "dataset", "ffpp")
     if hasattr(cfg, "get"):
         dataset_name = cfg.get("dataset", dataset_name)
-    batch_size = getattr(cfg, "batch_size", 4)
-    if hasattr(cfg, "get"):
-        batch_size = cfg.get("batch_size", 4)
+    if batch_size is None:
+        batch_size = getattr(cfg, "batch_size", 4)
+        if hasattr(cfg, "get"):
+            batch_size = cfg.get("batch_size", 4)
 
     shard_dir = os.path.join(cache_root, dataset_name)
     shard_files = sorted(glob.glob(os.path.join(shard_dir, f"{split}-*.tar")))

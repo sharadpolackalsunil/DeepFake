@@ -84,13 +84,16 @@ def main(cfg, resume=True):
     )
 
     # --- Data loaders ---
+    val_batch_size = cfg.train.get("val_batch_size", 32)
+    val_workers = cfg.train.get("val_workers", cfg.train.get("workers", 8))
     train_loader = build_dataloader(
         cfg.data, split="train",
-        num_workers=cfg.train.get("workers", 10),
+        num_workers=cfg.train.get("workers", 8),
     )
     val_loader = build_dataloader(
         cfg.data, split="val",
-        num_workers=max(1, cfg.train.get("workers", 10) // 2),
+        num_workers=val_workers,
+        batch_size=val_batch_size,
     )
 
     # --- Logging ---
@@ -239,7 +242,8 @@ def main(cfg, resume=True):
 
         # --- Validation ---
         print(f"\nEpoch {epoch} finished. Running validation...")
-        metrics = evaluate(model, val_loader, device)
+        max_val_batches = cfg.train.get("max_val_batches", None)
+        metrics = evaluate(model, val_loader, device, max_batches=max_val_batches)
         auc = metrics["auc"]
         print(f"Epoch {epoch} | Val AUC: {auc:.4f} | "
               f"EER: {metrics['eer']:.4f} | "
