@@ -2,12 +2,13 @@
 model:
   type: baseline_b4
   pretrained: true
-  drop_rate: 0.2
+  drop_rate: 0.4
 
 train:
   optimizer: adamw
-  lr: 3.0e-4
-  weight_decay: 0.01
+  lr: 3.0e-4               # Head classifier learning rate
+  backbone_lr: 3.0e-5      # Backbone fine-tuning learning rate (preserves ImageNet features)
+  weight_decay: 0.05       # Stronger L2 regularization to prevent identity memorization
   betas: [0.9, 0.999]
   schedule: cosine
   warmup_steps: 500
@@ -37,3 +38,5 @@ data:
   img_size: 224
   shuffle_buf: 2000
   bgr_to_rgb: true
+  compress_prob: 0.0       # Disabled: prevent train/val distribution mismatch on c23
+  blur_prob: 0.0           # Disabled: preserve native c23 frequency characteristics

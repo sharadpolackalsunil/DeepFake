@@ -66,14 +66,23 @@ def main(cfg, resume=True):
 
     # --- Optimizer & scheduler ---
     if model_type == "baseline_b4":
-        lr = float(cfg.train.get("lr", 3e-4))
+        classifier_params = list(model.backbone.get_classifier().parameters())
+        classifier_param_ids = set(id(p) for p in classifier_params)
+        backbone_params = [p for p in model.parameters() if id(p) not in classifier_param_ids]
+        backbone_lr = float(cfg.train.get("backbone_lr", 3e-5))
+        head_lr = float(cfg.train.get("lr", 3e-4))
+        weight_decay = float(cfg.train.get("weight_decay", 0.05))
+
+        param_groups = [
+            {"params": backbone_params, "lr": backbone_lr},
+            {"params": classifier_params, "lr": head_lr},
+        ]
         opt = torch.optim.AdamW(
-            model.parameters(),
-            lr=lr,
-            weight_decay=float(cfg.train.get("weight_decay", 0.01)),
+            param_groups,
+            weight_decay=weight_decay,
             betas=tuple(cfg.train.get("betas", [0.9, 0.999])),
         )
-        max_lr = lr
+        max_lr = [backbone_lr, head_lr]
     else:
         backbone_params = list(model.rgb_branch.parameters())
         backbone_param_ids = set(id(p) for p in backbone_params)

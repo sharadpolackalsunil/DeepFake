@@ -97,7 +97,8 @@ def simulate_sbi_blend(frames, blend_prob=0.25):
     return frames * (1.0 - mask) + transformed * mask
 
 
-def augment_video(frames, conf=None, split="train", target_size=224, target_frames=8):
+def augment_video(frames, conf=None, split="train", target_size=224, target_frames=8,
+                  compress_prob=0.0, blur_prob=0.0):
     """
     Applies spatial, frequency, and temporal augmentations to video frames,
     keeping landmark confidence scores synchronously aligned, followed by ImageNet normalization.
@@ -139,10 +140,11 @@ def augment_video(frames, conf=None, split="train", target_size=224, target_fram
                 conf_pad = conf[-1:].repeat(pad_size)
                 conf = torch.cat([conf, conf_pad], dim=0)
 
-        # 2. Simulated Compression & Blur (robustness against lossy codecs)
-        if random.random() < 0.4:
+        # 2. Simulated Compression & Blur (disabled by default for in-domain c23 training)
+        if compress_prob > 0 and random.random() < compress_prob:
             frames = simulate_compression(frames)
-        frames = simulate_blur(frames, blur_prob=0.3)
+        if blur_prob > 0:
+            frames = simulate_blur(frames, blur_prob=blur_prob)
 
         # 3. Spatial Augmentation (Random Resize + Re-crop)
         scale = random.uniform(1.0, 1.25)
@@ -191,9 +193,11 @@ def augment_video(frames, conf=None, split="train", target_size=224, target_fram
 
 class SampleDecoder:
     """Top-level picklable sample transformer for WebDataset on Windows multiprocessing."""
-    def __init__(self, split="train", bgr_to_rgb=True):
+    def __init__(self, split="train", bgr_to_rgb=True, compress_prob=0.0, blur_prob=0.0):
         self.split = split
         self.bgr_to_rgb = bgr_to_rgb
+        self.compress_prob = compress_prob
+        self.blur_prob = blur_prob
 
     def __call__(self, sample):
         frames = sample.get("frames.npy", None)
@@ -213,7 +217,10 @@ class SampleDecoder:
         video_id = key.rsplit("_", 1)[0] if "_" in key else key
 
         # Apply augmentation, synchronized temporal frame/conf alignment, and ImageNet normalization
-        augmented_frames, conf = augment_video(frames, conf=conf, split=self.split)
+        augmented_frames, conf = augment_video(
+            frames, conf=conf, split=self.split,
+            compress_prob=self.compress_prob, blur_prob=self.blur_prob,
+        )
 
         if isinstance(raw_label, bytes):
             try:
@@ -281,10 +288,22 @@ def build_dataloader(cfg, split="train", num_workers=12):
         if shuffle_buf > 0:
             dataset = dataset.shuffle(shuffle_buf)
 
+    compress_prob = getattr(cfg, "compress_prob", 0.0) if is_train else 0.0
+    if hasattr(cfg, "get") and is_train:
+        compress_prob = cfg.get("compress_prob", 0.0)
+    blur_prob = getattr(cfg, "blur_prob", 0.0) if is_train else 0.0
+    if hasattr(cfg, "get") and is_train:
+        blur_prob = cfg.get("blur_prob", 0.0)
+
     dataset = (
         dataset
         .decode()
-        .map(SampleDecoder(split=split, bgr_to_rgb=bgr_to_rgb))
+        .map(SampleDecoder(
+            split=split,
+            bgr_to_rgb=bgr_to_rgb,
+            compress_prob=compress_prob,
+            blur_prob=blur_prob,
+        ))
         .batched(batch_size)
     )
 
