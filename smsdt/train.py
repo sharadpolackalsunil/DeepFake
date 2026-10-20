@@ -129,13 +129,20 @@ def main(cfg, resume=True):
             mask_grid=grid,
         )
         batch_pairs = int(cfg.train.get("batch_pairs", 8))
+        workers = int(cfg.train.get("workers", 4))
+        persistent_workers = bool(cfg.train.get("persistent_workers", False)) if workers > 0 else False
+        prefetch_factor = int(cfg.train.get("prefetch_factor", 2)) if workers > 0 else None
+        pin_memory = bool(cfg.train.get("pin_memory", False))
+
         train_loader = DataLoader(
             train_dataset,
             batch_size=batch_pairs,
             shuffle=True,
-            num_workers=int(cfg.train.get("workers", 8)),
+            num_workers=workers,
             collate_fn=paired_collate,
-            pin_memory=True,
+            pin_memory=pin_memory,
+            persistent_workers=persistent_workers,
+            prefetch_factor=prefetch_factor,
             drop_last=True,
         )
 
