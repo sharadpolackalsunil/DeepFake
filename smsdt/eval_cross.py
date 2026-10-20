@@ -99,8 +99,8 @@ def load_model(ckpt_path: str, device: torch.device):
             max_frames=16,
             grid=14,
         )
-        from torchvision import transforms
-        norm_fn = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        # S-MSDT v1 was trained on [0, 1] tensors without ImageNet normalization (normalize=None)
+        norm_fn = None
         model_type = "v1"
 
     incompat = model.load_state_dict(state_dict, strict=False)
