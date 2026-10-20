@@ -1,4 +1,5 @@
 """CLIP ViT-L/14 Frame Encoder with LayerNorm-only Parameter-Efficient Fine-Tuning."""
+import os
 import torch
 import torch.nn as nn
 
