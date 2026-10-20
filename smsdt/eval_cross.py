@@ -122,16 +122,32 @@ def evaluate_dataset(model, ds, device, batch_size=4):
     clip_auc = float(roc_auc_score(clip_labels_all, clip_scores_all))
     eer, eer_thresh = compute_eer(labels, scores_mean)
 
-    # Breakdown per method
-    per_method_auc = {}
+    # Predictions at standard 0.5 threshold and at optimal EER threshold
+    preds_05 = (scores_mean >= 0.5).astype(int)
+    preds_eer = (scores_mean >= eer_thresh).astype(int)
+
     real_mask = (labels == 0.0)
+    total_acc_05 = float(np.mean(preds_05 == labels))
+    total_acc_eer = float(np.mean(preds_eer == labels))
+    pristine_acc_05 = float(np.mean(preds_05[real_mask] == 0.0)) if real_mask.sum() > 0 else 0.0
+    pristine_acc_eer = float(np.mean(preds_eer[real_mask] == 0.0)) if real_mask.sum() > 0 else 0.0
+
+    # Breakdown per method (Accuracy & AUC)
+    per_method_auc = {}
+    per_method_acc_05 = {}
+    per_method_acc_eer = {}
+
+    methods_arr = np.array(methods)
     for m in sorted(set(methods)):
         if m == "real":
             continue
-        m_mask = (np.array(methods) == m)
+        m_mask = (methods_arr == m)
         eval_mask = real_mask | m_mask
         if eval_mask.sum() > 0 and len(set(labels[eval_mask])) > 1:
             per_method_auc[m] = float(roc_auc_score(labels[eval_mask], scores_mean[eval_mask]))
+        if m_mask.sum() > 0:
+            per_method_acc_05[m] = float(np.mean(preds_05[m_mask] == 1.0))
+            per_method_acc_eer[m] = float(np.mean(preds_eer[m_mask] == 1.0))
 
     return {
         "num_videos": len(labels),
@@ -142,8 +158,65 @@ def evaluate_dataset(model, ds, device, batch_size=4):
         "clip_auc": clip_auc,
         "eer": eer,
         "eer_thresh": eer_thresh,
+        "total_acc_05": total_acc_05,
+        "total_acc_eer": total_acc_eer,
+        "pristine_acc_05": pristine_acc_05,
+        "pristine_acc_eer": pristine_acc_eer,
         "per_method_auc": per_method_auc,
+        "per_method_acc_05": per_method_acc_05,
+        "per_method_acc_eer": per_method_acc_eer,
     }
+
+
+def print_benchmark_table(res, dataset_name, split):
+    """Prints the benchmark table in the exact FaceForensics++ format."""
+    standard_order = [
+        "Deepfakes",
+        "Face2Face",
+        "FaceSwap",
+        "NeuralTextures",
+        "FaceShifter",
+        "DeepFakeDetection",
+        "DFD",
+    ]
+    all_methods = res.get("per_method_acc_05", {})
+    cols = [m for m in standard_order if m in all_methods]
+    cols += [m for m in sorted(all_methods.keys()) if m not in cols]
+
+    display_names = {
+        "DeepFakeDetection": "DFD",
+        "FaceShifter": "FaceShifter",
+    }
+    header_labels = [display_names.get(m, m) for m in cols]
+    headers = ["Info"] + header_labels + ["Pristine", "Total"]
+    col_widths = [max(len(h) + 2, 12) for h in headers]
+    col_widths[0] = 16
+
+    def fmt_row(items):
+        return " | ".join(f"{str(item):>{w}}" for item, w in zip(items, col_widths))
+
+    line_sep = "-" * (sum(col_widths) + 3 * (len(headers) - 1))
+    double_sep = "=" * len(line_sep)
+
+    print("\n" + double_sep)
+    print(f"BENCHMARK RESULTS TABLE: {dataset_name} [{split.upper()}] (N={res['num_videos']} videos)")
+    print(double_sep)
+    print(fmt_row(headers))
+    print(line_sep)
+
+    # Row 1: Accuracy @ 0.5
+    acc_05_vals = [f"{res['per_method_acc_05'].get(m, 0.0):.3f}" for m in cols]
+    print(fmt_row(["Accuracy@0.5"] + acc_05_vals + [f"{res['pristine_acc_05']:.3f}", f"{res['total_acc_05']:.3f}"]))
+
+    # Row 2: Accuracy @ EER
+    acc_eer_vals = [f"{res['per_method_acc_eer'].get(m, 0.0):.3f}" for m in cols]
+    print(fmt_row(["Accuracy@EER"] + acc_eer_vals + [f"{res['pristine_acc_eer']:.3f}", f"{res['total_acc_eer']:.3f}"]))
+
+    # Row 3: Video AUC
+    auc_vals = [f"{res['per_method_auc'].get(m, 0.0):.3f}" for m in cols]
+    print(fmt_row(["Video AUC"] + auc_vals + ["1.000", f"{res['video_auc_mean']:.3f}"]))
+
+    print(double_sep + "\n")
 
 
 def main():
@@ -152,6 +225,7 @@ def main():
     parser.add_argument("--index", type=str, default="data/splits/index.csv", help="Split index manifest")
     parser.add_argument("--store", type=str, default="data/store", help="Offline frame store directory")
     parser.add_argument("--split", type=str, default="test", help="Split name to evaluate (default: test)")
+    parser.add_argument("--methods", nargs="*", default=None, help="Optional subset of methods to evaluate (e.g. Deepfakes Face2Face FaceSwap NeuralTextures DFD)")
     parser.add_argument("--dataset-name", type=str, default="FF++ c23", help="Dataset display name")
     parser.add_argument("--out-csv", type=str, default="outputs/benchmark_results.csv", help="Output CSV path")
     parser.add_argument("--K", type=int, default=8, help="Clips per video")
@@ -171,21 +245,13 @@ def main():
         T=args.T,
         stride=1,
         normalize=norm_fn,
+        methods=args.methods,
     )
     print(f"Evaluating {args.dataset_name} ({args.split} split) with {len(ds)} videos...")
     res = evaluate_dataset(model, ds, device)
 
-    print("\n" + "=" * 60)
-    print(f"RESULTS: {args.dataset_name} [{args.split.upper()}] (N={res['num_videos']} videos)")
-    print(f"  * Video AUC (Mean):   {res['video_auc_mean']:.4f}")
-    print(f"  * Video AUC (Top-50%): {res['video_auc_top50']:.4f}")
-    print(f"  * Clip-level AUC:     {res['clip_auc']:.4f}")
-    print(f"  * Equal Error Rate:   {res['eer']:.4f} (thresh: {res['eer_thresh']:.4f})")
-    if res["per_method_auc"]:
-        print("  * Per-Method Video AUC:")
-        for m, a in res["per_method_auc"].items():
-            print(f"      - {m:18s}: {a:.4f}")
-    print("=" * 60)
+    # Render formatted benchmark results table
+    print_benchmark_table(res, args.dataset_name, args.split)
 
     # Append to output CSV
     os.makedirs(os.path.dirname(args.out_csv), exist_ok=True)
@@ -193,7 +259,7 @@ def main():
     with open(args.out_csv, "a", newline="") as f:
         writer = csv.writer(f)
         if not file_exists:
-            writer.writerow(["checkpoint", "model_type", "dataset", "split", "videos", "reals", "fakes", "video_auc_mean", "video_auc_top50", "clip_auc", "eer", "per_method_json"])
+            writer.writerow(["checkpoint", "model_type", "dataset", "split", "videos", "reals", "fakes", "video_auc_mean", "video_auc_top50", "clip_auc", "eer", "acc_05", "acc_eer", "pristine_acc", "per_method_auc_json", "per_method_acc_json"])
         writer.writerow([
             os.path.basename(args.ckpt),
             model_type,
@@ -206,7 +272,11 @@ def main():
             f"{res['video_auc_top50']:.4f}",
             f"{res['clip_auc']:.4f}",
             f"{res['eer']:.4f}",
+            f"{res['total_acc_05']:.4f}",
+            f"{res['total_acc_eer']:.4f}",
+            f"{res['pristine_acc_05']:.4f}",
             json.dumps(res["per_method_auc"]),
+            json.dumps(res["per_method_acc_05"]),
         ])
     print(f"Appended results row to {args.out_csv}")
 

@@ -212,8 +212,18 @@ class EvalClipDataset(Dataset):
     """Evaluation dataset extracting K evenly spaced clips per video for video-level aggregation."""
 
     def __init__(self, index_csv, store_root, split="val", K=8, T=8, stride=1,
-                 size=224, normalize=None):
-        self.rows = load_index(index_csv, split)
+                 size=224, normalize=None, methods=None):
+        rows = load_index(index_csv, split)
+        if methods is not None:
+            norm_methods = set()
+            for m in methods:
+                if m.upper() in ("DFD", "DEEPFAKEDETECTION"):
+                    norm_methods.add("DeepFakeDetection")
+                    norm_methods.add("DFD")
+                else:
+                    norm_methods.add(m)
+            rows = [r for r in rows if r["method"] in norm_methods or r["method"] == "real"]
+        self.rows = rows
         self.root = store_root
         self.K = K
         self.T = T
