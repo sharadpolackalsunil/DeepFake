@@ -106,12 +106,33 @@ def evaluate(model, loader, device, top_k_ratio=0.5, max_batches=None):
                 if max_batches is not None and batch_idx >= max_batches:
                     break
                 frames = batch["frames"].to(device, non_blocking=True)
-                conf = batch["conf"].to(device, non_blocking=True)
-                logits = model(frames, conf, return_features=False)
-                all_logits.append(logits.float())
-                all_labels.append(batch["label"].to(device, non_blocking=True))
+                conf = batch.get("conf", None)
+                if conf is not None:
+                    conf = conf.to(device, non_blocking=True)
+
+                if frames.ndim == 6:
+                    # (B, K, T, C, H, W) from EvalClipDataset
+                    B, K, T, C, H, W = frames.shape
+                    frames_flat = frames.view(B * K, T, C, H, W)
+                    conf_flat = conf.view(B * K, T) if conf is not None else None
+                    out = model(frames_flat, conf_flat)
+                    logits_flat = out[0] if isinstance(out, (tuple, list)) else out
+                    probs_flat = torch.sigmoid(logits_flat).view(B, K)
+                    probs_vid = probs_flat.mean(dim=1)
+                    logits = torch.logit(probs_vid.clamp(1e-6, 1.0 - 1e-6))
+                else:
+                    out = model(frames, conf)
+                    logits = out[0] if isinstance(out, (tuple, list)) else out
+
+                all_logits.append(logits.float().cpu())
+                all_labels.append(batch["label"].float().cpu())
                 if "manip_type" in batch:
-                    all_manip_types.append(batch["manip_type"].to(device, non_blocking=True))
+                    all_manip_types.append(batch["manip_type"].cpu())
+                elif "method" in batch:
+                    meths = batch["method"]
+                    if isinstance(meths, (list, tuple)):
+                        from smsdt.data.video_dataset import METHOD_ID
+                        all_manip_types.append(torch.tensor([METHOD_ID.get(m, 1) for m in meths]))
                 if "video_id" in batch:
                     vids = batch["video_id"]
                     if isinstance(vids, torch.Tensor):

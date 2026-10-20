@@ -141,7 +141,7 @@ class PairedClipDataset(Dataset):
                 return self.__getitem__((i + 1) % len(self))
             s = random.choice(starts)
             sel = np.arange(s, s + self.T * self.stride, self.stride)
-            real_u8 = np.asarray(rs.frames[sel])
+            real_u8 = np.asarray(rs.frames[sel]).copy()
             fake_u8, fake_mask = self.sbi_fn(real_u8, rs.lmk()[sel])
             method = "SBI"
         else:
@@ -153,8 +153,8 @@ class PairedClipDataset(Dataset):
                 return self.__getitem__((i + 1) % len(self))
             s = random.choice(starts)
             sel = np.arange(s, s + self.T * self.stride, self.stride)
-            real_u8 = np.asarray(rs.frames[ri[sel]])
-            fake_u8 = np.asarray(fs.frames[fi[sel]])
+            real_u8 = np.asarray(rs.frames[ri[sel]]).copy()
+            fake_u8 = np.asarray(fs.frames[fi[sel]]).copy()
             fake_mask = None
             method = fake["method"]
 
@@ -231,7 +231,7 @@ class EvalClipDataset(Dataset):
                 H, W = frames_u8.shape[1:3]
                 # Deterministic center crop
                 cy, cx = (H - self.size) // 2, (W - self.size) // 2
-                cropped = frames_u8[:, cy:cy + self.size, cx:cx + self.size]
+                cropped = frames_u8[:, cy:cy + self.size, cx:cx + self.size].copy()
                 clip_tensor = torch.from_numpy(np.ascontiguousarray(cropped)).permute(0, 3, 1, 2).float() / 255.0
                 if self.normalize is not None:
                     clip_tensor = self.normalize(clip_tensor)
