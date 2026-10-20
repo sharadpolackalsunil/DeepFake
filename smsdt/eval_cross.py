@@ -124,17 +124,18 @@ def evaluate_dataset(model, ds, device, batch_size=4):
     clip_scores_all, clip_labels_all = [], []
 
     with torch.no_grad():
-        for batch in loader:
-            frames = batch["frames"].to(device)  # (B, K, T, 3, H, W)
-            y = batch["label"].cpu().numpy()
-            vids = batch["video_id"]
-            meths = batch["method"]
+        with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device.type == "cuda")):
+            for batch in loader:
+                frames = batch["frames"].to(device)  # (B, K, T, 3, H, W)
+                y = batch["label"].cpu().numpy()
+                vids = batch["video_id"]
+                meths = batch["method"]
 
-            B, K, T, C, H, W = frames.shape
-            frames_flat = frames.view(B * K, T, C, H, W)
+                B, K, T, C, H, W = frames.shape
+                frames_flat = frames.view(B * K, T, C, H, W)
 
-            logits, _ = model(frames_flat)
-            probs = torch.sigmoid(logits).view(B, K).cpu().numpy()
+                logits, _ = model(frames_flat)
+                probs = torch.sigmoid(logits).view(B, K).cpu().numpy()
 
             for b in range(B):
                 p_clips = probs[b]
