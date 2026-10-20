@@ -175,7 +175,7 @@ def main(cfg, resume=True):
     min_lr_ratio = float(cfg.train.get("min_lr_ratio", 0.01))
 
     sched = cosine_with_warmup(opt, total_opt_steps, warmup_frac=warmup_frac, min_ratio=min_lr_ratio)
-    print(f"Total Epochs: {epochs} | Steps/epoch: {steps_per_epoch} | Total Optimizer Steps: {total_opt_steps}")
+    print(f"Total Epochs: {epochs} | Total Steps: {total_opt_steps}")
 
     # --- Model EMA ---
     ema_decay = float(cfg.train.get("ema_decay", 0.999))
@@ -204,9 +204,10 @@ def main(cfg, resume=True):
         model.train()
         epoch_loss = 0.0
         epoch_steps = 0
+        train_preds, train_targets = [], []
         opt.zero_grad(set_to_none=True)
 
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch + 1:02d}/{epochs:02d} [Train]", total=len(train_loader))
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch + 1:02d}/{epochs:02d}", total=len(train_loader))
         for i, batch in enumerate(pbar):
             frames = batch["frames"].to(device, non_blocking=True)
             labels = batch["label"].float().to(device, non_blocking=True)
@@ -244,6 +245,11 @@ def main(cfg, resume=True):
             epoch_loss += loss_logs["cls"]
             epoch_steps += 1
 
+            # Accumulate predictions in memory (near zero overhead during batch iteration)
+            probs = torch.sigmoid(logit).detach().float().cpu().numpy()
+            train_preds.extend(probs.tolist())
+            train_targets.extend(labels.detach().float().cpu().numpy().tolist())
+
             cur_lr = sched.get_last_lr()[0]
             postfix = {"Loss": f"{loss_logs['cls']:.4f}", "LR": f"{cur_lr:.2e}"}
             if "mask" in loss_logs:
@@ -251,6 +257,10 @@ def main(cfg, resume=True):
             pbar.set_postfix(postfix)
 
         avg_train_loss = epoch_loss / max(1, epoch_steps)
+        if len(set(train_targets)) > 1:
+            train_auc = float(roc_auc_score(train_targets, train_preds))
+        else:
+            train_auc = 0.5
 
         # --- Validation loop at epoch end ---
         print(f"\n--- Epoch {epoch + 1:02d}/{epochs:02d} Validation ---")
@@ -259,7 +269,7 @@ def main(cfg, resume=True):
         auc = metrics["auc"]
         eer = metrics["eer"]
         f1_05 = metrics["f1_05"]
-        print(f"Epoch {epoch + 1:02d} Val AUC: {auc:.4f} | EER: {eer:.4f} | F1@0.5: {f1_05:.4f} | Train Loss: {avg_train_loss:.4f}")
+        print(f"Epoch {epoch + 1:02d} | Train Loss: {avg_train_loss:.4f} | Train AUC: {train_auc:.4f} | Val AUC: {auc:.4f} | Val EER: {eer:.4f} | Val F1@0.5: {f1_05:.4f}")
 
         # Save latest checkpoint
         save_dict = {
