@@ -171,7 +171,7 @@ def train_v2(cfg_path: str, resume: bool = True):
         batch_size=int(train_cfg.get("val_batch_size", 4)),
         shuffle=False,
         num_workers=val_workers,
-        pin_memory=bool(train_cfg.get("pin_memory", False)),
+        pin_memory=False,  # Must be False: prevents cudaErrorAlreadyMapped on large validation video batches
         persistent_workers=bool(train_cfg.get("persistent_workers", False)) if val_workers > 0 else False,
         prefetch_factor=int(train_cfg.get("prefetch_factor", 2)) if val_workers > 0 else None,
     )
