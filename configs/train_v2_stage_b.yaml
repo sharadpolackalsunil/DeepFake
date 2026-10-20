@@ -49,6 +49,6 @@ train:
   persistent_workers: true   # Keeps workers hot in RAM between epochs (no restart latency)
   prefetch_factor: 2
   val_batch_size: 8          # 8 videos per validation batch
-  val_workers: 0
+  val_workers: 8             # 8 parallel workers for fast validation on 24-core CPU
 
 output_dir: outputs/checkpoints_v2_stage_b

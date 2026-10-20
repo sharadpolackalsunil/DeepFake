@@ -165,12 +165,15 @@ def train_v2(cfg_path: str, resume: bool = True):
         drop_last=True,
     )
 
+    val_workers = int(train_cfg.get("val_workers", 0))
     val_loader = DataLoader(
         val_ds,
         batch_size=int(train_cfg.get("val_batch_size", 4)),
         shuffle=False,
-        num_workers=int(train_cfg.get("val_workers", 0)),
-        pin_memory=False,
+        num_workers=val_workers,
+        pin_memory=bool(train_cfg.get("pin_memory", False)),
+        persistent_workers=bool(train_cfg.get("persistent_workers", False)) if val_workers > 0 else False,
+        prefetch_factor=int(train_cfg.get("prefetch_factor", 2)) if val_workers > 0 else None,
     )
 
     # 3. Optimizer & Schedulers
