@@ -1,7 +1,12 @@
 """CLIP ViT-L/14 Frame Encoder with LayerNorm-only Parameter-Efficient Fine-Tuning."""
 import torch
 import torch.nn as nn
-from transformers import CLIPVisionConfig, CLIPVisionModel
+
+try:
+    from transformers import CLIPVisionConfig, CLIPVisionModel
+except ImportError:
+    CLIPVisionConfig = None
+    CLIPVisionModel = None
 
 CLIP_MEAN = (0.48145466, 0.4578275, 0.40821073)
 CLIP_STD = (0.26862954, 0.26130258, 0.27577711)
@@ -20,9 +25,15 @@ class CLIPFrameEncoder(nn.Module):
         name: str = "openai/clip-vit-large-patch14",
         tune: str = "layernorm",
         grad_ckpt: bool = True,
-        config: CLIPVisionConfig | None = None,
+        config = None,
     ):
         super().__init__()
+        if CLIPVisionModel is None:
+            raise ImportError(
+                "Hugging Face transformers is required for CLIPFrameEncoder. "
+                "Install it with: pip install 'transformers>=4.40' safetensors"
+            )
+
         if config is not None:
             self.vit = CLIPVisionModel(config)
         else:
