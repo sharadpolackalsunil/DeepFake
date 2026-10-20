@@ -32,10 +32,42 @@ def compute_eer(y_true, y_scores):
 
 
 def load_model(ckpt_path: str, device: torch.device):
-    """Load S-MSDT v1 or v2 model from checkpoint."""
+    """Load S-MSDT v1 or v2 model from checkpoint with robust dictionary extraction."""
     ckpt = torch.load(ckpt_path, map_location="cpu")
-    cfg = ckpt.get("cfg", {})
-    state_dict = ckpt.get("model_ema", ckpt.get("model", ckpt))
+    cfg = ckpt.get("cfg", {}) if isinstance(ckpt, dict) else {}
+
+    # Extract state dict from various checkpoint formats
+    if isinstance(ckpt, dict):
+        if "ema_state_dict" in ckpt and ckpt["ema_state_dict"] is not None:
+            state_dict = ckpt["ema_state_dict"]
+            print("Loaded 'ema_state_dict' from checkpoint.")
+        elif "model_state_dict" in ckpt:
+            state_dict = ckpt["model_state_dict"]
+            print("Loaded 'model_state_dict' from checkpoint.")
+        elif "model_ema" in ckpt:
+            state_dict = ckpt["model_ema"]
+            print("Loaded 'model_ema' from checkpoint.")
+        elif "model" in ckpt:
+            state_dict = ckpt["model"]
+            print("Loaded 'model' from checkpoint.")
+        elif "state_dict" in ckpt:
+            state_dict = ckpt["state_dict"]
+            print("Loaded 'state_dict' from checkpoint.")
+        else:
+            state_dict = ckpt
+    else:
+        state_dict = ckpt
+
+    # Clean prefixes: 'module.' (DDP/AveragedModel) or '_orig_mod.' (torch.compile)
+    cleaned = {}
+    for k, v in state_dict.items():
+        k_clean = k
+        if k_clean.startswith("module."):
+            k_clean = k_clean[7:]
+        if k_clean.startswith("_orig_mod."):
+            k_clean = k_clean[10:]
+        cleaned[k_clean] = v
+    state_dict = cleaned
 
     # Detect v1 vs v2 architecture
     is_v2 = any("encoder.vit" in k for k in state_dict.keys()) or cfg.get("stage") is not None
@@ -71,7 +103,15 @@ def load_model(ckpt_path: str, device: torch.device):
         norm_fn = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         model_type = "v1"
 
-    model.load_state_dict(state_dict, strict=False)
+    incompat = model.load_state_dict(state_dict, strict=False)
+    matched_keys = len(state_dict) - len(incompat.unexpected_keys)
+    total_model_keys = len(model.state_dict())
+    print(f"Weight loading report: {matched_keys}/{total_model_keys} parameters matched.")
+    if len(incompat.missing_keys) > 0:
+        print(f"  * Warning: {len(incompat.missing_keys)} missing keys in model!")
+    if matched_keys == 0:
+        raise RuntimeError("FATAL: 0 keys matched when loading checkpoint! Checkpoint dictionary did not contain model parameters.")
+
     model.to(device)
     model.eval()
     return model, model_type, norm_fn
