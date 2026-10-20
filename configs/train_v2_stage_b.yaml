@@ -23,9 +23,12 @@ data:
   frame_stride: 1
   crop_size: 224
   norm: clip                 # Uses CLIP_MEAN and CLIP_STD
-  p_sbi: 0.5
+  p_sbi: 0.0                 # 0.0 guarantees exact Option 2: 100% round-robin across all 3,600 FF++ fakes
   jpeg_quality: [50, 100]
   p_jpeg: 0.3
+  p_blur: 0.1
+  p_flip: 0.5
+  val_k: 8                   # 8 clips per validation video (matching Phase 1)
 
 train:
   epochs: 40

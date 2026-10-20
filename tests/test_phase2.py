@@ -98,3 +98,18 @@ def test_param_groups_separation(dummy_clip_config):
     lrs = {g["lr"] for g in groups}
     assert 1e-4 in lrs, "LayerNorm learning rate 1e-4 not found in param groups"
     assert 5e-4 in lrs, "Head learning rate 5e-4 not found in param groups"
+
+
+def test_clip_normalize_picklable():
+    """Verify ClipNormalize is serializable with pickle (essential for Windows DataLoader spawn)."""
+    import pickle
+    from smsdt.train_v2 import get_clip_normalize
+
+    norm = get_clip_normalize()
+    data = pickle.dumps(norm)
+    restored = pickle.loads(data)
+    x = torch.rand(4, 3, 224, 224)
+    out1 = norm(x)
+    out2 = restored(x)
+    assert torch.allclose(out1, out2), "Restored normalizer produced different values"
+
