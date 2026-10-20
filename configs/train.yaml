@@ -16,17 +16,17 @@ grad_clip: 1.0
 
 # Exact-Epoch Scheduler (Cosine with Linear Warmup)
 schedule: cosine
-epochs: 60                    # 60 epochs x 90 batches (720 pairs / 8) = 5,400 optimizer steps
+epochs: 50                    # 50 epochs x 90 batches (720 pairs / 8) = 4,500 optimizer steps
 batch_pairs: 8                # 8 pairs = 16 video clips per step
 grad_accum: 1                 # 1 step accumulation on 32GB RTX 5090
 warmup_frac: 0.03             # 3% linear warmup
 min_lr_ratio: 0.01            # decays to 1% of peak LR
 
 # Hardware & Multiprocessing (RTX 5090 + Intel Core Ultra 9 285K)
-workers: 8                    # 8 DataLoader workers
-val_workers: 8
-val_batch_size: 32            # 32 clips per inference batch under torch.no_grad()
-pin_memory: true
+workers: 10                   # 10 DataLoader workers
+val_workers: 2
+val_batch_size: 4             # 4 videos (32 clips) per validation batch
+pin_memory: false             # false to prevent Windows CUDA resource already mapped error
 persistent_workers: true
 prefetch_factor: 4
 

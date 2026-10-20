@@ -16,6 +16,8 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.optim.swa_utils import AveragedModel, get_ema_multi_avg_fn
 from omegaconf import OmegaConf
+from tqdm import tqdm
+from sklearn.metrics import roc_auc_score
 
 from smsdt.models.smsdt import SMSDT
 from smsdt.losses import detection_loss, total_loss
@@ -148,10 +150,10 @@ def main(cfg, resume=True):
         )
         val_loader = DataLoader(
             val_dataset,
-            batch_size=int(cfg.train.get("val_batch_size", 32)),
+            batch_size=int(cfg.train.get("val_batch_size", 4)),
             shuffle=False,
-            num_workers=int(cfg.train.get("val_workers", 8)),
-            pin_memory=True,
+            num_workers=int(cfg.train.get("val_workers", 2)),
+            pin_memory=False,
         )
         steps_per_epoch = len(train_loader)
     else:
@@ -204,7 +206,8 @@ def main(cfg, resume=True):
         epoch_steps = 0
         opt.zero_grad(set_to_none=True)
 
-        for i, batch in enumerate(train_loader):
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch + 1:02d}/{epochs:02d} [Train]", total=len(train_loader))
+        for i, batch in enumerate(pbar):
             frames = batch["frames"].to(device, non_blocking=True)
             labels = batch["label"].float().to(device, non_blocking=True)
             masks = batch.get("mask")
@@ -241,21 +244,26 @@ def main(cfg, resume=True):
             epoch_loss += loss_logs["cls"]
             epoch_steps += 1
 
-            if step > 0 and step % 25 == 0:
-                cur_lr = sched.get_last_lr()[0]
-                mask_str = f" | Mask: {loss_logs['mask']:.4f}" if "mask" in loss_logs else ""
-                print(f"Epoch {epoch:02d} | Step {step:05d} | Loss: {loss_logs['cls']:.4f}{mask_str} | LR: {cur_lr:.2e}")
+            cur_lr = sched.get_last_lr()[0]
+            postfix = {"Loss": f"{loss_logs['cls']:.4f}", "LR": f"{cur_lr:.2e}"}
+            if "mask" in loss_logs:
+                postfix["Mask"] = f"{loss_logs['mask']:.4f}"
+            pbar.set_postfix(postfix)
+
+        avg_train_loss = epoch_loss / max(1, epoch_steps)
 
         # --- Validation loop at epoch end ---
-        print(f"\n--- Epoch {epoch} Evaluation ---")
+        print(f"\n--- Epoch {epoch + 1:02d}/{epochs:02d} Validation ---")
         eval_model = ema_model.module if ema_model is not None else model
         metrics = evaluate(eval_model, val_loader, device)
         auc = metrics["auc"]
-        print(f"Epoch {epoch} Val AUC: {auc:.4f} | EER: {metrics['eer']:.4f} | F1@0.5: {metrics['f1_05']:.4f}")
+        eer = metrics["eer"]
+        f1_05 = metrics["f1_05"]
+        print(f"Epoch {epoch + 1:02d} Val AUC: {auc:.4f} | EER: {eer:.4f} | F1@0.5: {f1_05:.4f} | Train Loss: {avg_train_loss:.4f}")
 
         # Save latest checkpoint
         save_dict = {
-            "epoch": epoch,
+            "epoch": epoch + 1,
             "step": step,
             "model_state_dict": model.state_dict(),
             "ema_state_dict": ema_model.state_dict() if ema_model is not None else None,
@@ -271,7 +279,7 @@ def main(cfg, resume=True):
             torch.save(save_dict, best_path)
             if ema_model is not None:
                 torch.save(ema_model.module.state_dict(), best_ema_path)
-            print(f"  >> New Best Val AUC: {best_auc:.4f} (Saved to {best_path} and {best_ema_path})")
+            print(f"  * New Best Val AUC: {best_auc:.4f} (Saved to {best_path} and {best_ema_path})")
 
     print(f"\nTraining Complete. Best Validation AUC: {best_auc:.4f}")
     if use_wandb:
