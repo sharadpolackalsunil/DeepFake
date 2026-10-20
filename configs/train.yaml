@@ -16,7 +16,7 @@ grad_clip: 1.0
 
 # Exact-Epoch Scheduler (Cosine with Linear Warmup)
 schedule: cosine
-epochs: 50                    # 50 epochs x 90 batches (720 pairs / 8) = 4,500 optimizer steps
+epochs: 60                    # 60 epochs x 90 batches (720 pairs / 8) = 5,400 optimizer steps (12 full cycles)
 batch_pairs: 8                # 8 pairs = 16 video clips (128 frames) per step
 grad_accum: 1                 # 1 step accumulation on 32GB RTX 5090
 warmup_frac: 0.03             # 3% linear warmup
