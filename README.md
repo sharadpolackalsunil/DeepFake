@@ -137,18 +137,21 @@ Active training log running on **NVIDIA GeForce RTX 5090** (50 Epochs, 90 batche
 | **17** | FaceSwap | 0.3209 | 0.9586 | 0.8109 | 0.2654 | 0.7148 | 0.8938 | 0.8505 | 0.6849 | 0.7759 | 0.6646 | 0.8666 |
 | **19** | FaceShifter | 0.3397 | 0.9518 | 0.8217 | 0.2500 | 0.7871 | 0.9004 | 0.8686 | 0.7291 | 0.8074 | 0.6864 | 0.8569 |
 | **23** | NeuralTextures | 0.4394 | 0.9011 | 0.8267 | 0.2500 | 0.7852 | 0.9097 | 0.8698 | 0.7251 | 0.7941 | 0.7054 | 0.8658 |
-| **24** | FaceShifter | 0.3350 | 0.9523 | **0.8384** | **0.2346** | **0.8398** | **0.9128** | **0.8925** | **0.7534** | **0.8102** | **0.7187** | **0.8699** |
+| **24** | FaceShifter | 0.3350 | 0.9523 | 0.8384 | 0.2346 | 0.8398 | 0.9128 | 0.8925 | 0.7534 | 0.8102 | 0.7187 | 0.8699 |
 | **25** | Deepfakes | 0.2250 | 0.9878 | 0.8291 | 0.2577 | 0.7449 | 0.8979 | 0.8776 | 0.7601 | 0.7899 | 0.7112 | 0.8619 |
+| **39 (Best)** | FaceShifter | 0.2185 | 0.9892 | **0.8566** | **0.2154** | **0.8542** | **0.9250** | **0.9020** | **0.8010** | **0.8270** | **0.7820** | **0.8720** |
 
-### Performance Insights:
-- **Fast GPU Throughput:** Training runs at **~2.5 it/s** on the RTX 5090, completing each 90-step epoch in just **~35 seconds**.
-- **Monotonic Progression:** Overall Validation AUC steadily climbed from $0.4801 \to \mathbf{0.8384}$ by Epoch 24.
-- **Method Highlights:** 
-  - `Deepfakes` exceeded **0.9128** AUC.
-  - `Face2Face` reached **0.8925** AUC.
-  - `NeuralTextures` (traditionally hardest) breached **0.8102** AUC.
-  - Cross-domain `DeepFakeDetection` reached **0.8699** AUC.
-- **Classification Metric F1@0.5:** Rose sharply from $0.000 \to \mathbf{0.8398}$, reflecting calibrated prediction probabilities.
+### Official Test Benchmark Evaluation (Detailed Report in [results.md](results.md))
+
+Evaluated with `outputs/checkpoints/best_ema.pt` (Epoch 39) across $N=3,687$ test videos on RTX 5090:
+
+| Test Split | Videos | Video AUC | Accuracy @ 0.50 | Calibrated Acc @ 0.70 | Acc @ EER (0.71) | Peak Balanced Acc |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **FF++ c23 (5 Methods)** | 1,083 | **0.851** | 0.780 | **0.772** | 0.770 | **0.781** (@ 0.750) |
+| **DFD (DeepFakeDetection)** | 2,987 | **0.865** | 0.842 | **0.782** | 0.778 | **0.785** (@ 0.800) |
+| **FF++ c23 + DFD (Master)** | **3,687** | **0.862** | **0.842** | **0.780** | **0.777** | **0.784** (@ 0.750) |
+
+*For complete confusion matrices, threshold sweep tables, and method breakdowns, see [results.md](results.md).*
 
 ---
 
