@@ -117,7 +117,7 @@ def load_model(ckpt_path: str, device: torch.device):
     return model, model_type, norm_fn
 
 
-def evaluate_dataset(model, ds, device, batch_size=4):
+def evaluate_dataset(model, ds, device, batch_size=4, eval_thresh=0.70):
     loader = DataLoader(ds, batch_size=batch_size, shuffle=False, num_workers=0)
     video_ids, labels, methods = [], [], []
     video_scores_mean, video_scores_top50 = [], []
@@ -190,6 +190,23 @@ def evaluate_dataset(model, ds, device, batch_size=4):
             per_method_acc_05[m] = float(np.mean(preds_05[m_mask] == 1.0))
             per_method_acc_eer[m] = float(np.mean(preds_eer[m_mask] == 1.0))
 
+    # Predictions at custom calibrated threshold
+    if eval_thresh is not None:
+        preds_custom = (scores_mean >= eval_thresh).astype(int)
+        total_acc_custom = float(np.mean(preds_custom == labels))
+        pristine_acc_custom = float(np.mean(preds_custom[real_mask] == 0.0)) if real_mask.sum() > 0 else 0.0
+        per_method_acc_custom = {}
+        for m in sorted(set(methods)):
+            if m == "real":
+                continue
+            m_mask = (methods_arr == m)
+            if m_mask.sum() > 0:
+                per_method_acc_custom[m] = float(np.mean(preds_custom[m_mask] == 1.0))
+    else:
+        total_acc_custom = None
+        pristine_acc_custom = None
+        per_method_acc_custom = None
+
     return {
         "num_videos": len(labels),
         "num_reals": int((labels == 0).sum()),
@@ -199,13 +216,17 @@ def evaluate_dataset(model, ds, device, batch_size=4):
         "clip_auc": clip_auc,
         "eer": eer,
         "eer_thresh": eer_thresh,
+        "eval_thresh": eval_thresh,
         "total_acc_05": total_acc_05,
         "total_acc_eer": total_acc_eer,
+        "total_acc_custom": total_acc_custom,
         "pristine_acc_05": pristine_acc_05,
         "pristine_acc_eer": pristine_acc_eer,
+        "pristine_acc_custom": pristine_acc_custom,
         "per_method_auc": per_method_auc,
         "per_method_acc_05": per_method_acc_05,
         "per_method_acc_eer": per_method_acc_eer,
+        "per_method_acc_custom": per_method_acc_custom,
         "scores_mean": scores_mean,
         "labels": labels,
         "methods": methods_arr,
@@ -338,16 +359,60 @@ def print_benchmark_table(res, dataset_name, split):
     acc_05_vals = [f"{res['per_method_acc_05'].get(m, 0.0):.3f}" for m in cols]
     print(fmt_row(["Accuracy@0.5"] + acc_05_vals + [f"{res['pristine_acc_05']:.3f}", f"{res['total_acc_05']:.3f}"]))
 
-    # Row 2: Accuracy @ EER
+    # Row 2: Accuracy @ Calibrated Threshold (if specified)
+    if res.get("eval_thresh") is not None and res.get("per_method_acc_custom") is not None:
+        acc_custom_vals = [f"{res['per_method_acc_custom'].get(m, 0.0):.3f}" for m in cols]
+        custom_lbl = f"Accuracy@{res['eval_thresh']:.2f}"
+        print(fmt_row([custom_lbl] + acc_custom_vals + [f"{res['pristine_acc_custom']:.3f}", f"{res['total_acc_custom']:.3f}"]))
+
+    # Row 3: Accuracy @ EER
     acc_eer_vals = [f"{res['per_method_acc_eer'].get(m, 0.0):.3f}" for m in cols]
     eer_lbl = f"Acc@EER({res['eer_thresh']:.2f})" if "eer_thresh" in res else "Accuracy@EER"
     print(fmt_row([eer_lbl] + acc_eer_vals + [f"{res['pristine_acc_eer']:.3f}", f"{res['total_acc_eer']:.3f}"]))
 
-    # Row 3: Video AUC
+    # Row 4: Video AUC
     auc_vals = [f"{res['per_method_auc'].get(m, 0.0):.3f}" for m in cols]
     print(fmt_row(["Video AUC"] + auc_vals + ["1.000", f"{res['video_auc_mean']:.3f}"]))
 
     print(double_sep + "\n")
+
+
+def print_classification_report(res, thresh=None):
+    """Prints a detailed confusion matrix and performance breakdown at a given threshold."""
+    if thresh is None:
+        thresh = res.get("eval_thresh", 0.70)
+    scores = res["scores_mean"]
+    labels = res["labels"]
+    preds = (scores >= thresh).astype(int)
+
+    tp = int(np.sum((preds == 1) & (labels == 1)))
+    tn = int(np.sum((preds == 0) & (labels == 0)))
+    fp = int(np.sum((preds == 1) & (labels == 0)))
+    fn = int(np.sum((preds == 0) & (labels == 1)))
+
+    n_fakes = tp + fn
+    n_reals = tn + fp
+    total = len(labels)
+
+    acc = (tp + tn) / total if total > 0 else 0.0
+    sens = tp / n_fakes if n_fakes > 0 else 0.0
+    spec = tn / n_reals if n_reals > 0 else 0.0
+    bal_acc = 0.5 * (sens + spec)
+    prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    f1 = 2 * prec * sens / (prec + sens) if (prec + sens) > 0 else 0.0
+
+    print("=" * 85)
+    print(f"CALIBRATED CLASSIFICATION REPORT (Threshold = {thresh:.3f})")
+    print("=" * 85)
+    print(f"  * True Positives  (Fakes Correctly Caught):  {tp:4d} / {n_fakes:4d} ({sens*100:.1f}%)")
+    print(f"  * True Negatives  (Reals Correctly Cleared): {tn:4d} / {n_reals:4d} ({spec*100:.1f}%)")
+    print(f"  * False Positives (False Alarms on Reals):   {fp:4d} / {n_reals:4d} ({fp/n_reals*100:.1f}%)")
+    print(f"  * False Negatives (Fakes Missed):            {fn:4d} / {n_fakes:4d} ({fn/n_fakes*100:.1f}%)")
+    print("-" * 85)
+    print(f"  * True Overall Accuracy [(TP+TN)/All]:      {acc*100:.2f}% ({tp+tn}/{total} videos)")
+    print(f"  * Balanced Accuracy [Mean(Sens, Spec)]:      {bal_acc*100:.2f}%")
+    print(f"  * Precision: {prec*100:.1f}% | Recall: {sens*100:.1f}% | F1-Score: {f1:.4f}")
+    print("=" * 85 + "\n")
 
 
 def main():
@@ -357,6 +422,7 @@ def main():
     parser.add_argument("--store", type=str, default="data/store", help="Offline frame store directory")
     parser.add_argument("--split", type=str, default="test", help="Split name to evaluate (default: test)")
     parser.add_argument("--methods", nargs="*", default=None, help="Optional subset of methods to evaluate (e.g. Deepfakes Face2Face FaceSwap NeuralTextures DFD)")
+    parser.add_argument("--eval-thresh", type=float, default=0.70, help="Calibrated threshold to evaluate (default: 0.70)")
     parser.add_argument("--thresholds", nargs="*", type=float, default=None, help="Custom threshold array for sensitivity sweep")
     parser.add_argument("--dataset-name", type=str, default="FF++ c23", help="Dataset display name")
     parser.add_argument("--out-csv", type=str, default="outputs/benchmark_results.csv", help="Output CSV path")
@@ -380,10 +446,14 @@ def main():
         methods=args.methods,
     )
     print(f"Evaluating {args.dataset_name} ({args.split} split) with {len(ds)} videos...")
-    res = evaluate_dataset(model, ds, device)
+    res = evaluate_dataset(model, ds, device, eval_thresh=args.eval_thresh)
 
     # Render formatted benchmark results table
     print_benchmark_table(res, args.dataset_name, args.split)
+
+    # Render classification report at calibrated threshold
+    if args.eval_thresh is not None:
+        print_classification_report(res, thresh=args.eval_thresh)
 
     # Render threshold sensitivity sweep table
     print_threshold_sweep(res, f"{args.dataset_name} [{args.split.upper()}]", thresholds=args.thresholds)
