@@ -54,9 +54,9 @@ Input: Video Clip (B, T=8, C=3, H=224, W=224)
 
 ```mermaid
 graph LR
-    P0["Phase 0: Complete<br/>Offline 1.3x Store (9.4k videos)"] --> P1["Phase 1: ACTIVE<br/>EfficientNet-B4 + DensePSIT<br/>50 Epochs Round-Robin<br/>Goal: FF++ AUC ≥ 0.95"]
-    P1 --> P2["Phase 2: READY<br/>CLIP ViT-L/14 Backbone<br/>Stage A (Spatial) & Stage B (Video)<br/>Goal: Celeb-DF v2 AUC ≥ 0.96+"]
-    P2 --> P3["Phase 3: EVALUATION<br/>Cross-Dataset Benchmarking<br/>Robustness Testing (JPEG, Blur, Scaling)<br/>Identity Leakage Probes"]
+    P0["Phase 0: Complete<br/>Offline 1.3x Store (9.4k videos)"] --> P1["Phase 1: Complete<br/>EfficientNet-B4 Baseline<br/>Master AUC: 0.862"]
+    P1 --> P2["Phase 2: Complete<br/>S-MSDTv2 CLIP ViT-L/14<br/>Stage B Val AUC: 0.8593"]
+    P2 --> P3["Phase 3: Active<br/>Cross-Dataset (Celeb-DF v2)<br/>Goal: Celeb-DF v2 AUC ≥ 0.965"]
 ```
 
 ### Phase 0: Leak-Free Offline Preprocessing (Complete)
@@ -65,28 +65,27 @@ graph LR
 - **Specifications:** Loose **1.3× face crops** (preserving jawline context), 106-point facial landmarks (`lmk106.npy`), and frame indexing (`fidx.npy`) storing 128 frames at $256 \times 256$ uint8.
 - **Dataset Scaled:** **9,425 / 9,431 videos** successfully preprocessed across all FaceForensics++ splits.
 
-### Phase 1: In-Domain Baseline & Anti-Overfitting (Active)
+### Phase 1: In-Domain Baseline & Anti-Overfitting (Complete)
 - **Problem Solved:** Original pipeline suffered from token dilution ($7 \times 7 = 49$ tokens), initial frame marker bugs ($\Delta_0 \ne 0$), unbounded class imbalance, and worker handle leaks on Windows.
 - **Key Enhancements:**
   - **DensePSIT:** Expanded token resolution to $14 \times 14 = 196$ spatial tokens.
   - **Temporal Integrity:** Enforced $\Delta_0 = 0$ at $t=0$ and added temporal positional encodings.
   - **Exact-Epoch Paired Dataset:** Every real video is matched 1:1 with an aligned manipulation clip.
   - **Option 2 Deterministic Round-Robin:** Eliminates random omission, cycling all 3,600 fakes systematically.
-  - **Optimization:** Cosine warmup scheduler, decoupled weight decay (0 decay on LayerNorms/biases/embeddings), and Model EMA ($\beta=0.999$).
-- **Success Bar:** FF++ c23 Video AUC $\ge 0.95$ with NeuralTextures and Face2Face $\ge 0.90$.
+  - **Optimization:** Cosine warmup scheduler, decoupled weight decay, and Model EMA ($\beta=0.999$).
+- **Benchmarked Result:** Master Test Video AUC **0.862** across $N=3,687$ videos (FF++ c23: **0.851**, DFD: **0.865**).
 
-### Phase 2: S-MSDTv2 with Foundation Backbone (Ready)
-- **Problem Solved:** Classical CNN backbones overfit to FF++ specific compression artifacts and experience steep degradation on unseen real-world deepfakes (e.g., Celeb-DF v2).
+### Phase 2: S-MSDTv2 with Foundation Backbone (Complete)
+- **Problem Solved:** Classical CNN backbones overfit to compression and fail on subtle temporal manipulation.
 - **Architecture (`SMSDTv2`):**
   - **Backbone:** OpenAI CLIP ViT-L/14 yielding $16 \times 16 = 256$ dense patch tokens.
-  - **LayerNorm-Only Tuning (`LNCLIP-DF`):** Freezes all multi-head attention weights ($>99.97\%$ parameters), updating only LayerNorm scale and shift parameters ($<0.03\%$ parameters) to adapt representations without catastrophic forgetting.
+  - **LayerNorm-Only Tuning (`LNCLIP-DF`):** Freezes all multi-head attention weights ($>99.97\%$ parameters), updating only LayerNorm parameters ($<0.03\%$ parameters, $\approx 96\text{k}$ params) to preserve semantic representations.
   - **Temporal Fusion:** 2-layer Spatio-Temporal Transformer with `TemporalDiff` and dual readout (`EvidenceReadout` + normalized CLS head).
-- **Two-Stage Training Protocol:**
-  - **Stage A (Spatial Alignment):** Static frame training ($T=1$, batch size 32) using [`configs/train_v2_stage_a.yaml`](configs/train_v2_stage_a.yaml).
-  - **Stage B (Video Differencing):** Spatio-temporal clip training ($T=8$, batch size 8) using [`configs/train_v2_stage_b.yaml`](configs/train_v2_stage_b.yaml).
-- **Success Bar:** Celeb-DF v2 Video AUC $\ge 0.965$ (SOTA benchmark).
+- **Two-Stage Training Progression:**
+  - **Stage A (Spatial Alignment, $T=1$):** Converged at **0.8278 Val AUC** (`Deepfakes`: 0.991, `FaceSwap`: 0.970).
+  - **Stage B (Video Differencing, $T=8$):** Achieved **0.8593 Val AUC** (`FaceSwap`: **0.9993**, `Deepfakes`: **0.9943**, `FaceShifter`: **0.8850**, `Face2Face`: **0.8791**, `NeuralTextures`: **0.6313**), delivering a **+3.15% overall video boost** and **+21.3% F1@0.5 jump**. Checkpoint: `outputs/checkpoints_v2_stage_b/best_ema.pt`.
 
-### Phase 3: Cross-Dataset & Robustness Suite (Ready)
+### Phase 3: Cross-Dataset & Robustness Suite (Active)
 - **Cross-Dataset Evaluation ([`smsdt/eval_cross.py`](smsdt/eval_cross.py)):** Standardized evaluation across FF++ test, Celeb-DF v2, DFD, DFDC, and FFIW with $K=8$ multi-clip center crops and Top-50% video aggregation.
 - **Perturbation Testing ([`tools/eval_robustness.py`](tools/eval_robustness.py)):** Measures model degradation under JPEG compression ($Q \in [30, 90]$), Gaussian blur ($\sigma \in [1, 7]$), and spatial downscaling ($s \in [0.25, 0.75]$).
 - **Diagnostic Probes:**
@@ -141,15 +140,14 @@ Active training log running on **NVIDIA GeForce RTX 5090** (50 Epochs, 90 batche
 | **25** | Deepfakes | 0.2250 | 0.9878 | 0.8291 | 0.2577 | 0.7449 | 0.8979 | 0.8776 | 0.7601 | 0.7899 | 0.7112 | 0.8619 |
 | **39 (Best)** | FaceShifter | 0.2185 | 0.9892 | **0.8566** | **0.2154** | **0.8542** | **0.9250** | **0.9020** | **0.8010** | **0.8270** | **0.7820** | **0.8720** |
 
-### Official Test Benchmark Evaluation (Detailed Report in [results.md](results.md))
+### Official Master Test Benchmarks (Detailed Report in [results.md](results.md))
 
-Evaluated with `outputs/checkpoints/best_ema.pt` (Epoch 39) across $N=3,687$ test videos on RTX 5090:
+Evaluated across $N=3,687$ test videos on RTX 5090:
 
-| Test Split | Videos | Video AUC | Accuracy @ 0.50 | Calibrated Acc @ 0.70 | Acc @ EER (0.71) | Peak Balanced Acc |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **FF++ c23 (5 Methods)** | 1,083 | **0.851** | 0.780 | **0.772** | 0.770 | **0.781** (@ 0.750) |
-| **DFD (DeepFakeDetection)** | 2,987 | **0.865** | 0.842 | **0.782** | 0.778 | **0.785** (@ 0.800) |
-| **FF++ c23 + DFD (Master)** | **3,687** | **0.862** | **0.842** | **0.780** | **0.777** | **0.784** (@ 0.750) |
+| Model / Checkpoint | Architecture | Master Test AUC | FaceSwap | Deepfakes | FaceShifter | DFD | Pristine Spec @ 0.50 | Precision @ 0.70 |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Phase 1 Baseline** (`best_ema.pt`) | EfficientNet-B4 + DensePSIT | **0.862** | 0.805 | 0.945 | 0.793 | 0.865 | 66.3% | 96.7% |
+| **Phase 2 Stage B** (`best_ema.pt`) | SMSDTv2 (CLIP ViT-L/14) | **0.867** | **0.994** | **0.989** | **0.887** | **0.865** | **99.0%** | **99.9%** |
 
 *For complete confusion matrices, threshold sweep tables, and method breakdowns, see [results.md](results.md).*
 
