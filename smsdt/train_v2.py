@@ -191,6 +191,8 @@ def train_v2(cfg_path: str):
     global_step = 0
     for epoch in range(1, epochs + 1):
         model.train()
+        if hasattr(train_loader.dataset, "set_epoch"):
+            train_loader.dataset.set_epoch(epoch - 1)
         total_loss, total_cls, total_mask = 0.0, 0.0, 0.0
         optimizer.zero_grad(set_to_none=True)
 

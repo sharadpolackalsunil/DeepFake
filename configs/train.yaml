@@ -35,7 +35,7 @@ label_smoothing: 0.05         # BCE label smoothing
 lambda_mask: 0.5              # patch-level mask loss weight (supervised by SBI & FF++ masks)
 
 # Augmentations
-p_sbi: 0.5                    # 50% probability of online clip-level SBI synthesis
+p_sbi: 0.0                    # 0.0 guarantees exact Option 2: 100% round-robin across all 3,600 FF++ fakes with 0 omissions
 jpeg_quality: [50, 100]       # safe JPEG range (does NOT erase NeuralTextures subtle signals)
 p_jpeg: 0.3
 p_blur: 0.1

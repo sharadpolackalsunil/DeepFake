@@ -209,12 +209,17 @@ def main(cfg, resume=True):
     model.train()
     for epoch in range(start_epoch, epochs):
         model.train()
+        if hasattr(train_loader.dataset, "set_epoch"):
+            train_loader.dataset.set_epoch(epoch)
+
         epoch_loss = 0.0
         epoch_steps = 0
         train_preds, train_targets = [], []
         opt.zero_grad(set_to_none=True)
 
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch:02d}/{epochs:02d}", total=len(train_loader))
+        methods = getattr(train_loader.dataset, "methods", ["Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures", "FaceShifter"])
+        active_method = methods[epoch % len(methods)] if methods else "Mixed"
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch:02d}/{epochs:02d} [{active_method}]", total=len(train_loader))
         for i, batch in enumerate(pbar):
             frames = batch["frames"].to(device, non_blocking=True)
             labels = batch["label"].float().to(device, non_blocking=True)
@@ -253,9 +258,9 @@ def main(cfg, resume=True):
             epoch_steps += 1
 
             # Accumulate predictions in memory (near zero overhead during batch iteration)
-            probs = torch.sigmoid(logit).detach().float().cpu().numpy()
+            probs = torch.sigmoid(logit).detach().float().cpu().numpy().flatten()
             train_preds.extend(probs.tolist())
-            train_targets.extend(labels.detach().float().cpu().numpy().tolist())
+            train_targets.extend(labels.detach().float().cpu().numpy().flatten().tolist())
 
             cur_lr = sched.get_last_lr()[0]
             postfix = {"Loss": f"{loss_logs['cls']:.4f}", "LR": f"{cur_lr:.2e}"}
@@ -277,6 +282,9 @@ def main(cfg, resume=True):
         eer = metrics["eer"]
         f1_05 = metrics["f1_05"]
         print(f"Epoch {epoch:02d} | Train Loss: {avg_train_loss:.4f} | Train AUC: {train_auc:.4f} | Val AUC: {auc:.4f} | Val EER: {eer:.4f} | Val F1@0.5: {f1_05:.4f}")
+        if metrics.get("per_manipulation"):
+            breakdown_str = " | ".join(f"{m}: {d['auc']:.4f}" for m, d in metrics["per_manipulation"].items())
+            print(f"  * Val AUC Breakdown: {breakdown_str}")
 
         # Save latest checkpoint
         save_dict = {
