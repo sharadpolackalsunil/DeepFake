@@ -223,6 +223,16 @@ def train_v2(cfg_path: str, resume: bool = True):
             model.load_state_dict(ckpt_to_load["model"])
             if "model_ema" in ckpt_to_load:
                 model_ema.load_state_dict(ckpt_to_load["model_ema"])
+            if "optimizer" in ckpt_to_load:
+                try:
+                    optimizer.load_state_dict(ckpt_to_load["optimizer"])
+                except Exception:
+                    pass
+            if "scheduler" in ckpt_to_load:
+                try:
+                    scheduler.load_state_dict(ckpt_to_load["scheduler"])
+                except Exception:
+                    pass
             start_epoch = ckpt_to_load.get("epoch", 0) + 1
             best_val_auc = ckpt_to_load.get("val_auc", 0.0)
             print(f"  * Resumed at Epoch {start_epoch:02d}/{epochs:02d} | Best Val AUC: {best_val_auc:.4f}")
@@ -323,6 +333,8 @@ def train_v2(cfg_path: str, resume: bool = True):
             "val_f1_05": val_f1,
             "model": model.state_dict(),
             "model_ema": model_ema.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "scheduler": scheduler.state_dict(),
             "cfg": cfg,
         }
         save_checkpoint_atomic(ckpt_data, os.path.join(output_dir, "last.pt"))
