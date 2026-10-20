@@ -202,6 +202,27 @@ def main(cfg, resume=True):
     start_epoch = 0
     step = 0
     best_auc = 0.0
+
+    if resume and os.path.exists(checkpoint_path):
+        print(f"Resuming training from: {checkpoint_path}")
+        ckpt = torch.load(checkpoint_path, map_location=device)
+        model.load_state_dict(ckpt["model_state_dict"])
+        if ema_model is not None and ckpt.get("ema_state_dict") is not None:
+            ema_model.load_state_dict(ckpt["ema_state_dict"])
+        opt.load_state_dict(ckpt["optimizer_state_dict"])
+        start_epoch = ckpt["epoch"] + 1
+        step = ckpt.get("step", 0)
+        best_auc = ckpt.get("best_auc", 0.0)
+
+        # Advance or restore scheduler
+        if "scheduler_state_dict" in ckpt and ckpt["scheduler_state_dict"] is not None:
+            try:
+                sched.load_state_dict(ckpt["scheduler_state_dict"])
+            except Exception:
+                for _ in range(step):
+                    sched.step()
+        print(f"  * Resumed at Epoch {start_epoch:02d}/{epochs:02d} | Step {step} | Best Val AUC: {best_auc:.4f}")
+
     grad_clip = float(cfg.train.get("grad_clip", 1.0))
     label_smoothing = float(cfg.train.get("label_smoothing", 0.05))
     lam_mask = float(cfg.train.get("lambda_mask", 0.5))
