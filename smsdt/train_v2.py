@@ -16,24 +16,32 @@ from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
+from tqdm import tqdm
+
 from smsdt.data.sbi_video import sbi_clip
 from smsdt.data.video_dataset import PairedClipDataset, EvalClipDataset, paired_collate
+from smsdt.eval import evaluate as evaluate_metrics
 from smsdt.losses import detection_loss
 from smsdt.models.clip_encoder import CLIPFrameEncoder, CLIP_MEAN, CLIP_STD
 from smsdt.models.smsdt_v2 import SMSDTv2
 from smsdt.train import cosine_with_warmup
 
 
-def get_clip_normalize():
-    """Torch normalization transform for CLIP inputs."""
-    mean = torch.tensor(CLIP_MEAN).view(1, 3, 1, 1)
-    std = torch.tensor(CLIP_STD).view(1, 3, 1, 1)
+class ClipNormalize:
+    """Torch normalization transform for CLIP inputs (picklable for Windows DataLoader spawn)."""
 
-    def _norm(x):
+    def __init__(self, mean=CLIP_MEAN, std=CLIP_STD):
+        self.mean = torch.tensor(mean).view(1, 3, 1, 1)
+        self.std = torch.tensor(std).view(1, 3, 1, 1)
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
         # x is (T, 3, H, W) in [0, 1]
-        return (x - mean) / std
+        return (x - self.mean) / self.std
 
-    return _norm
+
+def get_clip_normalize():
+    """Return picklable CLIP normalization transform."""
+    return ClipNormalize()
 
 
 def evaluate(model, loader, device, max_videos=None):
@@ -57,8 +65,8 @@ def evaluate(model, loader, device, max_videos=None):
 
             # Mean clip probability as primary video score
             vid_score = probs.mean(dim=1)
-            all_preds.extend(vid_score.cpu().numpy().tolist())
-            all_labels.extend(labels.cpu().numpy().tolist())
+            all_preds.extend(vid_score.float().cpu().numpy().tolist())
+            all_labels.extend(labels.float().cpu().numpy().tolist())
 
     if len(set(all_labels)) < 2:
         return 0.5
@@ -131,27 +139,31 @@ def train_v2(cfg_path: str, resume: bool = True):
         index_csv=data_cfg.get("index", "data/splits/index.csv"),
         store_root=data_cfg.get("store", "data/store"),
         split="val",
-        K=4,
+        K=int(data_cfg.get("val_k", 8)),
         T=frames_per_clip,
         stride=data_cfg.get("frame_stride", 1),
         normalize=norm_fn,
     )
 
+    workers = int(train_cfg.get("num_workers", 4))
     train_loader = DataLoader(
         train_ds,
         batch_size=train_cfg.get("batch_pairs", 8),
         shuffle=True,
         collate_fn=paired_collate,
-        num_workers=train_cfg.get("num_workers", 0 if sys.platform == "win32" and not torch.cuda.is_available() else 4),
-        pin_memory=train_cfg.get("pin_memory", torch.cuda.is_available()),
+        num_workers=workers,
+        pin_memory=bool(train_cfg.get("pin_memory", False)),
+        persistent_workers=bool(train_cfg.get("persistent_workers", False)) if workers > 0 else False,
+        prefetch_factor=int(train_cfg.get("prefetch_factor", 2)) if workers > 0 else None,
         drop_last=True,
     )
 
     val_loader = DataLoader(
         val_ds,
-        batch_size=4,
+        batch_size=int(train_cfg.get("val_batch_size", 4)),
         shuffle=False,
-        num_workers=0,
+        num_workers=int(train_cfg.get("val_workers", 0)),
+        pin_memory=False,
     )
 
     # 3. Optimizer & Schedulers
@@ -202,14 +214,20 @@ def train_v2(cfg_path: str, resume: bool = True):
 
     # 4. Training Loop
     global_step = 0
+    methods = getattr(train_loader.dataset, "methods", ["Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures", "FaceShifter"])
+
     for epoch in range(start_epoch, epochs + 1):
         model.train()
         if hasattr(train_loader.dataset, "set_epoch"):
             train_loader.dataset.set_epoch(epoch - 1)
         total_loss, total_cls, total_mask = 0.0, 0.0, 0.0
+        train_preds, train_targets = [], []
         optimizer.zero_grad(set_to_none=True)
 
-        for step, batch in enumerate(train_loader):
+        active_method = methods[(epoch - 1) % len(methods)] if methods else "Mixed"
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch:02d}/{epochs:02d} [{active_method}]", total=len(train_loader))
+
+        for step, batch in enumerate(pbar):
             frames = batch["frames"].to(device)  # (2B, T, 3, 224, 224)
             labels = batch["label"].to(device)    # (2B,)
             mask = batch["mask"].to(device)      # (2B, T, g, g)
@@ -251,18 +269,37 @@ def train_v2(cfg_path: str, resume: bool = True):
             total_cls += logs.get("cls", 0.0)
             total_mask += logs.get("mask", 0.0)
 
+            probs = torch.sigmoid(logits).detach().float().cpu().numpy().flatten()
+            train_preds.extend(probs.tolist())
+            train_targets.extend(labels.detach().float().cpu().numpy().flatten().tolist())
+
+            cur_lr = scheduler.get_last_lr()[0] if hasattr(scheduler, "get_last_lr") else 0.0
+            pbar.set_postfix({"Loss": f"{logs.get('cls', float(loss)):.4f}", "LR": f"{cur_lr:.2e}"})
+
         avg_loss = total_loss / len(train_loader)
         avg_cls = total_cls / len(train_loader)
         avg_mask = total_mask / len(train_loader)
+        train_auc = float(roc_auc_score(train_targets, train_preds)) if len(set(train_targets)) > 1 else 0.5
 
         # Periodic Validation
-        val_auc = evaluate(model_ema, val_loader, device)
-        print(f"Epoch {epoch:02d}/{epochs:02d} | Train Loss: {avg_loss:.4f} (cls: {avg_cls:.4f}, mask: {avg_mask:.4f}) | Val AUC: {val_auc:.4f}")
+        print(f"\n--- Epoch {epoch:02d}/{epochs:02d} Validation ---")
+        metrics = evaluate_metrics(model_ema, val_loader, device)
+        v_metrics = metrics.get("video_level", metrics)
+        val_auc = float(v_metrics["auc"])
+        val_eer = float(v_metrics["eer"])
+        val_f1 = float(v_metrics["f1_05"])
+
+        print(f"Epoch {epoch:02d} | Train Loss: {avg_loss:.4f} | Train AUC: {train_auc:.4f} | Val AUC: {val_auc:.4f} | Val EER: {val_eer:.4f} | Val F1@0.5: {val_f1:.4f}")
+        if metrics.get("per_manipulation"):
+            breakdown_str = " | ".join(f"{m}: {d['auc']:.4f}" for m, d in metrics["per_manipulation"].items())
+            print(f"  * Val AUC Breakdown: {breakdown_str}")
 
         # Save checkpoints
         ckpt_data = {
             "epoch": epoch,
             "val_auc": val_auc,
+            "val_eer": val_eer,
+            "val_f1_05": val_f1,
             "model": model.state_dict(),
             "model_ema": model_ema.state_dict(),
             "cfg": cfg,
