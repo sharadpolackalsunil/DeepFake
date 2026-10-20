@@ -44,7 +44,11 @@ train:
   lambda_mask: 0.5           # Active 16x16 patch-mask supervision
   ema_decay: 0.999
   precision: bfloat16
-  num_workers: 4
-  pin_memory: false
+  num_workers: 8             # Uses 8 parallel worker threads on 24-core Core Ultra 9
+  pin_memory: true           # Fast async DMA transfers to 5090 VRAM
+  persistent_workers: true   # Keeps workers hot in RAM between epochs (no restart latency)
+  prefetch_factor: 2
+  val_batch_size: 8          # 8 videos per validation batch
+  val_workers: 0
 
 output_dir: outputs/checkpoints_v2_stage_b

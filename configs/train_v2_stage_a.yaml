@@ -30,7 +30,7 @@ data:
 
 train:
   epochs: 30
-  batch_pairs: 32            # 64 frames per optimizer step
+  batch_pairs: 64            # 128 frames per optimizer step (saturates RTX 5090 Blackwell tensor cores)
   grad_accum: 1
   lr_backbone_ln: 1.0e-4     # LayerNorm parameter learning rate
   lr_head: 5.0e-4            # CLS projection head learning rate
@@ -42,7 +42,11 @@ train:
   lambda_mask: 0.0           # Mask loss inactive during Stage A CLS pre-tuning
   ema_decay: 0.999
   precision: bfloat16
-  num_workers: 4
-  pin_memory: false
+  num_workers: 8             # Uses 8 parallel worker threads on 24-core Core Ultra 9
+  pin_memory: true           # Fast async DMA transfers to 5090 VRAM
+  persistent_workers: true   # Keeps workers hot in RAM between epochs (no restart latency)
+  prefetch_factor: 2
+  val_batch_size: 16         # 16 videos per validation batch (evaluates in ~4 seconds)
+  val_workers: 0
 
 output_dir: outputs/checkpoints_v2_stage_a

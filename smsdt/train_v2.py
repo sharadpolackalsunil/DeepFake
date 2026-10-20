@@ -44,6 +44,13 @@ def get_clip_normalize():
     return ClipNormalize()
 
 
+def save_checkpoint_atomic(data: dict, filepath: str):
+    """Save checkpoint atomically via temporary file to prevent corruption on interrupt."""
+    tmp_path = filepath + ".tmp"
+    torch.save(data, tmp_path)
+    os.replace(tmp_path, filepath)
+
+
 def evaluate(model, loader, device, max_videos=None):
     """Evaluate model on EvalClipDataset, computing video-level and clip-level AUC."""
     model.eval()
@@ -196,15 +203,29 @@ def train_v2(cfg_path: str, resume: bool = True):
     start_epoch = 1
 
     last_ckpt_path = os.path.join(output_dir, "last.pt")
-    if resume and os.path.exists(last_ckpt_path):
-        print(f"Resuming training from: {last_ckpt_path}")
-        ckpt = torch.load(last_ckpt_path, map_location=device)
-        model.load_state_dict(ckpt["model"])
-        if "model_ema" in ckpt:
-            model_ema.load_state_dict(ckpt["model_ema"])
-        start_epoch = ckpt.get("epoch", 0) + 1
-        best_val_auc = ckpt.get("val_auc", 0.0)
-        print(f"  * Resumed at Epoch {start_epoch:02d}/{epochs:02d} | Best Val AUC: {best_val_auc:.4f}")
+    best_ema_path = os.path.join(output_dir, "best_ema.pt")
+    if resume:
+        ckpt_to_load = None
+        if os.path.exists(last_ckpt_path):
+            try:
+                ckpt_to_load = torch.load(last_ckpt_path, map_location=device)
+                print(f"Resuming training from: {last_ckpt_path}")
+            except Exception as e:
+                print(f"Warning: Failed to load {last_ckpt_path} ({e}). Falling back to best_ema.pt...")
+        if ckpt_to_load is None and os.path.exists(best_ema_path):
+            try:
+                ckpt_to_load = torch.load(best_ema_path, map_location=device)
+                print(f"Resuming training from: {best_ema_path}")
+            except Exception as e:
+                print(f"Warning: Failed to load {best_ema_path} ({e}).")
+
+        if ckpt_to_load is not None:
+            model.load_state_dict(ckpt_to_load["model"])
+            if "model_ema" in ckpt_to_load:
+                model_ema.load_state_dict(ckpt_to_load["model_ema"])
+            start_epoch = ckpt_to_load.get("epoch", 0) + 1
+            best_val_auc = ckpt_to_load.get("val_auc", 0.0)
+            print(f"  * Resumed at Epoch {start_epoch:02d}/{epochs:02d} | Best Val AUC: {best_val_auc:.4f}")
 
     precision = train_cfg.get("precision", "bfloat16")
     amp_dtype = torch.bfloat16 if precision == "bfloat16" and torch.cuda.is_available() else torch.float32
@@ -265,7 +286,7 @@ def train_v2(cfg_path: str, resume: bool = True):
 
                 global_step += 1
 
-            total_loss += float(loss) * grad_accum
+            total_loss += float(loss.detach()) * grad_accum
             total_cls += logs.get("cls", 0.0)
             total_mask += logs.get("mask", 0.0)
 
@@ -274,7 +295,7 @@ def train_v2(cfg_path: str, resume: bool = True):
             train_targets.extend(labels.detach().float().cpu().numpy().flatten().tolist())
 
             cur_lr = scheduler.get_last_lr()[0] if hasattr(scheduler, "get_last_lr") else 0.0
-            pbar.set_postfix({"Loss": f"{logs.get('cls', float(loss)):.4f}", "LR": f"{cur_lr:.2e}"})
+            pbar.set_postfix({"Loss": f"{logs.get('cls', float(loss.detach())):.4f}", "LR": f"{cur_lr:.2e}"})
 
         avg_loss = total_loss / len(train_loader)
         avg_cls = total_cls / len(train_loader)
@@ -304,11 +325,11 @@ def train_v2(cfg_path: str, resume: bool = True):
             "model_ema": model_ema.state_dict(),
             "cfg": cfg,
         }
-        torch.save(ckpt_data, os.path.join(output_dir, "last.pt"))
+        save_checkpoint_atomic(ckpt_data, os.path.join(output_dir, "last.pt"))
 
         if val_auc > best_val_auc:
             best_val_auc = val_auc
-            torch.save(ckpt_data, os.path.join(output_dir, "best_ema.pt"))
+            save_checkpoint_atomic(ckpt_data, os.path.join(output_dir, "best_ema.pt"))
             print(f"  * New best Val AUC: {best_val_auc:.4f} saved to {output_dir}/best_ema.pt")
 
     print(f"=== Completed S-MSDTv2 [{stage.upper()}] Training! Best Val AUC: {best_val_auc:.4f} ===")
