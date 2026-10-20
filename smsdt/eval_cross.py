@@ -135,23 +135,23 @@ def evaluate_dataset(model, ds, device, batch_size=4):
                 frames_flat = frames.view(B * K, T, C, H, W)
 
                 logits, _ = model(frames_flat)
-                probs = torch.sigmoid(logits).view(B, K).cpu().numpy()
+                probs = torch.sigmoid(logits).view(B, K).float().cpu().numpy()
 
-            for b in range(B):
-                p_clips = probs[b]
-                p_mean = float(np.mean(p_clips))
-                # Top-50% clip score
-                k_top = max(1, K // 2)
-                p_top50 = float(np.mean(np.partition(p_clips, -k_top)[-k_top:]))
+                for b in range(B):
+                    p_clips = probs[b]
+                    p_mean = float(np.mean(p_clips))
+                    # Top-50% clip score
+                    k_top = max(1, K // 2)
+                    p_top50 = float(np.mean(np.partition(p_clips, -k_top)[-k_top:]))
 
-                video_scores_mean.append(p_mean)
-                video_scores_top50.append(p_top50)
-                labels.append(float(y[b]))
-                video_ids.append(vids[b])
-                methods.append(meths[b])
+                    video_scores_mean.append(p_mean)
+                    video_scores_top50.append(p_top50)
+                    labels.append(float(y[b]))
+                    video_ids.append(vids[b])
+                    methods.append(meths[b])
 
-                clip_scores_all.extend(p_clips.tolist())
-                clip_labels_all.extend([float(y[b])] * K)
+                    clip_scores_all.extend(p_clips.tolist())
+                    clip_labels_all.extend([float(y[b])] * K)
 
     labels = np.array(labels)
     scores_mean = np.array(video_scores_mean)
