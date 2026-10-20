@@ -207,7 +207,7 @@ def main(cfg, resume=True):
         train_preds, train_targets = [], []
         opt.zero_grad(set_to_none=True)
 
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch + 1:02d}/{epochs:02d}", total=len(train_loader))
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch:02d}/{epochs:02d}", total=len(train_loader))
         for i, batch in enumerate(pbar):
             frames = batch["frames"].to(device, non_blocking=True)
             labels = batch["label"].float().to(device, non_blocking=True)
@@ -263,17 +263,17 @@ def main(cfg, resume=True):
             train_auc = 0.5
 
         # --- Validation loop at epoch end ---
-        print(f"\n--- Epoch {epoch + 1:02d}/{epochs:02d} Validation ---")
+        print(f"\n--- Epoch {epoch:02d}/{epochs:02d} Validation ---")
         eval_model = ema_model.module if ema_model is not None else model
         metrics = evaluate(eval_model, val_loader, device)
         auc = metrics["auc"]
         eer = metrics["eer"]
         f1_05 = metrics["f1_05"]
-        print(f"Epoch {epoch + 1:02d} | Train Loss: {avg_train_loss:.4f} | Train AUC: {train_auc:.4f} | Val AUC: {auc:.4f} | Val EER: {eer:.4f} | Val F1@0.5: {f1_05:.4f}")
+        print(f"Epoch {epoch:02d} | Train Loss: {avg_train_loss:.4f} | Train AUC: {train_auc:.4f} | Val AUC: {auc:.4f} | Val EER: {eer:.4f} | Val F1@0.5: {f1_05:.4f}")
 
         # Save latest checkpoint
         save_dict = {
-            "epoch": epoch + 1,
+            "epoch": epoch,
             "step": step,
             "model_state_dict": model.state_dict(),
             "ema_state_dict": ema_model.state_dict() if ema_model is not None else None,
