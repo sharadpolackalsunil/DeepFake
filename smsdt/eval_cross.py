@@ -206,7 +206,96 @@ def evaluate_dataset(model, ds, device, batch_size=4):
         "per_method_auc": per_method_auc,
         "per_method_acc_05": per_method_acc_05,
         "per_method_acc_eer": per_method_acc_eer,
+        "scores_mean": scores_mean,
+        "labels": labels,
+        "methods": methods_arr,
     }
+
+
+def print_threshold_sweep(res, dataset_name, thresholds=None):
+    """Evaluates an array of decision thresholds to find the optimal operating boundary."""
+    if thresholds is None:
+        thresholds = [0.30, 0.40, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80]
+
+    eer_th = res.get("eer_thresh")
+    all_th = sorted(set([float(t) for t in thresholds] + ([round(float(eer_th), 3)] if eer_th is not None else [])))
+
+    labels = res["labels"]
+    scores = res["scores_mean"]
+    methods = res["methods"]
+    real_mask = (labels == 0.0)
+
+    standard_order = [
+        "Deepfakes",
+        "Face2Face",
+        "FaceSwap",
+        "NeuralTextures",
+        "FaceShifter",
+        "DeepFakeDetection",
+        "DFD",
+    ]
+    all_methods = res.get("per_method_acc_05", {})
+    cols = [m for m in standard_order if m in all_methods]
+    cols += [m for m in sorted(all_methods.keys()) if m not in cols]
+
+    display_names = {
+        "DeepFakeDetection": "DFD",
+        "FaceShifter": "FaceShifter",
+    }
+    header_labels = [display_names.get(m, m) for m in cols]
+    headers = ["Threshold"] + header_labels + ["Pristine", "Total Acc", "Balanced"]
+    col_widths = [max(len(h) + 2, 12) for h in headers]
+    col_widths[0] = 16
+
+    def fmt_row(items):
+        return " | ".join(f"{str(item):>{w}}" for item, w in zip(items, col_widths))
+
+    line_sep = "-" * (sum(col_widths) + 3 * (len(headers) - 1))
+    double_sep = "=" * len(line_sep)
+
+    print("\n" + double_sep)
+    print(f"THRESHOLD SENSITIVITY SWEEP: {dataset_name} (Finding Optimal Operating Cutoff)")
+    print(double_sep)
+    print(fmt_row(headers))
+    print(line_sep)
+
+    best_acc = 0.0
+    best_acc_th = 0.5
+    best_bal = 0.0
+    best_bal_th = 0.5
+
+    for th in all_th:
+        preds = (scores >= th).astype(int)
+        total_acc = float(np.mean(preds == labels))
+        pristine_acc = float(np.mean(preds[real_mask] == 0.0)) if real_mask.sum() > 0 else 0.0
+        fake_acc = float(np.mean(preds[~real_mask] == 1.0)) if (~real_mask).sum() > 0 else 0.0
+        bal_acc = float(0.5 * (pristine_acc + fake_acc))
+
+        if total_acc > best_acc:
+            best_acc = total_acc
+            best_acc_th = th
+        if bal_acc > best_bal:
+            best_bal = bal_acc
+            best_bal_th = th
+
+        m_vals = []
+        for m in cols:
+            m_mask = (methods == m)
+            if m_mask.sum() > 0:
+                m_vals.append(f"{np.mean(preds[m_mask] == 1.0):.3f}")
+            else:
+                m_vals.append("N/A")
+
+        is_eer = (eer_th is not None and abs(th - eer_th) < 1e-3)
+        th_str = f"{th:.3f} (EER)" if is_eer else f"{th:.3f}"
+        print(fmt_row([th_str] + m_vals + [f"{pristine_acc:.3f}", f"{total_acc:.3f}", f"{bal_acc:.3f}"]))
+
+    print(line_sep)
+    print(f"  * Peak Total Accuracy:     {best_acc:.3f} at threshold = {best_acc_th:.3f}")
+    print(f"  * Peak Balanced Accuracy:  {best_bal:.3f} at threshold = {best_bal_th:.3f}")
+    if eer_th is not None:
+        print(f"  * Optimal EER Threshold:   {eer_th:.3f}")
+    print(double_sep + "\n")
 
 
 def print_benchmark_table(res, dataset_name, split):
@@ -251,7 +340,8 @@ def print_benchmark_table(res, dataset_name, split):
 
     # Row 2: Accuracy @ EER
     acc_eer_vals = [f"{res['per_method_acc_eer'].get(m, 0.0):.3f}" for m in cols]
-    print(fmt_row(["Accuracy@EER"] + acc_eer_vals + [f"{res['pristine_acc_eer']:.3f}", f"{res['total_acc_eer']:.3f}"]))
+    eer_lbl = f"Acc@EER({res['eer_thresh']:.2f})" if "eer_thresh" in res else "Accuracy@EER"
+    print(fmt_row([eer_lbl] + acc_eer_vals + [f"{res['pristine_acc_eer']:.3f}", f"{res['total_acc_eer']:.3f}"]))
 
     # Row 3: Video AUC
     auc_vals = [f"{res['per_method_auc'].get(m, 0.0):.3f}" for m in cols]
@@ -267,6 +357,7 @@ def main():
     parser.add_argument("--store", type=str, default="data/store", help="Offline frame store directory")
     parser.add_argument("--split", type=str, default="test", help="Split name to evaluate (default: test)")
     parser.add_argument("--methods", nargs="*", default=None, help="Optional subset of methods to evaluate (e.g. Deepfakes Face2Face FaceSwap NeuralTextures DFD)")
+    parser.add_argument("--thresholds", nargs="*", type=float, default=None, help="Custom threshold array for sensitivity sweep")
     parser.add_argument("--dataset-name", type=str, default="FF++ c23", help="Dataset display name")
     parser.add_argument("--out-csv", type=str, default="outputs/benchmark_results.csv", help="Output CSV path")
     parser.add_argument("--K", type=int, default=8, help="Clips per video")
@@ -293,6 +384,9 @@ def main():
 
     # Render formatted benchmark results table
     print_benchmark_table(res, args.dataset_name, args.split)
+
+    # Render threshold sensitivity sweep table
+    print_threshold_sweep(res, f"{args.dataset_name} [{args.split.upper()}]", thresholds=args.thresholds)
 
     # Append to output CSV
     os.makedirs(os.path.dirname(args.out_csv), exist_ok=True)
