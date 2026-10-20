@@ -117,15 +117,26 @@ class PairedClipDataset(Dataset):
         self.T = T
         self.stride = stride
         self.mask_grid = mask_grid
+        self.methods = list(methods)
+        self.epoch = 0
         self.reals = [r for r in rows if r["method"] == "real"]
         self.fakes = defaultdict(list)
         for r in rows:
-            if r["method"] in methods:
+            if r["method"] in self.methods:
                 self.fakes[r["target_id"]].append(r)
+
+        # Sort each target identity's fake list deterministically by method order
+        for tid in self.fakes:
+            self.fakes[tid].sort(key=lambda x: self.methods.index(x["method"]) if x["method"] in self.methods else 999)
+
         self.p_sbi = p_sbi
         self.sbi_fn = sbi_fn
         self.aug = augment or Augment()
         self.normalize = normalize
+
+    def set_epoch(self, epoch: int):
+        """Set current epoch for deterministic round-robin manipulation cycling."""
+        self.epoch = int(epoch)
 
     def __len__(self):
         return len(self.reals)  # Exactly 720 real videos = 1 exact epoch
@@ -145,7 +156,9 @@ class PairedClipDataset(Dataset):
             fake_u8, fake_mask = self.sbi_fn(real_u8, rs.lmk()[sel])
             method = "SBI"
         else:
-            fake = random.choice(self.fakes[real["target_id"]])
+            fakes_list = self.fakes[real["target_id"]]
+            # Deterministic round-robin cycling: Epoch 0->Method 0, Epoch 1->Method 1, etc.
+            fake = fakes_list[self.epoch % len(fakes_list)]
             fs = VideoStore(self.root, fake["video_id"])
             common, ri, fi = np.intersect1d(rs.fidx, fs.fidx, return_indices=True)
             starts = contiguous_starts(common, self.T, self.stride)

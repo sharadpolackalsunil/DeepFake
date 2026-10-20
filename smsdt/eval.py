@@ -177,9 +177,9 @@ def evaluate(model, loader, device, top_k_ratio=0.5, max_batches=None):
 
     # Per-manipulation-type breakdown (each fake type evaluated against ALL real samples)
     if all_manip_types:
+        from smsdt.data.video_dataset import METHOD_ID
+        reverse_map = {v: k for k, v in METHOD_ID.items()}
         manip_types = torch.cat(all_manip_types).cpu().numpy()
-        from smsdt.data.dataset import MANIP_TYPE_MAP
-        reverse_map = {v: k for k, v in MANIP_TYPE_MAP.items()}
 
         real_mask = (labels == 0)
         per_manip = {}
