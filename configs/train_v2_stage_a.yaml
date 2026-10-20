@@ -39,7 +39,7 @@ train:
   lambda_mask: 0.0           # Mask loss inactive during Stage A CLS pre-tuning
   ema_decay: 0.999
   precision: bfloat16
-  num_workers: 8
-  pin_memory: true
+  num_workers: 4
+  pin_memory: false
 
 output_dir: outputs/checkpoints_v2_stage_a

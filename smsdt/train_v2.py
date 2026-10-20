@@ -66,7 +66,7 @@ def evaluate(model, loader, device, max_videos=None):
     return float(roc_auc_score(all_labels, all_preds))
 
 
-def train_v2(cfg_path: str):
+def train_v2(cfg_path: str, resume: bool = True):
     with open(cfg_path) as f:
         cfg = yaml.safe_load(f)
 
@@ -181,6 +181,19 @@ def train_v2(cfg_path: str):
         p.requires_grad = False
 
     best_val_auc = 0.0
+    start_epoch = 1
+
+    last_ckpt_path = os.path.join(output_dir, "last.pt")
+    if resume and os.path.exists(last_ckpt_path):
+        print(f"Resuming training from: {last_ckpt_path}")
+        ckpt = torch.load(last_ckpt_path, map_location=device)
+        model.load_state_dict(ckpt["model"])
+        if "model_ema" in ckpt:
+            model_ema.load_state_dict(ckpt["model_ema"])
+        start_epoch = ckpt.get("epoch", 0) + 1
+        best_val_auc = ckpt.get("val_auc", 0.0)
+        print(f"  * Resumed at Epoch {start_epoch:02d}/{epochs:02d} | Best Val AUC: {best_val_auc:.4f}")
+
     precision = train_cfg.get("precision", "bfloat16")
     amp_dtype = torch.bfloat16 if precision == "bfloat16" and torch.cuda.is_available() else torch.float32
 
@@ -189,7 +202,7 @@ def train_v2(cfg_path: str):
 
     # 4. Training Loop
     global_step = 0
-    for epoch in range(1, epochs + 1):
+    for epoch in range(start_epoch, epochs + 1):
         model.train()
         if hasattr(train_loader.dataset, "set_epoch"):
             train_loader.dataset.set_epoch(epoch - 1)
@@ -267,5 +280,6 @@ def train_v2(cfg_path: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True, help="Path to Stage A or Stage B yaml config")
+    parser.add_argument("--from-scratch", action="store_true", help="Start training from scratch without resuming")
     args = parser.parse_args()
-    train_v2(args.config)
+    train_v2(args.config, resume=not args.from_scratch)
