@@ -280,10 +280,20 @@ class EvalClipDataset(Dataset):
 
     def __getitem__(self, i):
         row = self.rows[i]
-        vs = VideoStore(self.root, row["video_id"])
+        store_root = self.root
+        vid = row["video_id"]
+        if not os.path.exists(os.path.join(store_root, vid)):
+            for alt in ["data/store_celebdf", "data/store"]:
+                if os.path.exists(os.path.join(alt, vid)):
+                    store_root = alt
+                    break
+        vs = VideoStore(store_root, vid)
         starts = contiguous_starts(vs.fidx, self.T, self.stride)
 
         if not starts:
+            if not hasattr(self, "_warned_missing"):
+                self._warned_missing = True
+                print(f"\n[WARNING] VideoStore at '{store_root}/{vid}' has no frames (starts=[])! Ensure --store points to the correct frame store directory!\n")
             # Fallback for short tracks: repeat first frame
             clips = torch.zeros(self.K, self.T, 3, self.size, self.size)
         else:
