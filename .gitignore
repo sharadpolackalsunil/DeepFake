@@ -1,7 +1,3 @@
-# ============================================
-# S-MSDT Project .gitignore
-# ============================================
-
 # ── Python ──
 __pycache__/
 *.py[cod]
@@ -25,6 +21,7 @@ var/
 .venv/
 venv/
 ENV/
+.pytest_cache/
 
 # ── PyTorch / Model Artifacts ──
 *.pt
@@ -39,19 +36,20 @@ calib_cache.bin
 data/raw/
 data/cache/
 data/store/
+data/store_celebdf/
 data/splits/*.csv
 !data/raw/.gitkeep
 !data/cache/.gitkeep
 !data/splits/.gitkeep
-data/store_celebdf
+
 # ── Outputs ──
 outputs/checkpoints/
 outputs/checkpoints_*/
 outputs/logs/
 outputs/*.onnx
 outputs/*.engine
-outputs/triton_repo/
-outputs/benchmark_results.csv
+outputs/*.csv
+outputs/*.json
 !outputs/.gitkeep
 
 # ── Experiment tracking ──
@@ -79,9 +77,8 @@ ehthumbs.db
 .ipynb_checkpoints/
 *.ipynb
 
-# ── Claude / Agents ──
-.claude/*
-!.claude/commands/
+# ── Agents & Local Notes ──
+.claude/
 .agents/
 
 # ── Docker ──
@@ -94,8 +91,4 @@ docker-compose.override.yml
 *.orig
 .env
 .env.local
-# Claude / Reference docs
-.claude/
-architecture.md
-claude.md
-diagram.md
+
