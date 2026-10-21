@@ -65,3 +65,42 @@ def test_eval_clip_aggregation_shapes():
     assert top50_score.shape == (B,)
     # Top-50% on sample 2 should be noticeably higher than simple mean
     assert top50_score[2] > mean_score[2]
+
+
+def test_eval_clip_dataset_dfd_isolation():
+    """Verify that EvalClipDataset with methods=['DeepFakeDetection'] selects ONLY DFD fakes."""
+    from collections import Counter
+    from smsdt.data.video_dataset import EvalClipDataset
+
+    ds_dfd = EvalClipDataset(
+        index_csv="data/splits/index.csv",
+        store_root="data/store",
+        split="test",
+        methods=["DeepFakeDetection"],
+    )
+
+    # 1. Verify exactly 2,987 videos
+    assert len(ds_dfd) == 2987, f"Expected 2987 DFD test videos, got {len(ds_dfd)}"
+
+    counts = Counter(r["method"] for r in ds_dfd.rows)
+    # 2. Verify ONLY DeepFakeDetection and real exist
+    assert set(counts.keys()) == {"DeepFakeDetection", "real"}
+    assert counts["DeepFakeDetection"] == 2604
+    assert counts["real"] == 383
+
+    # 3. Explicitly check that NO FF++ fakes leaked in
+    for forbidden in ["Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures", "FaceShifter"]:
+        assert forbidden not in counts, f"Found leaked method {forbidden} in DFD dataset!"
+
+    # 4. In reverse, verify that pure FF++ evaluation contains ZERO DFD fakes or DFD reals
+    ds_ffpp = EvalClipDataset(
+        index_csv="data/splits/index.csv",
+        store_root="data/store",
+        split="test",
+        methods=["Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures", "FaceShifter"],
+    )
+    # Pure FF++ has 700 fakes (140 x 5 methods) + 140 pure YouTube reals = exactly 840 videos
+    assert len(ds_ffpp) == 840
+    ffpp_counts = Counter(r["method"] for r in ds_ffpp.rows)
+    assert "DeepFakeDetection" not in ffpp_counts
+    assert "DFD" not in ffpp_counts

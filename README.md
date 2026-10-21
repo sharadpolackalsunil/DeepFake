@@ -12,12 +12,14 @@
 
 ## Table of Contents
 1. [Architectural Overview](#architectural-overview)
-2. [Multi-Phase Roadmap](#multi-phase-roadmap)
-3. [Data Protocol & Deterministic Round-Robin (Option 2)](#data-protocol--deterministic-round-robin-option-2)
-4. [Live Training Results (Phase 1 Baseline)](#live-training-results-phase-1-baseline)
-5. [Hardware Configuration (NVIDIA RTX 5090)](#hardware-configuration-nvidia-rtx-5090)
-6. [Quick Start & Command Reference](#quick-start--command-reference)
-7. [Repository Structure](#repository-structure)
+2. [Multi-Phase Roadmap & Implementation Status Tracker](#multi-phase-roadmap--implementation-status-tracker)
+3. [Data Protocol & Stateless Balanced Fake Sampling](#data-protocol--stateless-balanced-fake-sampling)
+4. [Training Formulation, Two-Stage Progression & Loss Functions](#training-formulation-two-stage-progression--loss-functions)
+5. [Scientific Evaluation, Calibration & Testing Protocol](#scientific-evaluation-calibration--testing-protocol)
+6. [Live Training Results (Phase 1 Baseline)](#live-training-results-phase-1-baseline)
+7. [Hardware Configuration (NVIDIA RTX 5090)](#hardware-configuration-nvidia-rtx-5090)
+8. [Quick Start & Command Reference](#quick-start--command-reference)
+9. [Repository Structure](#repository-structure)
 
 ---
 
@@ -50,14 +52,30 @@ Input: Video Clip (B, T=8, C=3, H=224, W=224)
 
 ---
 
-## Multi-Phase Roadmap
+## Multi-Phase Roadmap & Implementation Status Tracker
 
 ```mermaid
 graph LR
     P0["Phase 0: Complete<br/>Offline 1.3x Store (9.4k videos)"] --> P1["Phase 1: Complete<br/>EfficientNet-B4 Baseline<br/>Master AUC: 0.862"]
     P1 --> P2["Phase 2: Complete<br/>S-MSDTv2 CLIP ViT-L/14<br/>Stage B Val AUC: 0.8593"]
-    P2 --> P3["Phase 3: Active<br/>Cross-Dataset (Celeb-DF v2)<br/>Goal: Celeb-DF v2 AUC ≥ 0.965"]
+    P2 --> P3["Phase C / S-MSDTv3: Active<br/>Bug Fixes + Calibration + Stage C<br/>Goal: NT ≥ 0.85, Celeb-DF v2 ≥ 0.950+"]
 ```
+
+### Master Implementation Status vs. Execution Roadmap
+
+Following [`smsdt_v3_execution_plan.md`](smsdt_v3_execution_plan.md), the codebase enforces a strict scientific discipline: **data pipeline and training defect fixes must be isolated and benchmarked first (Step 4) before introducing new neural network modules (Step 5)** to determine whether performance collapse on NeuralTextures and Face2Face was caused by worker starvation or model capacity.
+
+| Step | Roadmap Component | Status | Codebase Modifications & Implementations |
+| :---: | :--- | :---: | :--- |
+| **1** | **D2 Worker Freeze Verification** | ✅ **Complete** | Confirmed that Windows multiprocessing with `persistent_workers: true` isolated worker dataset memory, freezing fake method rotation on Method 0 (`Deepfakes`). |
+| **2** | **Hygiene Bug Fixes (D1, D2, D3)** | ✅ **Complete** | • **D1:** Added difference-derived manipulation masks $\|fake_{u8} - real_{u8}\|$ with $w_{\text{pos}}=3.0$ in [`video_dataset.py`](smsdt/data/video_dataset.py) & [`losses.py`](smsdt/losses.py).<br>• **D2:** Implemented worker-safe stateless balanced sampling `pick_fake` (25% NT, 25% F2F, 20% FS, 15% DF, 15% FSwap).<br>• **D3:** Added dynamic EMA warmup $d_t = \min(0.999, \frac{1+t}{10+t})$ in [`train_v2.py`](smsdt/train_v2.py).<br>• Excluded scalars (`beta`, `mix`, `p.ndim < 2`) from weight decay in [`smsdt_v2.py`](smsdt/models/smsdt_v2.py).<br>• Filtered 584 DFD videos from validation split (leaving 840 pure FF++ videos).<br>• Accelerated validation with `val_start_epoch: 10` (skips epochs 1–9, saves `last.pt` atomically). |
+| **3** | **Scientific Testing & Calibration Engine** | ✅ **Complete** | Integrated directly into [`eval_cross.py`](smsdt/eval_cross.py) without repo clutter:<br>• Class-balanced Platt scaling (`fit_platt`) via L-BFGS.<br>• Optimal decision threshold search via Youden's $J = \text{TPR} - \text{FPR}$ (`youden_tau`).<br>• 1,000-iteration stratified bootstrap 95% Confidence Intervals (`boot_ci`).<br>• Biometric utility computation ($\text{TPR} @ 1\%$ and $5\%$ FPR).<br>• 15-bin Expected Calibration Error (`compute_ece`).<br>• Stage A ($T=1$) and Stage B ($T=8$) auto-detection from checkpoint metadata.<br>• Relabeled test-tuned EER as `[Oracle] Acc@EER`.<br>• CLI flags: `--fit-calib`, `--calib`, `--ci`, `--save-scores`. |
+| **4** | **Re-Run Stage B Baseline ("v2-fixed")** | 🚀 **Ready to Run** | Configured [`configs/train_v2_stage_a.yaml`](configs/train_v2_stage_a.yaml) and [`configs/train_v2_stage_b.yaml`](configs/train_v2_stage_b.yaml) with safe output paths (`outputs/checkpoints_v2_stage_a_fixed` and `outputs/checkpoints_v2_fixed`). Existing weights remain untouched. |
+| **5** | **S-MSDTv3 Architectural Modules** | ⏸️ **Pending Step 4** | *No architectural changes made yet:* dual-stream high-frequency injection (`ResidualStream` with SRM + Haar DWT), Landmark Perioral Attention Prior, and `EvidenceReadoutV3` (Log-Sum-Exp pooling) are staged for Step 5 if a residual gap remains after benchmarking Step 4. |
+| **6** | **Stage C Two-Phase Training** | ⏸️ **Pending Step 5** | 28-epoch fine-tuning curriculum (Phase C1: freeze backbone; Phase C2: unfreeze all). |
+| **7** | **Controlled Ablation Matrix** | ⏸️ **Pending Step 6** | Controlled ablations: +ResidualStream, +Perioral Prior, +LSE Readout, +SBI. |
+| **8** | **Full Benchmark & Robustness Suite** | 🎯 **Script Ready** | [`smsdt/eval_cross.py`](smsdt/eval_cross.py) is ready to evaluate FF++ test, Celeb-DF v2, and DFD under frozen validation calibration. |
+| **9** | **Camera-Ready Results Tables** | ⏸️ **Pending Step 8** | Publication tables with 95% bootstrap CIs for IEEE TIFS. |
 
 ### Phase 0: Leak-Free Offline Preprocessing (Complete)
 - **Problem Solved:** Runtime on-the-fly face detection throttled training and tight ArcFace crops cut off boundary swap seams sitting at the jaw and hairline.
@@ -71,7 +89,7 @@ graph LR
   - **DensePSIT:** Expanded token resolution to $14 \times 14 = 196$ spatial tokens.
   - **Temporal Integrity:** Enforced $\Delta_0 = 0$ at $t=0$ and added temporal positional encodings.
   - **Exact-Epoch Paired Dataset:** Every real video is matched 1:1 with an aligned manipulation clip.
-  - **Option 2 Deterministic Round-Robin:** Eliminates random omission, cycling all 3,600 fakes systematically.
+  - **Stateless Balanced Fake Sampling:** Eliminates multiprocessing worker isolation bugs, ensuring continuous, balanced exposure to all 5 manipulation types every epoch.
   - **Optimization:** Cosine warmup scheduler, decoupled weight decay, and Model EMA ($\beta=0.999$).
 - **Benchmarked Result:** Master Test Video AUC **0.862** across $N=3,687$ videos (FF++ c23: **0.851**, DFD: **0.865**).
 
@@ -94,26 +112,152 @@ graph LR
 
 ---
 
-## Data Protocol & Deterministic Round-Robin (Option 2)
+## Data Protocol & Stateless Balanced Fake Sampling
 
-To ensure **100% of the training dataset is covered with zero omissions**, S-MSDT employs **Deterministic Round-Robin Cycling** across all 50 epochs:
-
+### The Multiprocessing Isolation Discovery & Fix
+Previously, manipulation methods were indexed via an epoch-modulo formula:
 $$\text{fake\_method} = \text{self.fakes}[\text{target\_id}][\text{epoch} \pmod 5]$$
 
-The FaceForensics++ training split contains **720 Real videos** and **3,600 Fake videos** (5 manipulation methods $\times$ 720 target IDs):
+**The Root Cause (D2 Diagnostic):** Under PyTorch multiprocessing on Windows with `persistent_workers: true`, worker processes maintain isolated memory spaces. Updating `dataset.set_epoch(epoch)` in the main process thread **never crossed process boundaries** to persistent workers. Consequently, persistent workers remained permanently frozen on Method 0 (`Deepfakes`), starving `NeuralTextures` and `Face2Face` and causing `NeuralTextures` validation AUC to collapse to ~0.54.
 
-| Epoch Modulo | Active Manipulation | Reals Trained | Fakes Trained | Method Coverage |
-| :---: | :--- | :---: | :---: | :---: |
-| **Epoch 00, 05, 10, 15, ...** | `Deepfakes` | 720 Reals | 720 Deepfakes | **100%** |
-| **Epoch 01, 06, 11, 16, ...** | `Face2Face` | 720 Reals | 720 Face2Face | **100%** |
-| **Epoch 02, 07, 12, 17, ...** | `FaceSwap` | 720 Reals | 720 FaceSwap | **100%** |
-| **Epoch 03, 08, 13, 18, ...** | `NeuralTextures` | 720 Reals | 720 NeuralTextures | **100%** |
-| **Epoch 04, 09, 14, 19, ...** | `FaceShifter` | 720 Reals | 720 FaceShifter | **100%** |
+### The Fixed Architecture: Worker-Safe Stateless Balanced Sampling (`pick_fake`)
+We replaced the stateful `set_epoch()` dependency with **stateless weighted sampling** implemented directly inside `__getitem__`:
 
-### Mathematical Coverage Guarantees:
-1. **Every 5 Epochs:** All 3,600 fake videos and all 720 real videos are trained with **0 omissions** (100% full dataset coverage).
-2. **Across 50 Epochs:** The 5-epoch cycle repeats **10 complete times**. Every single fake video is trained **exactly 10 times**, and every real video is trained **50 times**.
-3. **Exact 50/50 Batch Balance:** Every single batch contains an exact 1:1 ratio of real and fake clips.
+$$\mathcal{P}(\text{method}) = \frac{w_{\text{method}}}{\sum_{m} w_m}$$
+
+Because sampling is stateless and driven by worker-local random generators, every worker process continuously and uniformly streams all 5 manipulation methods across every batch and epoch without cross-process synchronization:
+
+| Manipulation Method | Weight ($w_m$) | Sampling Ratio | Role & Strategic Objective |
+| :--- | :---: | :---: | :--- |
+| **`NeuralTextures`** | **0.25** | **25%** | Boosted 1.25× to overcome foundation model semantic bias against neural facial rendering. |
+| **`Face2Face`** | **0.25** | **25%** | Boosted 1.25× to detect facial expression and reenactment deformation artifacts. |
+| **`FaceShifter`** | **0.20** | **20%** | Trains robust detection of high-fidelity GAN face-swapping blending seams. |
+| **`Deepfakes`** | **0.15** | **15%** | Autoencoder face-swapping baseline (converges rapidly). |
+| **`FaceSwap`** | **0.15** | **15%** | Classical 3D graphics face replacement (converges rapidly). |
+
+### Difference-Derived Patch Mask Supervision (D1 Fix)
+In original FaceForensics++ data, pristine/fake pairs lacked ground-truth blending masks, leaving the patch localization head unguided. We implemented on-the-fly difference masks:
+
+$$M_{\text{raw}} = \max_{c \in \{R,G,B\}} \left| X_{\text{fake}}^{(c)} - X_{\text{real}}^{(c)} \right|, \qquad M = \text{Downsample}\left(\frac{M_{\text{raw}}}{\tau_{95}}\right) > 0.1$$
+
+This generates pixel-aligned spatial supervision targeting the exact manipulated pixels (e.g., mouth region for `NeuralTextures`, boundary seams for `FaceShifter`).
+
+### Guarantees
+1. **Continuous Multi-Method Exposure:** All 5 manipulation types are trained in parallel every single epoch, eliminating catastrophic forgetting and worker starvation.
+2. **Exact 50/50 Real/Fake Batch Balance:** Every training batch consists of exact 1:1 real and manipulated clip pairs for pristine facial anchoring.
+3. **Multiprocessing Stability:** Fully compatible with `num_workers: 4` and `persistent_workers: true` on Windows workstations.
+
+---
+
+## Training Formulation, Two-Stage Progression & Loss Functions
+
+### 1. Two-Stage Training Paradigm (Stage A vs. Stage B)
+
+S-MSDTv2 employs a decoupled two-stage curriculum that separates spatial forensic token calibration from spatio-temporal video modeling:
+
+| Feature | Phase A (Stage A) | Phase B (Stage B) |
+| :--- | :--- | :--- |
+| **Input Shape** | 1 Frame ($T=1$) | 8 Contiguous Frames ($T=8$) |
+| **Batch Size** | 64 pairs = 128 frames / step | 8 pairs = 16 clips (128 frames) / step |
+| **Trainable Params** | `<0.03%` (CLIP LayerNorms only, ~76k params) | TemporalDiff + Spatio-Temporal Blocks + Dual Readout Head |
+| **Supervision** | Frame-level classification ($\mathcal{L}_{\text{cls}}$) | Video classification + 16×16 patch localization ($\mathcal{L}_{\text{cls}} + 0.5 \cdot \mathcal{L}_{\text{mask}}$) |
+| **Primary Goal** | Shift CLIP from semantics to spatial artifacts | Model inter-frame flicker, temporal jitter, and patch localization |
+| **Hardware Throughput** | ~11 steps/epoch (~2.5 sec/epoch on RTX 5090) | ~90 steps/epoch (~50-55 sec/epoch on RTX 5090) |
+
+#### Why Train Separately?
+1. **Preventing Gradient Shock:** The temporal transformer and patch readout head start from random initialization. Training both simultaneously from scratch sends erratic, high-variance gradients into CLIP's LayerNorms, corrupting the visual backbone before spatial forensic tokens stabilize.
+2. **Preventing Video Memorization:** Video training operates with smaller clip batches ($B=16$), which risks overfitting to specific actor identities if the backbone is tuned concurrently. Stage A uses large frame batches ($B=128$) to enforce invariant spatial boundaries.
+3. **Cracking NeuralTextures (NT):**
+   - NeuralTextures only alters the **mouth cavity and facial expressions** via neural rendering; it contains no face-swap boundary seams.
+   - On static frames ($T=1$), NT easily mimics pristine faces. Stage A dedicates **25% balanced sampling** to NT, forcing CLIP LayerNorms to become sensitive to neural rendering noise.
+   - Stage B introduces **`TemporalDiff` ($\Delta X_t = X_t - X_{t-1}$)** and **Patch-Mask Supervision**: this exposes NT's inter-frame oral jitter and explicitly drives the 16×16 spatial attention to lock onto the mouth patches.
+
+---
+
+### 2. Multi-Task Loss Formulation
+
+The primary detection objective optimizes a balanced classification and localized patch-mask loss:
+
+$$\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{cls}} + \lambda_{\text{mask}} \cdot \mathcal{L}_{\text{mask}}$$
+
+#### Component 1: Video Classification Loss ($\mathcal{L}_{\text{cls}}$)
+Binary Cross-Entropy with Logits with **Label Smoothing ($\epsilon = 0.05$)**:
+
+$$\text{target} = y \cdot (1 - \epsilon) + 0.5 \cdot \epsilon \quad \implies \quad y_{\text{real}} \to 0.025, \quad y_{\text{fake}} \to 0.975$$
+
+$$\mathcal{L}_{\text{cls}} = -\sum \left[ \text{target} \cdot \log(\sigma(\hat{y})) + (1 - \text{target}) \cdot \log(1 - \sigma(\hat{y})) \right]$$
+
+*Rationale:* Prevents gradient saturation and overconfidence on easily detected manipulation methods (`FaceSwap`, `Deepfakes`), maintaining strong gradient updates for subtle reenactments (`NeuralTextures`, `Face2Face`).
+
+#### Component 2: Patch-Mask Localization Loss ($\mathcal{L}_{\text{mask}}$)
+Spatial supervision across the $16 \times 16 = 256$ patch token grid:
+
+$$\mathcal{L}_{\text{mask}} = -\frac{1}{N_{\text{patches}}} \sum_{i=1}^{256} \left[ w_{\text{pos}} \cdot m_i \cdot \log(\sigma(p_i)) + (1 - m_i) \cdot \log(1 - \sigma(p_i)) \right]$$
+
+- **Supervision Signal ($m_i$):** Generated from pixel-aligned difference masks between fake and pristine counterparts ($|fake_{u8} - real_{u8}| > 0.1$).
+- **Positive Class Weight ($w_{\text{pos}} = 3.0$):** Corrects spatial class imbalance, as forged facial regions (e.g., mouth, eyes) occupy `<20%` of total face patches.
+
+#### Stage Weighting:
+- **Phase A:** $\lambda_{\text{mask}} = 0.0$ (Pure frame classification).
+- **Phase B:** $\lambda_{\text{mask}} = 0.5$ (Joint video classification and spatial patch localization).
+
+---
+
+### 3. Accelerated Validation & Split Isolation Protocol
+
+- **Strict Identity Isolation:** The dataset split enforces 0 overlap between train, val, and test partitions in both video IDs (`0 overlap`) and target actor identities (`0 overlap`).
+- **Pure In-Domain FF++ Evaluation:** DeepFakeDetection (DFD) actor reals and fakes are filtered from validation, leaving exactly $N=840$ videos (140 reals + 140 per each of the 5 FF++ methods).
+- **Validation Acceleration (`val_start_epoch: 10`):** Validation is completely bypassed for Epochs 1 to 9, allowing the model to train at 100% throughput with atomic `last.pt` checkpoints. Validation activates at Epoch 10, computing exact per-manipulation AUC breakdowns and saving `best_ema.pt`.
+
+---
+
+## Scientific Evaluation, Calibration & Testing Protocol
+
+Following the strategic engineering analysis in [`S-MSDTv2_Strategic_Plan.md`](S-MSDTv2_Strategic_Plan.md), the repository adopts strict peer-review benchmark protocols designed for IEEE TIFS, CVPR, and ICCV.
+
+### 1. Eliminating Test-Set Snooping: Frozen Platt Calibration
+- **The Core Flaw in Legacy Pipelines:** Standard evaluations often fit EER decision thresholds on the *test set itself*. In top-tier computer vision venues, tuning thresholds on the evaluation split is considered test-set snooping (oracle performance).
+- **The Protocol:**
+  1. **Calibration Split:** Class-balanced Platt scaling is fitted strictly on FF++ validation mean logits $u$:
+     $$p = \sigma(a \cdot u + b), \quad \text{where } a, b \text{ are fitted via weighted logistic regression}$$
+  2. **Frozen Operating Threshold:** Threshold $\tau$ is chosen on validation by maximizing **Youden's J statistic**:
+     $$J = \text{TPR} - \text{FPR} \quad \iff \quad \arg\max_\tau \text{Balanced Accuracy}(\tau)$$
+  3. **Evaluation Transfer:** The parameter tuple $(a, b, \tau)$ is permanently frozen and applied unchanged across FF++ test, DFD, and Celeb-DF v2.
+  4. **Oracle Labeling:** Any metric requiring test-set threshold selection is explicitly designated as `oracle_*` and documented as an upper bound rather than an operational metric.
+
+---
+
+### 2. Standardized Cross-Dataset Benchmark Protocol (Celeb-DF v2)
+- **Zero In-Domain Leakage:** The model is trained purely on FaceForensics++ c23 (5 methods + reals). No Celeb-DF v2, DFD, or synthetic pseudo-fakes are present in training, guaranteeing an honest out-of-distribution evaluation.
+- **Official Test Manifest:** Evaluated on the official 518 test videos (178 real, 340 fake, 65.6% fake prevalence).
+- **Multi-Clip Video Inference:** Evaluates $K=8$ clips of $T=8$ frames per video with 1.3× loose face crops, aggregating clip predictions via mean logit pooling.
+- **Reporting Hierarchy:**
+  - **Primary Headline Metric:** Video-Level AUC with **95% Confidence Intervals** computed via 2,000 stratified video-level bootstrap resamples.
+  - **Secondary Operational Metrics:** AP, EER, TPR @ FPR = 1% & 5%, and Balanced Accuracy at frozen $\tau$.
+  - **Metric Separation:** Video-level metrics and frame-level metrics are reported in distinct tables to ensure fair comparisons against DeepfakeBench baselines.
+
+---
+
+### 3. Macro Model Selection & Regression Floor Guards
+- **Macro FF++ Val Metric:** Checkpoint selection is governed by the unweighted macro-mean across all five manipulation methods:
+  $$\text{Macro AUC} = \frac{1}{5} \left( \text{AUC}_{\text{Deepfakes}} + \text{AUC}_{\text{Face2Face}} + \text{AUC}_{\text{FaceSwap}} + \text{AUC}_{\text{NeuralTextures}} + \text{AUC}_{\text{FaceShifter}} \right)$$
+  This eliminates evaluation bias from DFD, which previously constituted ~79% of validation fake videos.
+- **Floor Guards on Established Methods:**
+  $$\text{Save Checkpoint } \iff \text{Macro AUC} > \text{Best} \quad \mathbf{AND} \quad \text{AUC}_{\text{FaceSwap}} \ge 0.975 \quad \mathbf{AND} \quad \text{AUC}_{\text{Deepfakes}} \ge 0.975$$
+  Guarantees that performance on established autoencoder and 3D swaps never regresses while optimizing for hard reenactment methods.
+
+---
+
+### 4. Forensic Diagnostic & Robustness Suite
+To verify genuine forensic feature learning rather than shortcut learning or identity memorization:
+
+| Diagnostic Tool | Target Pathology | Verification Mechanism |
+| :--- | :--- | :--- |
+| **`tools/diag_identity_probe.py`** | Identity Memorization (D3) | Measures whether intra-identity real/fake pairs cluster by actor identity rather than manipulation status. |
+| **`tools/diag_domain_shift.py`** | Domain Bias (D4) | Audits false-positive stability across YouTube compression reals vs. Actor studio reals. |
+| **`tools/eval_robustness.py`** | Perturbation Resilience | Evaluates degradation curves under JPEG compression ($Q \in [30, 90]$), Gaussian blur ($\sigma \in [1, 7]$), and downscaling ($s \in [0.25, 0.75]$). |
+| **Method Counter Tracking** | Worker Multiprocessing Starvation (D2) | Real-time logging of manipulation methods trained per epoch to ensure persistent workers maintain uniform exposure. |
+| **Bootstrap CI Engine** | Statistical Significance | 2,000 stratified video-level resamplings to establish true significance over standard errors ($\text{SE} \approx 0.015$). |
 
 ---
 
@@ -171,11 +315,11 @@ The codebase is hardened specifically for Windows workstations powered by high-e
 
 ### 1. Phase 1 Training (In-Domain Baseline)
 ```powershell
-# Launch Phase 1 training (50 epochs, Option 2 cycling)
+# Launch Phase 1 training (50 epochs)
 python -m smsdt.train --config-dir configs
 ```
 
-### 2. Phase 2 Training (S-MSDTv2 with CLIP ViT-L/14)
+### 2. Phase 2 Training (S-MSDTv2 "v2-fixed" with CLIP ViT-L/14)
 ```powershell
 # Step 1: Install vision foundation dependencies
 pip install "transformers>=4.40" safetensors
@@ -183,27 +327,36 @@ pip install "transformers>=4.40" safetensors
 # Step 2: Cache OpenAI CLIP ViT-L/14 weights
 python -c "from transformers import CLIPVisionModel; CLIPVisionModel.from_pretrained('openai/clip-vit-large-patch14')"
 
-# Step 3: Train Stage A (Static Frame Alignment)
+# Step 3: Train Stage A Fixed (Spatial Alignment, T=1, ~1.5 mins on RTX 5090)
+# Skips validation for Epochs 1-9; validates and saves at Epoch 10
 python -m smsdt.train_v2 --config configs/train_v2_stage_a.yaml
 
-# Step 4: Train Stage B (Spatio-Temporal Video Differencing)
+# Step 4: Train Stage B Fixed (Video Differencing with Balanced Sampling & Diff Masks, T=8, ~25 mins)
+# Warm-starts from Stage A fixed checkpoint; outputs to outputs/checkpoints_v2_fixed/
 python -m smsdt.train_v2 --config configs/train_v2_stage_b.yaml
 ```
 
-### 3. Evaluation & Benchmarking
+### 3. Scientific Evaluation & Calibration Protocol
 ```powershell
-# Evaluate Phase 1 checkpoint on FF++ test split
-python -m smsdt.eval_cross --ckpt outputs/checkpoints/best_ema.pt --split test --dataset-name "FF++ c23"
+# Step 1: Fit Class-Balanced Platt Calibration on FF++ Validation Split
+# Finds (a, b) and Youden's J optimal threshold tau, freezing to JSON
+python -m smsdt.eval_cross --ckpt outputs/checkpoints_v2_fixed/best_ema.pt --split val --fit-calib outputs/calib_val.json
 
-# Evaluate Phase 2 checkpoint on Celeb-DF v2
-python -m smsdt.eval_cross --ckpt outputs/checkpoints_v2_stage_b/best_ema.pt --split test --dataset-name "Celeb-DF v2"
+# Step 2: Evaluate Part A (T=1) on FF++ Test Split with Frozen Calibration
+python -m smsdt.eval_cross --ckpt outputs/checkpoints_v2_stage_a_fixed/best_ema.pt --split test --dataset-name "FF++ c23 (Part A)" --calib outputs/calib_val.json --ci
 
-# Evaluate Robustness against JPEG, Blur, and Rescaling
-python -m tools.eval_robustness --ckpt outputs/checkpoints/best_ema.pt --out-dir outputs/robustness
+# Step 3: Evaluate Part B (T=8) on FF++ Test Split with 95% Bootstrap CIs
+python -m smsdt.eval_cross --ckpt outputs/checkpoints_v2_fixed/best_ema.pt --split test --dataset-name "FF++ c23 (Part B)" --calib outputs/calib_val.json --ci --save-scores outputs/part_b_test_scores.csv
 
-# Run Diagnostic Probes (Identity Memorization & Domain Shift)
-python -m tools.diag_identity_probe --ckpt outputs/checkpoints/best_ema.pt
-python -m tools.diag_domain_shift --ckpt outputs/checkpoints/best_ema.pt
+# Step 4: Evaluate Part B on Celeb-DF v2 (Zero-Shot Cross-Dataset Benchmark)
+python -m smsdt.eval_cross --ckpt outputs/checkpoints_v2_fixed/best_ema.pt --index data/splits/celebdf_test.csv --split test --dataset-name "Celeb-DF v2" --calib outputs/calib_val.json --ci --save-scores outputs/celebdf_scores.csv
+
+# Step 5: Evaluate Robustness against JPEG, Blur, and Rescaling
+python -m tools.eval_robustness --ckpt outputs/checkpoints_v2_fixed/best_ema.pt --out-dir outputs/robustness
+
+# Step 6: Run Diagnostic Probes (Identity Memorization & Domain Shift)
+python -m tools.diag_identity_probe --ckpt outputs/checkpoints_v2_fixed/best_ema.pt
+python -m tools.diag_domain_shift --ckpt outputs/checkpoints_v2_fixed/best_ema.pt
 ```
 
 ---
@@ -231,7 +384,7 @@ DEEPFAKE/
 │   │   ├── smsdt.py              # Full S-MSDT v1 architecture
 │   │   └── smsdt_v2.py           # Full S-MSDT v2 foundation model architecture
 │   ├── data/
-│   │   ├── video_dataset.py      # Map-style PairedClipDataset with Option 2 cycling
+│   │   ├── video_dataset.py      # Map-style PairedClipDataset with stateless balanced sampling
 │   │   └── sbi_video.py          # Temporally consistent Self-Blended Images (SBI)
 │   ├── preprocess/
 │   │   └── build_store.py        # Multi-worker 1.3x loose frame & 106-landmark extractor
@@ -239,12 +392,12 @@ DEEPFAKE/
 │   ├── train.py                  # Phase 1 training orchestrator
 │   ├── train_v2.py               # Phase 2 two-stage training orchestrator
 │   ├── eval.py                   # In-epoch validation evaluator
-│   └── eval_cross.py             # Cross-dataset benchmark runner (K=8 multi-clip)
+│   └── eval_cross.py             # Cross-dataset benchmark & calibration runner
 ├── tools/
 │   ├── eval_robustness.py        # Robustness curves under JPEG, blur, and scaling
 │   ├── diag_identity_probe.py    # D3 identity memorization probe
 │   └── diag_domain_shift.py      # D4 domain shift auditor
-└── tests/                        # Full test suite (25/25 unit tests passing)
+└── tests/                        # Full test suite (26/26 unit tests passing)
 ```
 
 ---
