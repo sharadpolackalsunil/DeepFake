@@ -222,7 +222,7 @@ def write_shard(chunks, shard_path):
 def discover_ffpp_videos(data_root, compression="c23"):
     """Discover FF++ videos from the standard directory structure.
 
-    Expected structure (from download1.py):
+    Expected structure (from scripts/download_ffpp.py):
         data_root/
             original_sequences/youtube/<compression>/videos/*.mp4
             manipulated_sequences/Deepfakes/<compression>/videos/*.mp4

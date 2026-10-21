@@ -63,7 +63,7 @@ graph LR
 
 ### Master Implementation Status vs. Execution Roadmap
 
-Following [`smsdt_v3_execution_plan.md`](smsdt_v3_execution_plan.md), the codebase enforces a strict scientific discipline: **data pipeline and training defect fixes must be isolated and benchmarked first (Step 4) before introducing new neural network modules (Step 5)** to determine whether performance collapse on NeuralTextures and Face2Face was caused by worker starvation or model capacity.
+Following [`SOTA Roadmap`](docs/roadmap/SOTA_Roadmap.md), the codebase enforces a strict scientific discipline: **data pipeline and training defect fixes must be isolated and benchmarked first (Step 4) before introducing new neural network modules (Step 5)** to determine whether performance collapse on NeuralTextures and Face2Face was caused by worker starvation or model capacity.
 
 | Step | Roadmap Component | Status | Codebase Modifications & Implementations |
 | :---: | :--- | :---: | :--- |
@@ -213,7 +213,7 @@ $$\mathcal{L}_{\text{mask}} = -\frac{1}{N_{\text{patches}}} \sum_{i=1}^{256} \le
 
 ## Scientific Evaluation, Calibration & Testing Protocol
 
-Following the strategic engineering analysis in [`S-MSDTv2_Strategic_Plan.md`](S-MSDTv2_Strategic_Plan.md), the repository adopts strict peer-review benchmark protocols designed for IEEE TIFS, CVPR, and ICCV.
+Following the strategic engineering analysis in [`Strategic Plan v2`](docs/roadmap/Strategic_Plan_v2.md), the repository adopts strict peer-review benchmark protocols designed for IEEE TIFS, CVPR, and ICCV.
 
 ### 1. Eliminating Test-Set Snooping: Frozen Platt Calibration
 - **The Core Flaw in Legacy Pipelines:** Standard evaluations often fit EER decision thresholds on the *test set itself*. In top-tier computer vision venues, tuning thresholds on the evaluation split is considered test-set snooping (oracle performance).
