@@ -144,12 +144,12 @@ Active training log running on **NVIDIA GeForce RTX 5090** (50 Epochs, 90 batche
 
 Evaluated across $N=3,687$ test videos on RTX 5090:
 
-| Model / Checkpoint | Architecture | Master Test AUC | FaceSwap | Deepfakes | FaceShifter | DFD | Pristine Spec @ 0.50 | Precision @ 0.70 |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Phase 1 Baseline** (`best_ema.pt`) | EfficientNet-B4 + DensePSIT | **0.862** | 0.805 | 0.945 | 0.793 | 0.865 | 66.3% | 96.7% |
-| **Phase 2 Stage B** (`best_ema.pt`) | SMSDTv2 (CLIP ViT-L/14) | **0.867** | **0.994** | **0.989** | **0.887** | **0.865** | **99.0%** | **99.9%** |
+| Model / Checkpoint | Architecture | Master Test AUC | FaceSwap | Deepfakes | FaceShifter | DFD | Celeb-DF v2 | Pristine Spec @ 0.50 | Precision @ 0.70 |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Phase 1 Baseline** (`best_ema.pt`) | EfficientNet-B4 + DensePSIT | **0.862** | 0.805 | 0.945 | 0.793 | 0.865 | — | 66.3% | 96.7% |
+| **Phase 2 Stage B** (`best_ema.pt`) | SMSDTv2 (CLIP ViT-L/14) | **0.867** | **0.994** | **0.989** | **0.887** | **0.865** | **0.856** | **99.0%** | **99.9%** |
 
-*For complete confusion matrices, threshold sweep tables, and method breakdowns, see [results.md](results.md).*
+*For complete confusion matrices, threshold sweep tables, Celeb-DF v2 breakdowns, and method details, see [results.md](results.md).*
 
 ---
 
