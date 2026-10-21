@@ -3,7 +3,7 @@
 # Target: SOTA cross-dataset transfer (Celeb-DF v2 video AUC >= 0.95 - 0.965)
 
 stage: stage_b
-init_ckpt: outputs/checkpoints_v2_stage_a/best_ema.pt
+init_ckpt: outputs/checkpoints_v2_stage_a_fixed/best_ema.pt
 
 model:
   backbone: openai/clip-vit-large-patch14
@@ -51,5 +51,7 @@ train:
   prefetch_factor: 2
   val_batch_size: 8          # 8 videos per validation batch
   val_workers: 4             # 4 parallel workers for fast & safe validation on Windows
+  val_start_epoch: 10        # Skips validation before Epoch 10 for maximum training speed
+  val_interval: 1            # Validates every epoch from Epoch 10 onwards
 
 output_dir: outputs/checkpoints_v2_fixed

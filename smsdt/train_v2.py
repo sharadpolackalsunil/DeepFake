@@ -117,6 +117,10 @@ def train_v2(cfg_path: str, resume: bool = True):
 
     # Optional checkpoint initialization (e.g. Stage B initializing from Stage A)
     init_ckpt = cfg.get("init_ckpt")
+    if init_ckpt and not os.path.exists(init_ckpt):
+        alt = init_ckpt.replace("checkpoints_v2_stage_a_fixed", "checkpoints_v2_stage_a")
+        if os.path.exists(alt):
+            init_ckpt = alt
     if init_ckpt and os.path.exists(init_ckpt):
         print(f"Loading weights from {init_ckpt}...")
         ckpt = torch.load(init_ckpt, map_location="cpu")
@@ -214,6 +218,8 @@ def train_v2(cfg_path: str, resume: bool = True):
     for p in model_ema.parameters():
         p.requires_grad = False
 
+    val_start_epoch = int(train_cfg.get("val_start_epoch", 1))
+    val_interval = int(train_cfg.get("val_interval", 1))
     best_val_auc = 0.0
     start_epoch = 1
 
@@ -336,47 +342,64 @@ def train_v2(cfg_path: str, resume: bool = True):
         print(f"  * Methods trained in Epoch {epoch:02d}: {dict(method_counter)}")
 
         # Periodic Validation
-        print(f"\n--- Epoch {epoch:02d}/{epochs:02d} Validation ---")
-        metrics = evaluate_metrics(model_ema, val_loader, device)
-        v_metrics = metrics.get("video_level", metrics)
-        val_auc = float(v_metrics["auc"])
-        val_eer = float(v_metrics["eer"])
-        val_f1 = float(v_metrics["f1_05"])
+        should_val = (epoch >= val_start_epoch) and (((epoch - val_start_epoch) % val_interval == 0) or epoch == epochs)
+        if should_val:
+            print(f"\n--- Epoch {epoch:02d}/{epochs:02d} Validation ---")
+            metrics = evaluate_metrics(model_ema, val_loader, device)
+            v_metrics = metrics.get("video_level", metrics)
+            val_auc = float(v_metrics["auc"])
+            val_eer = float(v_metrics["eer"])
+            val_f1 = float(v_metrics["f1_05"])
 
-        print(f"Epoch {epoch:02d} | Train Loss: {avg_loss:.4f} | Train AUC: {train_auc:.4f} | Val AUC: {val_auc:.4f} | Val EER: {val_eer:.4f} | Val F1@0.5: {val_f1:.4f}")
-        if metrics.get("per_manipulation"):
-            breakdown_str = " | ".join(f"{m}: {d['auc']:.4f}" for m, d in metrics["per_manipulation"].items())
-            print(f"  * Val AUC Breakdown: {breakdown_str}")
+            print(f"Epoch {epoch:02d} | Train Loss: {avg_loss:.4f} | Train AUC: {train_auc:.4f} | Val AUC: {val_auc:.4f} | Val EER: {val_eer:.4f} | Val F1@0.5: {val_f1:.4f}")
+            if metrics.get("per_manipulation"):
+                breakdown_str = " | ".join(f"{m}: {d['auc']:.4f}" for m, d in metrics["per_manipulation"].items())
+                print(f"  * Val AUC Breakdown: {breakdown_str}")
 
-        # Compute Macro FF++ AUC (DF, F2F, FS, NT, FSh) to prevent DFD-domination
-        ffpp_methods = ["Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures", "FaceShifter"]
-        per_m = metrics.get("per_manipulation", {})
-        ffpp_aucs = [per_m[m]["auc"] for m in ffpp_methods if m in per_m and "auc" in per_m[m]]
-        macro_auc = float(np.mean(ffpp_aucs)) if ffpp_aucs else val_auc
-        fs_auc = per_m.get("FaceSwap", {}).get("auc", 1.0)
-        df_auc = per_m.get("Deepfakes", {}).get("auc", 1.0)
-        floors_passed = (fs_auc >= 0.975) and (df_auc >= 0.975)
-        print(f"  * FF++ Macro AUC: {macro_auc:.4f} (Floors: FS={fs_auc:.4f}, DF={df_auc:.4f})")
+            # Compute Macro FF++ AUC (DF, F2F, FS, NT, FSh) to prevent DFD-domination
+            ffpp_methods = ["Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures", "FaceShifter"]
+            per_m = metrics.get("per_manipulation", {})
+            ffpp_aucs = [per_m[m]["auc"] for m in ffpp_methods if m in per_m and "auc" in per_m[m]]
+            macro_auc = float(np.mean(ffpp_aucs)) if ffpp_aucs else val_auc
+            fs_auc = per_m.get("FaceSwap", {}).get("auc", 1.0)
+            df_auc = per_m.get("Deepfakes", {}).get("auc", 1.0)
+            floors_passed = (fs_auc >= 0.975) and (df_auc >= 0.975)
+            print(f"  * FF++ Macro AUC: {macro_auc:.4f} (Floors: FS={fs_auc:.4f}, DF={df_auc:.4f})")
 
-        # Save checkpoints
-        ckpt_data = {
-            "epoch": epoch,
-            "val_auc": val_auc,
-            "macro_auc": macro_auc,
-            "val_eer": val_eer,
-            "val_f1_05": val_f1,
-            "model": model.state_dict(),
-            "model_ema": model_ema.state_dict(),
-            "optimizer": optimizer.state_dict(),
-            "scheduler": scheduler.state_dict(),
-            "cfg": cfg,
-        }
-        save_checkpoint_atomic(ckpt_data, os.path.join(output_dir, "last.pt"))
+            # Save checkpoints
+            ckpt_data = {
+                "epoch": epoch,
+                "val_auc": val_auc,
+                "macro_auc": macro_auc,
+                "val_eer": val_eer,
+                "val_f1_05": val_f1,
+                "model": model.state_dict(),
+                "model_ema": model_ema.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "scheduler": scheduler.state_dict(),
+                "cfg": cfg,
+            }
+            save_checkpoint_atomic(ckpt_data, os.path.join(output_dir, "last.pt"))
 
-        if macro_auc > best_val_auc and floors_passed:
-            best_val_auc = macro_auc
-            save_checkpoint_atomic(ckpt_data, os.path.join(output_dir, "best_ema.pt"))
-            print(f"  * New best Macro Val AUC: {best_val_auc:.4f} saved to {output_dir}/best_ema.pt")
+            if macro_auc > best_val_auc and floors_passed:
+                best_val_auc = macro_auc
+                save_checkpoint_atomic(ckpt_data, os.path.join(output_dir, "best_ema.pt"))
+                print(f"  * New best Macro Val AUC: {best_val_auc:.4f} saved to {output_dir}/best_ema.pt")
+        else:
+            print(f"Epoch {epoch:02d}/{epochs:02d} | Train Loss: {avg_loss:.4f} | Train AUC: {train_auc:.4f} [Validation skipped until Epoch {val_start_epoch:02d}]")
+            ckpt_data = {
+                "epoch": epoch,
+                "val_auc": 0.0,
+                "macro_auc": 0.0,
+                "val_eer": 0.5,
+                "val_f1_05": 0.0,
+                "model": model.state_dict(),
+                "model_ema": model_ema.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "scheduler": scheduler.state_dict(),
+                "cfg": cfg,
+            }
+            save_checkpoint_atomic(ckpt_data, os.path.join(output_dir, "last.pt"))
 
     print(f"=== Completed S-MSDTv2 [{stage.upper()}] Training! Best Val AUC: {best_val_auc:.4f} ===")
 
