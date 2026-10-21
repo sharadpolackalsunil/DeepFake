@@ -16,15 +16,18 @@ from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
+import collections
 from tqdm import tqdm
 
 from smsdt.data.sbi_video import sbi_clip
-from smsdt.data.video_dataset import PairedClipDataset, EvalClipDataset, paired_collate
+from smsdt.data.video_dataset import PairedClipDataset, EvalClipDataset, paired_collate, METHOD_ID
 from smsdt.eval import evaluate as evaluate_metrics
 from smsdt.losses import detection_loss
 from smsdt.models.clip_encoder import CLIPFrameEncoder, CLIP_MEAN, CLIP_STD
 from smsdt.models.smsdt_v2 import SMSDTv2
 from smsdt.train import cosine_with_warmup
+
+ID_TO_METHOD = {v: k for k, v in METHOD_ID.items()}
 
 
 class ClipNormalize:
@@ -118,7 +121,14 @@ def train_v2(cfg_path: str, resume: bool = True):
         print(f"Loading weights from {init_ckpt}...")
         ckpt = torch.load(init_ckpt, map_location="cpu")
         state_dict = ckpt.get("model_ema", ckpt.get("model", ckpt))
-        model.load_state_dict(state_dict, strict=False)
+        cleaned = {}
+        for k, v in state_dict.items():
+            k_clean = k.replace("module.", "").replace("_orig_mod.", "")
+            cleaned[k_clean] = v
+        missing, unexpected = model.load_state_dict(cleaned, strict=False)
+        print(f"  * Checkpoint loaded. Missing keys: {len(missing)}, Unexpected keys: {len(unexpected)}")
+        if unexpected:
+            print(f"    Unexpected keys sample: {unexpected[:5]}")
 
     model.to(device)
 
@@ -142,6 +152,7 @@ def train_v2(cfg_path: str, resume: bool = True):
         mask_grid=model_cfg.get("grid", 16),
     )
 
+    val_methods = data_cfg.get("val_methods", ["Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures", "FaceShifter"])
     val_ds = EvalClipDataset(
         index_csv=data_cfg.get("index", "data/splits/index.csv"),
         store_root=data_cfg.get("store", "data/store"),
@@ -150,6 +161,7 @@ def train_v2(cfg_path: str, resume: bool = True):
         T=frames_per_clip,
         stride=data_cfg.get("frame_stride", 1),
         normalize=norm_fn,
+        methods=val_methods,
     )
 
     workers = int(train_cfg.get("num_workers", 4))
@@ -256,16 +268,22 @@ def train_v2(cfg_path: str, resume: bool = True):
             train_loader.dataset.set_epoch(epoch - 1)
         total_loss, total_cls, total_mask = 0.0, 0.0, 0.0
         train_preds, train_targets = [], []
+        method_counter = collections.Counter()
         optimizer.zero_grad(set_to_none=True)
 
-        active_method = methods[(epoch - 1) % len(methods)] if methods else "Mixed"
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch:02d}/{epochs:02d} [{active_method}]", total=len(train_loader))
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch:02d}/{epochs:02d} [Balanced]", total=len(train_loader))
 
         for step, batch in enumerate(pbar):
             frames = batch["frames"].to(device)  # (2B, T, 3, 224, 224)
             labels = batch["label"].to(device)    # (2B,)
             mask = batch["mask"].to(device)      # (2B, T, g, g)
             has_mask = batch["has_mask"].to(device)
+
+            # Track methods trained in this batch
+            if "method" in batch:
+                fake_mids = batch["method"][1::2].cpu().tolist()
+                for mid in fake_mids:
+                    method_counter[ID_TO_METHOD.get(mid, str(mid))] += 1
 
             with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=torch.cuda.is_available()):
                 logits, patch_logits = model(frames)
@@ -292,10 +310,11 @@ def train_v2(cfg_path: str, resume: bool = True):
                 optimizer.zero_grad(set_to_none=True)
                 scheduler.step()
 
-                # Update EMA weights
+                # Dynamic EMA warmup schedule: decay = min(base_decay, (1 + t)/(10 + t))
+                step_ema_decay = min(float(ema_decay), (1.0 + global_step) / (10.0 + global_step))
                 with torch.no_grad():
                     for p_ema, p_model in zip(model_ema.parameters(), model.parameters()):
-                        p_ema.data.mul_(ema_decay).add_(p_model.data, alpha=1.0 - ema_decay)
+                        p_ema.data.mul_(step_ema_decay).add_(p_model.data, alpha=1.0 - step_ema_decay)
 
                 global_step += 1
 
@@ -314,6 +333,7 @@ def train_v2(cfg_path: str, resume: bool = True):
         avg_cls = total_cls / len(train_loader)
         avg_mask = total_mask / len(train_loader)
         train_auc = float(roc_auc_score(train_targets, train_preds)) if len(set(train_targets)) > 1 else 0.5
+        print(f"  * Methods trained in Epoch {epoch:02d}: {dict(method_counter)}")
 
         # Periodic Validation
         print(f"\n--- Epoch {epoch:02d}/{epochs:02d} Validation ---")
@@ -328,10 +348,21 @@ def train_v2(cfg_path: str, resume: bool = True):
             breakdown_str = " | ".join(f"{m}: {d['auc']:.4f}" for m, d in metrics["per_manipulation"].items())
             print(f"  * Val AUC Breakdown: {breakdown_str}")
 
+        # Compute Macro FF++ AUC (DF, F2F, FS, NT, FSh) to prevent DFD-domination
+        ffpp_methods = ["Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures", "FaceShifter"]
+        per_m = metrics.get("per_manipulation", {})
+        ffpp_aucs = [per_m[m]["auc"] for m in ffpp_methods if m in per_m and "auc" in per_m[m]]
+        macro_auc = float(np.mean(ffpp_aucs)) if ffpp_aucs else val_auc
+        fs_auc = per_m.get("FaceSwap", {}).get("auc", 1.0)
+        df_auc = per_m.get("Deepfakes", {}).get("auc", 1.0)
+        floors_passed = (fs_auc >= 0.975) and (df_auc >= 0.975)
+        print(f"  * FF++ Macro AUC: {macro_auc:.4f} (Floors: FS={fs_auc:.4f}, DF={df_auc:.4f})")
+
         # Save checkpoints
         ckpt_data = {
             "epoch": epoch,
             "val_auc": val_auc,
+            "macro_auc": macro_auc,
             "val_eer": val_eer,
             "val_f1_05": val_f1,
             "model": model.state_dict(),
@@ -342,10 +373,10 @@ def train_v2(cfg_path: str, resume: bool = True):
         }
         save_checkpoint_atomic(ckpt_data, os.path.join(output_dir, "last.pt"))
 
-        if val_auc > best_val_auc:
-            best_val_auc = val_auc
+        if macro_auc > best_val_auc and floors_passed:
+            best_val_auc = macro_auc
             save_checkpoint_atomic(ckpt_data, os.path.join(output_dir, "best_ema.pt"))
-            print(f"  * New best Val AUC: {best_val_auc:.4f} saved to {output_dir}/best_ema.pt")
+            print(f"  * New best Macro Val AUC: {best_val_auc:.4f} saved to {output_dir}/best_ema.pt")
 
     print(f"=== Completed S-MSDTv2 [{stage.upper()}] Training! Best Val AUC: {best_val_auc:.4f} ===")
 
