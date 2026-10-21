@@ -495,9 +495,9 @@ def print_benchmark_table(res, dataset_name, split):
     eer_lbl = f"[Oracle] Acc@EER({res['eer_thresh']:.2f})" if "eer_thresh" in res else "[Oracle] Acc@EER"
     print(fmt_row([eer_lbl] + acc_eer_vals + [f"{res['pristine_acc_eer']:.3f}", f"{res['oracle_acc_eer']:.3f}"]))
 
-    # Row 5: Video AUC
+    # Row 5: Video AUC (Pristine is the negative reference class; AUC against itself is N/A)
     auc_vals = [f"{res['per_method_auc'].get(m, 0.0):.3f}" for m in cols]
-    print(fmt_row(["Video AUC"] + auc_vals + ["1.000", f"{res['video_auc_mean']:.3f}"]))
+    print(fmt_row(["Video AUC"] + auc_vals + ["—", f"{res['video_auc_mean']:.3f}"]))
 
     print(line_sep)
     ci_str = f" [95% CI: {res['video_auc_ci'][0]:.4f} - {res['video_auc_ci'][1]:.4f}]" if res.get("video_auc_ci") else ""
