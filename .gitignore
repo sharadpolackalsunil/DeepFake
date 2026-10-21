@@ -46,10 +46,12 @@ data/splits/*.csv
 
 # ── Outputs ──
 outputs/checkpoints/
+outputs/checkpoints_*/
 outputs/logs/
 outputs/*.onnx
 outputs/*.engine
 outputs/triton_repo/
+outputs/benchmark_results.csv
 !outputs/.gitkeep
 
 # ── Experiment tracking ──
