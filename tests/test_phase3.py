@@ -1,4 +1,10 @@
 """Unit tests for Phase 3: Cross-dataset evaluation metrics, perturbation filters, and diagnostics."""
+import os
+import sys
+
+# Ensure repository root is on sys.path for direct execution
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import numpy as np
 import pytest
 import torch
@@ -104,3 +110,16 @@ def test_eval_clip_dataset_dfd_isolation():
     ffpp_counts = Counter(r["method"] for r in ds_ffpp.rows)
     assert "DeepFakeDetection" not in ffpp_counts
     assert "DFD" not in ffpp_counts
+
+
+if __name__ == "__main__":
+    print("Running Phase 3 tests directly...")
+    test_compute_eer_exact()
+    print("  * test_compute_eer_exact: PASSED")
+    test_robustness_perturbation_filters()
+    print("  * test_robustness_perturbation_filters: PASSED")
+    test_eval_clip_aggregation_shapes()
+    print("  * test_eval_clip_aggregation_shapes: PASSED")
+    test_eval_clip_dataset_dfd_isolation()
+    print("  * test_eval_clip_dataset_dfd_isolation: PASSED")
+    print("\nAll 4 tests in test_phase3.py passed successfully!")
