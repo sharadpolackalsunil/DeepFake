@@ -298,6 +298,70 @@ THRESHOLD SENSITIVITY SWEEP: FF++ c23 + DFD [TEST] (N=3687 videos)
 
 ---
 
+### Isolated DFD Benchmark Evaluation ($N=2,987$ Videos)
+
+To specifically assess cross-domain generalization to Google/Jigsaw's `DeepFakeDetection` benchmark without in-domain FF++ test mixtures, the checkpoint was evaluated on all 2,604 DFD synthetic videos against all 383 pristine authentic videos:
+
+```
+=============================================================
+BENCHMARK RESULTS TABLE: DFD (DeepFakeDetection) [TEST] (N=2987 videos)
+=============================================================
+            Info |          DFD |     Pristine |        Total
+-------------------------------------------------------------
+    Accuracy@0.5 |        0.560 |        0.990 |        0.615
+   Accuracy@0.70 |        0.497 |        0.995 |        0.561
+   Acc@EER(0.03) |        0.789 |        0.791 |        0.789
+       Video AUC |        0.865 |        1.000 |        0.865
+=============================================================
+```
+
+#### Calibrated Classification Report (@ Threshold = 0.700)
+```
+=====================================================================================
+CALIBRATED CLASSIFICATION REPORT: DFD BENCHMARK (Threshold = 0.700)
+=====================================================================================
+  * True Positives  (Fakes Correctly Caught):  1295 / 2604 (49.7%)
+  * True Negatives  (Reals Correctly Cleared):  381 /  383 (99.5%)
+  * False Positives (False Alarms on Reals):      2 /  383 (0.5%)
+  * False Negatives (Fakes Missed):            1309 / 2604 (50.3%)
+-------------------------------------------------------------------------------------
+  * True Overall Accuracy [(TP+TN)/All]:      56.11% (1676/2987 videos)
+  * Balanced Accuracy [Mean(Sens, Spec)]:      74.60%
+  * Precision: 99.8% | Recall: 49.7% | F1-Score: 0.6639
+=====================================================================================
+```
+
+#### DFD Threshold Sensitivity Sweep
+```
+============================================================================
+THRESHOLD SENSITIVITY SWEEP: DFD (DeepFakeDetection) [TEST]
+============================================================================
+       Threshold |          DFD |     Pristine |    Total Acc |     Balanced
+----------------------------------------------------------------------------
+     0.029 (EER) |        0.789 |        0.786 |        0.789 |        0.788
+           0.300 |        0.616 |        0.969 |        0.662 |        0.793
+           0.400 |        0.586 |        0.979 |        0.636 |        0.783
+           0.500 |        0.560 |        0.990 |        0.615 |        0.775
+           0.550 |        0.547 |        0.990 |        0.604 |        0.768
+           0.600 |        0.532 |        0.992 |        0.591 |        0.762
+           0.650 |        0.518 |        0.995 |        0.579 |        0.756
+           0.700 |        0.497 |        0.995 |        0.561 |        0.746
+           0.750 |        0.483 |        0.995 |        0.548 |        0.739
+           0.800 |        0.466 |        0.997 |        0.534 |        0.732
+----------------------------------------------------------------------------
+  * Peak Total Accuracy:     0.789 at threshold = 0.029
+  * Peak Balanced Accuracy:  0.793 at threshold = 0.300
+  * Optimal EER Threshold:   0.029
+============================================================================
+```
+
+#### DFD Specific Analysis (Phase 1 vs. Phase 2 Stage B):
+* **Video AUC:** Remains exceptionally strong and stable at **0.865** across both Phase 1 and Phase 2 Stage B.
+* **Peak Balanced Accuracy:** Improved from **78.5% (Phase 1 @ 0.80) $\to$ 79.3% (Phase 2 @ 0.30)**.
+* **Precision Surge:** Reached **99.8%** with only **2 false alarms** out of 383 actor reals (vs. Phase 1's 87 false alarms / 22.7% false alarm rate on the same real videos).
+
+---
+
 ### Critical Forensic Discoveries from Stage B Testing
 
 1. **The Elimination of Real False Positives (99.0% - 99.5% Specificity):**
