@@ -25,6 +25,29 @@ METHOD_ID = {
     "DeepFakeDetection": 7,
 }
 
+# Balanced sampling weights tilted toward reenactment methods to overcome semantic foundation bias
+METHOD_W = {
+    "Deepfakes": 0.15,
+    "FaceSwap": 0.15,
+    "FaceShifter": 0.20,
+    "Face2Face": 0.25,
+    "NeuralTextures": 0.25,
+}
+
+
+def pick_fake(fakes_list, method_weights=None):
+    """Stateless, worker-safe balanced fake selection.
+    Ensures persistent workers actively sample all manipulation methods across every epoch.
+    """
+    if not fakes_list:
+        return None
+    weights_dict = method_weights if method_weights is not None else METHOD_W
+    ws = [weights_dict.get(f.get("method"), 0.20) for f in fakes_list]
+    total_w = sum(ws)
+    if total_w > 0:
+        return random.choices(fakes_list, weights=ws, k=1)[0]
+    return random.choice(fakes_list)
+
 
 def load_index(path, split):
     """Load rows from data/splits/index.csv filtered by split."""
@@ -111,7 +134,7 @@ class PairedClipDataset(Dataset):
 
     def __init__(self, index_csv, store_root, T=8, stride=1, p_sbi=0.5, sbi_fn=None,
                  methods=("Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures", "FaceShifter"),
-                 augment=None, normalize=None, mask_grid=14):
+                 augment=None, normalize=None, mask_grid=14, method_weights=None):
         rows = load_index(index_csv, "train")
         self.root = store_root
         self.T = T
@@ -119,6 +142,7 @@ class PairedClipDataset(Dataset):
         self.mask_grid = mask_grid
         self.methods = list(methods)
         self.epoch = 0
+        self.method_weights = method_weights or METHOD_W
         self.reals = [r for r in rows if r["method"] == "real"]
         self.fakes = defaultdict(list)
         for r in rows:
@@ -157,8 +181,10 @@ class PairedClipDataset(Dataset):
             method = "SBI"
         else:
             fakes_list = self.fakes[real["target_id"]]
-            # Deterministic round-robin cycling: Epoch 0->Method 0, Epoch 1->Method 1, etc.
-            fake = fakes_list[self.epoch % len(fakes_list)]
+            # Stateless balanced sampling: ensures all methods train evenly under persistent_workers=True
+            fake = pick_fake(fakes_list, self.method_weights)
+            if fake is None:
+                fake = fakes_list[self.epoch % len(fakes_list)]
             fs = VideoStore(self.root, fake["video_id"])
             common, ri, fi = np.intersect1d(rs.fidx, fs.fidx, return_indices=True)
             starts = contiguous_starts(common, self.T, self.stride)
@@ -168,7 +194,13 @@ class PairedClipDataset(Dataset):
             sel = np.arange(s, s + self.T * self.stride, self.stride)
             real_u8 = np.asarray(rs.frames[ri[sel]]).copy()
             fake_u8 = np.asarray(fs.frames[fi[sel]]).copy()
-            fake_mask = None
+
+            # Difference-derived manipulation mask (D1 fix)
+            # Pixel-aligned difference between fake and real crops
+            diff = np.abs(fake_u8.astype(np.float32) - real_u8.astype(np.float32)).max(axis=-1)  # (T, H, W)
+            p95 = np.percentile(diff, 95)
+            diff_norm = diff / p95 if p95 > 1e-3 else diff
+            fake_mask = (diff_norm > 0.15).astype(np.float32)
             method = fake["method"]
 
         p = self.aug.sample(real_u8.shape[1])
@@ -222,7 +254,19 @@ class EvalClipDataset(Dataset):
                     norm_methods.add("DFD")
                 else:
                     norm_methods.add(m)
-            rows = [r for r in rows if r["method"] in norm_methods or r["method"] == "real"]
+            include_dfd = any(m in norm_methods for m in ("DeepFakeDetection", "DFD"))
+            filtered = []
+            for r in rows:
+                m = r["method"]
+                vid = r.get("video_id", "")
+                tid = r.get("target_id", "")
+                if m in norm_methods:
+                    filtered.append(r)
+                elif m == "real":
+                    if not include_dfd and (vid.startswith("dfd_") or tid.startswith("dfd_")):
+                        continue
+                    filtered.append(r)
+            rows = filtered
         self.rows = rows
         self.root = store_root
         self.K = K

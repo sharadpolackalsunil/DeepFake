@@ -29,6 +29,7 @@ data:
   p_blur: 0.1
   p_flip: 0.5
   val_k: 8                   # 8 clips per validation video (matching Phase 1)
+  val_methods: ["Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures", "FaceShifter"]  # Pure in-domain FF++ (excludes DFD)
 
 train:
   epochs: 40
@@ -44,11 +45,11 @@ train:
   lambda_mask: 0.5           # Active 16x16 patch-mask supervision
   ema_decay: 0.999
   precision: bfloat16
-  num_workers: 8             # Uses 8 parallel worker threads on 24-core Core Ultra 9
+  num_workers: 4             # 4 parallel workers (stable memory footprint on Windows)
   pin_memory: true           # Fast async DMA transfers to 5090 VRAM
   persistent_workers: true   # Keeps workers hot in RAM between epochs (no restart latency)
   prefetch_factor: 2
   val_batch_size: 8          # 8 videos per validation batch
   val_workers: 4             # 4 parallel workers for fast & safe validation on Windows
 
-output_dir: outputs/checkpoints_v2_stage_b
+output_dir: outputs/checkpoints_v2_fixed

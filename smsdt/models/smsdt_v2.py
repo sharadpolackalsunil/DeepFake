@@ -129,7 +129,7 @@ class SMSDTv2(nn.Module):
             if not p.requires_grad:
                 continue
             is_ln = "encoder" in n and "norm" in n.lower()
-            no_decay = p.ndim == 1 or n.endswith(".bias") or "norm" in n.lower() or "embed" in n or "space" in n or "time" in n
+            no_decay = p.ndim < 2 or n.endswith(".bias") or "norm" in n.lower() or "embed" in n or "space" in n or "time" in n or "beta" in n or "mix" in n
 
             key = ("ln" if is_ln else "head", not no_decay)
             groups[key].append(p)

@@ -30,7 +30,9 @@ def detection_loss(logit, label, patch_logits=None, mask=None, has_mask=None,
         sel = has_mask.bool() if has_mask is not None else torch.ones_like(label, dtype=torch.bool)
         if sel.any():
             m = (mask[sel].flatten(2) > 0.1).float()  # (B', T, g*g)
-            lm = F.binary_cross_entropy_with_logits(patch_logits[sel].float(), m)
+            pl = patch_logits[sel].float()
+            pos_weight = torch.tensor(3.0, device=pl.device)
+            lm = F.binary_cross_entropy_with_logits(pl, m, pos_weight=pos_weight)
             total = total + lam_mask * lm
             logs["mask"] = float(lm.detach())
 
