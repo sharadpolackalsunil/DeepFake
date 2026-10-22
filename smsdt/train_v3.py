@@ -95,7 +95,10 @@ def train_v3(cfg_path: str, resume: bool = True):
     init_ckpt = cfg.get("init_ckpt")
     if init_ckpt and os.path.exists(init_ckpt):
         print(f"Loading Stage B baseline checkpoint: {init_ckpt}")
-        ckpt_data = torch.load(init_ckpt, map_location="cpu")
+        try:
+            ckpt_data = torch.load(init_ckpt, map_location="cpu", weights_only=False)
+        except TypeError:
+            ckpt_data = torch.load(init_ckpt, map_location="cpu")
         missing, unexpected = model.load_v2_weights(ckpt_data)
         print(f"  * Foundation & transformer weights loaded successfully.")
         print(f"  * New v3 module keys initialized: {len(missing)} keys (res.*, readout.*)")
@@ -215,13 +218,13 @@ def train_v3(cfg_path: str, resume: bool = True):
         ckpt_to_load = None
         if os.path.exists(last_ckpt_path):
             try:
-                ckpt_to_load = torch.load(last_ckpt_path, map_location=device)
+                ckpt_to_load = torch.load(last_ckpt_path, map_location=device, weights_only=False)
                 print(f"Resuming Stage C training from: {last_ckpt_path}")
             except Exception as e:
                 print(f"Warning: Failed to load {last_ckpt_path} ({e}). Falling back to best_ema.pt...")
         if ckpt_to_load is None and os.path.exists(best_ema_path):
             try:
-                ckpt_to_load = torch.load(best_ema_path, map_location=device)
+                ckpt_to_load = torch.load(best_ema_path, map_location=device, weights_only=False)
                 print(f"Resuming Stage C training from: {best_ema_path}")
             except Exception as e:
                 print(f"Warning: Failed to load {best_ema_path} ({e}).")

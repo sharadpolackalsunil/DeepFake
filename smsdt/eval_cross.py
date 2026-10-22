@@ -96,7 +96,10 @@ def boot_ci(y_true, y_scores, n=1000, seed=42):
 
 def load_model(ckpt_path: str, device: torch.device):
     """Load S-MSDT v1 or v2 model from checkpoint with robust dictionary extraction."""
-    ckpt = torch.load(ckpt_path, map_location="cpu")
+    try:
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    except TypeError:
+        ckpt = torch.load(ckpt_path, map_location="cpu")
     cfg = ckpt.get("cfg", {}) if isinstance(ckpt, dict) else {}
 
     # Extract state dict from various checkpoint formats
