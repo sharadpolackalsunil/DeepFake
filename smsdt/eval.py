@@ -100,8 +100,8 @@ def evaluate(model, loader, device, top_k_ratio=0.5, max_batches=None):
     all_video_ids = []
 
     with torch.no_grad():
-        autocast_enabled = (device == "cuda")
-        with torch.autocast("cuda", dtype=torch.bfloat16, enabled=autocast_enabled):
+        is_cuda = (device == "cuda" or (isinstance(device, torch.device) and device.type == "cuda"))
+        with torch.autocast("cuda", dtype=torch.bfloat16, enabled=is_cuda):
             for batch_idx, batch in enumerate(loader):
                 if max_batches is not None and batch_idx >= max_batches:
                     break
@@ -115,8 +115,20 @@ def evaluate(model, loader, device, top_k_ratio=0.5, max_batches=None):
                     B, K, T, C, H, W = frames.shape
                     frames_flat = frames.view(B * K, T, C, H, W)
                     conf_flat = conf.view(B * K, T) if conf is not None else None
-                    out = model(frames_flat, conf_flat)
-                    logits_flat = out[0] if isinstance(out, (tuple, list)) else out
+
+                    # Process in chunks of max 16 clips (128 frames, identical to training batch)
+                    # to strictly eliminate GPU memory spikes and allocation fragmentation
+                    chunk_size = 16
+                    sub_logits = []
+                    for start_idx in range(0, B * K, chunk_size):
+                        end_idx = min(start_idx + chunk_size, B * K)
+                        chunk_frames = frames_flat[start_idx:end_idx]
+                        chunk_conf = conf_flat[start_idx:end_idx] if conf_flat is not None else None
+                        out = model(chunk_frames, chunk_conf)
+                        logits_chunk = out[0] if isinstance(out, (tuple, list)) else out
+                        sub_logits.append(logits_chunk)
+
+                    logits_flat = torch.cat(sub_logits, dim=0)
                     probs_flat = torch.sigmoid(logits_flat).view(B, K)
                     probs_vid = probs_flat.mean(dim=1)
                     logits = torch.logit(probs_vid.clamp(1e-6, 1.0 - 1e-6))
