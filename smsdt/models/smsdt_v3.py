@@ -96,8 +96,8 @@ class SMSDTv3(nn.Module):
         self.beta = nn.Parameter(torch.zeros(()))
 
         # Denormalization constants for mapping CLIP frames to [0, 1] for ResidualStream
-        self.register_buffer("clip_mean", torch.tensor(CLIP_MEAN).view(1, 3, 1, 1))
-        self.register_buffer("clip_std", torch.tensor(CLIP_STD).view(1, 3, 1, 1))
+        self.register_buffer("clip_mean", torch.tensor(CLIP_MEAN).view(1, 3, 1, 1), persistent=False)
+        self.register_buffer("clip_std", torch.tensor(CLIP_STD).view(1, 3, 1, 1), persistent=False)
 
     def set_gradient_checkpointing(self, enable: bool = True):
         for blk in self.blocks:
@@ -256,10 +256,10 @@ class SMSDTv3(nn.Module):
 
         missing, unexpected = self.load_state_dict(filtered_state, strict=False)
 
-        # Expected missing keys must belong to new modules
+        # Expected missing keys must belong to new modules or helper buffers
         non_new_missing = [
             k for k in missing
-            if not (k.startswith("res.") or k.startswith("readout."))
+            if not (k.startswith("res.") or k.startswith("readout.") or k in ("clip_mean", "clip_std"))
         ]
         if non_new_missing:
             raise RuntimeError(f"Unexpected missing keys from Stage B checkpoint: {non_new_missing}")
