@@ -20,7 +20,7 @@ try:
     safe_objs = []
     if hasattr(np, "_core") and hasattr(np._core, "multiarray"):
         safe_objs.extend([np._core.multiarray._reconstruct, np.ndarray, np.dtype])
-    if hasattr(np, "core") and hasattr(np.core, "multiarray"):
+    elif hasattr(np, "core") and hasattr(np.core, "multiarray"):
         safe_objs.extend([np.core.multiarray._reconstruct, np.ndarray, np.dtype])
     if hasattr(torch.serialization, "add_safe_globals") and safe_objs:
         torch.serialization.add_safe_globals(safe_objs)
