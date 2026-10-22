@@ -209,6 +209,42 @@ def train_v3(cfg_path: str, resume: bool = True):
     global_step = 0
     best_val_auc = 0.0
 
+    last_ckpt_path = os.path.join(output_dir, "last.pt")
+    best_ema_path = os.path.join(output_dir, "best_ema.pt")
+    if resume:
+        ckpt_to_load = None
+        if os.path.exists(last_ckpt_path):
+            try:
+                ckpt_to_load = torch.load(last_ckpt_path, map_location=device)
+                print(f"Resuming Stage C training from: {last_ckpt_path}")
+            except Exception as e:
+                print(f"Warning: Failed to load {last_ckpt_path} ({e}). Falling back to best_ema.pt...")
+        if ckpt_to_load is None and os.path.exists(best_ema_path):
+            try:
+                ckpt_to_load = torch.load(best_ema_path, map_location=device)
+                print(f"Resuming Stage C training from: {best_ema_path}")
+            except Exception as e:
+                print(f"Warning: Failed to load {best_ema_path} ({e}).")
+
+        if ckpt_to_load is not None:
+            model.load_state_dict(ckpt_to_load["model"])
+            if "model_ema" in ckpt_to_load:
+                model_ema.load_state_dict(ckpt_to_load["model_ema"])
+            if "optimizer" in ckpt_to_load:
+                try:
+                    optimizer.load_state_dict(ckpt_to_load["optimizer"])
+                except Exception:
+                    pass
+            if "scheduler" in ckpt_to_load:
+                try:
+                    scheduler.load_state_dict(ckpt_to_load["scheduler"])
+                except Exception:
+                    pass
+            start_epoch = ckpt_to_load.get("epoch", 0) + 1
+            global_step = ckpt_to_load.get("global_step", start_epoch * steps_per_epoch)
+            best_val_auc = ckpt_to_load.get("macro_auc", ckpt_to_load.get("val_auc", 0.0))
+            print(f"  * Resumed at Epoch {start_epoch+1:02d}/{epochs:02d} (Global Step: {global_step}) | Best Macro Val AUC: {best_val_auc:.4f}")
+
     print(f"Dataset: {len(train_dataset)} training pairs, {len(val_dataset)} validation videos.")
     print(f"Schedule: {epochs} epochs ({total_steps} steps). Phase C1 (freeze existing): Epochs 1-{freeze_existing_epochs}.")
 
@@ -360,6 +396,7 @@ def train_v3(cfg_path: str, resume: bool = True):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/train_v3_stage_c.yaml")
+    parser.add_argument("--no-resume", action="store_true", help="Start from epoch 0 ignoring existing last.pt")
     args = parser.parse_args()
-    train_v3(args.config)
+    train_v3(args.config, resume=not args.no_resume)
 
