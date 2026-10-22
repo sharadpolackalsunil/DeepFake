@@ -295,7 +295,10 @@ def main():
 
     # Load checkpoint
     if os.path.exists(args.ckpt):
-        ckpt = torch.load(args.ckpt, map_location=device)
+        try:
+            ckpt = torch.load(args.ckpt, map_location=device, weights_only=False)
+        except TypeError:
+            ckpt = torch.load(args.ckpt, map_location=device)
         if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
             model.load_state_dict(ckpt["model_state_dict"])
             print(f"Loaded checkpoint: {args.ckpt} (epoch {ckpt.get('epoch', '?')})")
