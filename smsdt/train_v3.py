@@ -22,6 +22,7 @@ from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from smsdt.data.sbi_video import sbi_clip
 from smsdt.data.video_dataset import PairedClipDataset, EvalClipDataset, paired_collate, METHOD_ID
 from smsdt.losses_v3 import detection_loss_v3
 from smsdt.models.clip_encoder import CLIPFrameEncoder, CLIP_MEAN, CLIP_STD
@@ -53,31 +54,7 @@ def save_checkpoint_atomic(data: dict, filepath: str):
     os.replace(tmp_path, filepath)
 
 
-def evaluate(model, loader, device, max_videos=None):
-    """Evaluate model on EvalClipDataset, computing video-level AUC."""
-    model.eval()
-    all_preds, all_labels = [], []
-
-    with torch.no_grad():
-        for i, batch in enumerate(loader):
-            if max_videos is not None and i >= max_videos:
-                break
-            frames = batch["frames"].to(device)
-            labels = batch["label"].to(device)
-            B, K, T, C, H, W = frames.shape
-
-            frames_flat = frames.view(B * K, T, C, H, W)
-            logits, _, _ = model(frames_flat)
-            probs = torch.sigmoid(logits).view(B, K)
-
-            vid_score = probs.mean(dim=1)
-            all_preds.extend(vid_score.float().cpu().numpy().tolist())
-            all_labels.extend(labels.float().cpu().numpy().tolist())
-
-    if len(set(all_labels)) < 2:
-        return 0.5
-
-    return float(roc_auc_score(all_labels, all_preds))
+from smsdt.eval import evaluate
 
 
 def train_v3(cfg_path: str, resume: bool = True):
@@ -144,52 +121,63 @@ def train_v3(cfg_path: str, resume: bool = True):
 
     optimizer = torch.optim.AdamW(param_groups, betas=(0.9, 0.999), eps=1e-8)
 
+    # Audit trainable parameters
+    trainable_names = {n for n, p in model.named_parameters() if p.requires_grad}
+    trainable_params = sum(p.numel() for n, p in model.named_parameters() if n in trainable_names)
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Model parameters: {trainable_params:,} trainable / {total_params:,} total ({100 * trainable_params / total_params:.2f}%)")
+
     # 4. Datasets & Loaders
+    norm_fn = get_clip_normalize()
+    frames_per_clip = data_cfg.get("frames_per_clip", 8)
+
     train_dataset = PairedClipDataset(
         index_csv=data_cfg.get("index", "data/splits/index.csv"),
         store_root=data_cfg.get("store", "data/store"),
-        T=data_cfg.get("frames_per_clip", 8),
+        T=frames_per_clip,
         stride=data_cfg.get("frame_stride", 1),
         p_sbi=data_cfg.get("p_sbi", 0.0),
-        crop_size=data_cfg.get("crop_size", 224),
-        jpeg_quality=tuple(data_cfg.get("jpeg_quality", [50, 100])),
-        p_jpeg=data_cfg.get("p_jpeg", 0.3),
-        p_blur=data_cfg.get("p_blur", 0.1),
-        p_flip=data_cfg.get("p_flip", 0.5),
-        transform=get_clip_normalize(),
+        sbi_fn=sbi_clip,
+        normalize=norm_fn,
+        mask_grid=model_cfg.get("grid", 16),
     )
 
+    workers = int(train_cfg.get("num_workers", 8))
     train_loader = DataLoader(
         train_dataset,
         batch_size=train_cfg.get("batch_pairs", 8),
         shuffle=True,
-        num_workers=train_cfg.get("num_workers", 4),
+        num_workers=workers,
         collate_fn=paired_collate,
         pin_memory=train_cfg.get("pin_memory", True),
-        persistent_workers=train_cfg.get("persistent_workers", True),
-        prefetch_factor=train_cfg.get("prefetch_factor", 2),
+        persistent_workers=train_cfg.get("persistent_workers", True) if workers > 0 else False,
+        prefetch_factor=train_cfg.get("prefetch_factor", 2) if workers > 0 else None,
         drop_last=True,
     )
 
     # In-domain validation loader (pure FF++ 5 manipulation methods)
+    val_methods = data_cfg.get("val_methods", ["Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures", "FaceShifter"])
     val_dataset = EvalClipDataset(
         index_csv=data_cfg.get("index", "data/splits/index.csv"),
         store_root=data_cfg.get("store", "data/store"),
         split="val",
-        K=data_cfg.get("val_k", 8),
-        T=data_cfg.get("frames_per_clip", 8),
+        K=int(data_cfg.get("val_k", 8)),
+        T=frames_per_clip,
         stride=data_cfg.get("frame_stride", 1),
-        crop_size=data_cfg.get("crop_size", 224),
-        transform=get_clip_normalize(),
-        methods=data_cfg.get("val_methods", ["Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures", "FaceShifter"]),
+        size=int(data_cfg.get("crop_size", 224)),
+        normalize=norm_fn,
+        methods=val_methods,
     )
 
+    val_workers = int(train_cfg.get("val_workers", 8))
     val_loader = DataLoader(
         val_dataset,
         batch_size=train_cfg.get("val_batch_size", 8),
         shuffle=False,
-        num_workers=train_cfg.get("val_workers", 4),
-        pin_memory=True,
+        num_workers=val_workers,
+        pin_memory=False,
+        persistent_workers=bool(train_cfg.get("persistent_workers", False)) if val_workers > 0 else False,
+        prefetch_factor=int(train_cfg.get("prefetch_factor", 2)) if val_workers > 0 else None,
     )
 
     # 5. Training Parameters & Curriculum
@@ -197,7 +185,13 @@ def train_v3(cfg_path: str, resume: bool = True):
     freeze_existing_epochs = train_cfg.get("freeze_existing_epochs", 3)
     steps_per_epoch = len(train_loader)
     total_steps = epochs * steps_per_epoch
-    warmup_steps = int(total_steps * train_cfg.get("warmup_frac", 0.05))
+
+    scheduler = cosine_with_warmup(
+        optimizer,
+        total_steps=total_steps,
+        warmup_frac=train_cfg.get("warmup_frac", 0.05),
+        min_ratio=train_cfg.get("min_lr_ratio", 0.01),
+    )
 
     precision = train_cfg.get("precision", "bfloat16")
     use_autocast = precision in ("bfloat16", "float16") and torch.cuda.is_available()
@@ -209,6 +203,7 @@ def train_v3(cfg_path: str, resume: bool = True):
     margin = float(train_cfg.get("margin", 1.0))
     ohem_frac = float(train_cfg.get("ohem_frac", 0.5))
     pos_weight = float(train_cfg.get("pos_weight", 3.0))
+    base_ema_decay = float(train_cfg.get("ema_decay", 0.999))
 
     start_epoch = 0
     global_step = 0
@@ -223,19 +218,15 @@ def train_v3(cfg_path: str, resume: bool = True):
         # Phase C1 vs Phase C2 parameter freeze check
         is_phase_c1 = epoch < freeze_existing_epochs
         for name, param in model.named_parameters():
-            if not param.requires_grad:
-                continue
-            is_new = name.startswith("res.") or name.startswith("readout.")
-            if is_phase_c1:
-                # Freeze existing foundation & head weights in Phase C1
-                param.requires_grad = is_new
+            if name not in trainable_names:
+                param.requires_grad = False
             else:
-                # Unfreeze all trainable weights in Phase C2
-                param.requires_grad = True
+                is_new = name.startswith("res.") or name.startswith("readout.")
+                param.requires_grad = (is_new if is_phase_c1 else True)
 
         pbar = tqdm(train_loader, desc=f"Epoch {epoch+1:02d}/{epochs:02d} [{'Phase C1' if is_phase_c1 else 'Phase C2'}]")
         epoch_losses = collections.defaultdict(float)
-        batch_count = 0
+        method_counter = collections.Counter()
 
         for batch in pbar:
             global_step += 1
@@ -243,10 +234,10 @@ def train_v3(cfg_path: str, resume: bool = True):
             labels = batch["label"].to(device, non_blocking=True)
             masks = batch["mask"].to(device, non_blocking=True)
 
-            # Cosine learning rate schedule with warmup
-            lr_scale = cosine_with_warmup(global_step, total_steps, warmup_steps, min_lr_ratio=train_cfg.get("min_lr_ratio", 0.01))
-            for g in optimizer.param_groups:
-                g["lr"] = g.get("initial_lr", g["lr"]) * lr_scale
+            if "method" in batch:
+                fake_mids = batch["method"][1::2].cpu().tolist()
+                for mid in fake_mids:
+                    method_counter[ID_TO_METHOD.get(mid, str(mid))] += 1
 
             optimizer.zero_grad(set_to_none=True)
 
@@ -269,26 +260,41 @@ def train_v3(cfg_path: str, resume: bool = True):
             loss.backward()
 
             if train_cfg.get("grad_clip", 0.0) > 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), train_cfg["grad_clip"])
+                torch.nn.utils.clip_grad_norm_(
+                    [p for p in model.parameters() if p.requires_grad],
+                    train_cfg["grad_clip"]
+                )
 
             optimizer.step()
+            scheduler.step()
 
-            # Dynamic EMA decay warmup schedule
-            ema_decay = min(0.999, (1.0 + global_step) / (10.0 + global_step))
+            # Dynamic EMA decay warmup schedule per Strategic Plan
+            step_ema_decay = min(base_ema_decay, (1.0 + global_step) / (10.0 + global_step))
             with torch.no_grad():
-                for p_ema, p in zip(model_ema.parameters(), model.parameters()):
-                    p_ema.lerp_(p, 1.0 - ema_decay)
+                for p_ema, p_model in zip(model_ema.parameters(), model.parameters()):
+                    p_ema.data.mul_(step_ema_decay).add_(p_model.data, alpha=1.0 - step_ema_decay)
 
-            batch_count += 1
             for k, v in loss_dict.items():
                 epoch_losses[k] += v.item()
 
+            cur_lr = scheduler.get_last_lr()[-1] if hasattr(scheduler, "get_last_lr") else 0.0
             pbar.set_postfix({
                 "loss": f"{loss.item():.4f}",
                 "cls": f"{loss_dict['cls'].item():.3f}",
                 "rank": f"{loss_dict['rank'].item():.3f}",
                 "mask": f"{loss_dict['mask'].item():.3f}",
+                "lr": f"{cur_lr:.2e}",
             })
+
+        print(f"  * Methods trained in Epoch {epoch+1:02d}: {dict(method_counter)}")
+
+        # Telemetry logging per §3.4
+        with torch.no_grad():
+            prior_gain_val = float(model.readout.prior_gain.item()) if hasattr(model.readout, "prior_gain") else 0.0
+            r_val = float(model.readout.log_r.exp().item()) if hasattr(model.readout, "log_r") else 3.0
+            gate_bias_val = float(model.res.gate.bias.mean().item()) if hasattr(model.res, "gate") else 0.0
+            w_mix_val = float(torch.sigmoid(model.readout.mix).item()) if hasattr(model.readout, "mix") else 0.5
+            print(f"  * V3 Telemetry: gate_bias={gate_bias_val:.2f}, prior_gain={prior_gain_val:.4f}, LSE r={r_val:.2f}, readout_mix={w_mix_val:.3f}")
 
         # Save last checkpoint atomically every epoch
         save_checkpoint_atomic({
@@ -297,28 +303,56 @@ def train_v3(cfg_path: str, resume: bool = True):
             "model": model.state_dict(),
             "model_ema": model_ema.state_dict(),
             "optimizer": optimizer.state_dict(),
+            "scheduler": scheduler.state_dict(),
             "cfg": cfg,
         }, os.path.join(output_dir, "last.pt"))
 
         # Validation evaluation
         val_start_epoch = train_cfg.get("val_start_epoch", 3)
         if (epoch + 1) >= val_start_epoch:
-            val_auc = evaluate(model_ema, val_loader, device)
-            print(f"Epoch {epoch+1:02d} Validation AUC (EMA): {val_auc:.4f}")
+            print(f"\n--- Epoch {epoch+1:02d}/{epochs:02d} In-Domain FF++ Validation ---")
+            metrics = evaluate(model_ema, val_loader, device)
+            v_metrics = metrics.get("video_level", metrics)
+            val_auc = float(v_metrics["auc"])
+            val_eer = float(v_metrics.get("eer", 0.0))
+            val_f1 = float(v_metrics.get("f1_05", 0.0))
 
-            if val_auc > best_val_auc:
-                best_val_auc = val_auc
+            print(f"Epoch {epoch+1:02d} | Val AUC (EMA): {val_auc:.4f} | EER: {val_eer:.4f} | F1@0.5: {val_f1:.4f}")
+
+            # Per-manipulation breakdown & FF++ Macro AUC (DF, F2F, FS, NT, FSh)
+            ffpp_methods = ["Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures", "FaceShifter"]
+            per_m = metrics.get("per_manipulation", {})
+            if per_m:
+                breakdown_str = " | ".join(f"{m}: {per_m[m]['auc']:.4f}" for m in ffpp_methods if m in per_m)
+                print(f"  * Per-Method AUC: {breakdown_str}")
+
+            ffpp_aucs = [per_m[m]["auc"] for m in ffpp_methods if m in per_m and "auc" in per_m[m]]
+            macro_auc = float(np.mean(ffpp_aucs)) if ffpp_aucs else val_auc
+            fs_auc = per_m.get("FaceSwap", {}).get("auc", 1.0)
+            df_auc = per_m.get("Deepfakes", {}).get("auc", 1.0)
+            floors_passed = (fs_auc >= 0.985) and (df_auc >= 0.980)
+            print(f"  * FF++ Macro AUC: {macro_auc:.4f} (Floors: FS={fs_auc:.4f} [>=0.985], DF={df_auc:.4f} [>=0.980])")
+
+            # Checkpoint selection strictly by Macro AUC subject to regression floors (§3.5)
+            if macro_auc > best_val_auc and floors_passed:
+                best_val_auc = macro_auc
                 save_checkpoint_atomic({
                     "epoch": epoch,
                     "global_step": global_step,
                     "model": model.state_dict(),
                     "model_ema": model_ema.state_dict(),
-                    "val_auc": best_val_auc,
+                    "optimizer": optimizer.state_dict(),
+                    "scheduler": scheduler.state_dict(),
+                    "val_auc": val_auc,
+                    "macro_auc": macro_auc,
+                    "metrics": metrics,
                     "cfg": cfg,
                 }, os.path.join(output_dir, "best_ema.pt"))
-                print(f"  * Saved new best checkpoint with Val AUC: {best_val_auc:.4f}")
+                print(f"  * Saved new best checkpoint with FF++ Macro Val AUC: {best_val_auc:.4f}")
+        else:
+            print(f"Epoch {epoch+1:02d}/{epochs:02d} [Validation skipped until Epoch {val_start_epoch:02d}]")
 
-    print(f"=== S-MSDTv3 Stage C Training Complete. Best Val AUC: {best_val_auc:.4f} ===")
+    print(f"=== S-MSDTv3 Stage C Training Complete. Best Macro Val AUC: {best_val_auc:.4f} ===")
 
 
 if __name__ == "__main__":
@@ -326,3 +360,4 @@ if __name__ == "__main__":
     parser.add_argument("--config", default="configs/train_v3_stage_c.yaml")
     args = parser.parse_args()
     train_v3(args.config)
+
