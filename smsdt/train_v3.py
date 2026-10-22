@@ -269,6 +269,7 @@ def train_v3(cfg_path: str, resume: bool = True):
             frames = batch["frames"].to(device, non_blocking=True)
             labels = batch["label"].to(device, non_blocking=True)
             masks = batch["mask"].to(device, non_blocking=True)
+            priors = batch["prior"].to(device, non_blocking=True) if "prior" in batch else None
 
             if "method" in batch:
                 fake_mids = batch["method"][1::2].cpu().tolist()
@@ -278,7 +279,7 @@ def train_v3(cfg_path: str, resume: bool = True):
             optimizer.zero_grad(set_to_none=True)
 
             with torch.autocast(device_type="cuda", dtype=autocast_dtype, enabled=use_autocast):
-                logits, patch_logits, aux_logits = model(frames)
+                logits, patch_logits, aux_logits = model(frames, prior=priors)
                 loss, loss_dict = detection_loss_v3(
                     logit=logits,
                     label=labels,
