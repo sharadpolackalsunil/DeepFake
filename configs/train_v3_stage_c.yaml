@@ -55,12 +55,12 @@ train:
   pos_weight: 3.0            # Positive weight multiplier on manipulated pixels in difference masks
   ema_decay: 0.999
   precision: bfloat16
-  num_workers: 4
+  num_workers: 8
   pin_memory: true
   persistent_workers: true
   prefetch_factor: 2
   val_batch_size: 8
-  val_workers: 4
+  val_workers: 8
   val_start_epoch: 3         # Starts validation at epoch 3 (end of Phase C1)
   val_interval: 1
 
