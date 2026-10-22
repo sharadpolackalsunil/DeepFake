@@ -311,6 +311,8 @@ def train_v3(cfg_path: str, resume: bool = True):
         val_start_epoch = train_cfg.get("val_start_epoch", 3)
         if (epoch + 1) >= val_start_epoch:
             print(f"\n--- Epoch {epoch+1:02d}/{epochs:02d} In-Domain FF++ Validation ---")
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
             metrics = evaluate(model_ema, val_loader, device)
             v_metrics = metrics.get("video_level", metrics)
             val_auc = float(v_metrics["auc"])

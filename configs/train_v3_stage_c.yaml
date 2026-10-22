@@ -59,8 +59,8 @@ train:
   pin_memory: true
   persistent_workers: true
   prefetch_factor: 2
-  val_batch_size: 8
-  val_workers: 8
+  val_batch_size: 4
+  val_workers: 4
   val_start_epoch: 3         # Starts validation at epoch 3 (end of Phase C1)
   val_interval: 1
 
