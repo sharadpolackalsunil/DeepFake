@@ -279,8 +279,8 @@ This document presents the complete end-to-end architectures for **S-MSDT v1** (
 │ • Deepfakes AUC:       0.9450        │ • Deepfakes AUC:       0.9900        │
 │ • FaceShifter AUC:     0.7930        │ • FaceShifter AUC:     0.9440        │
 │ • DFD Alone Video AUC: 0.8650        │ • DFD Alone Video AUC: 0.8534        │
-│ • Celeb-DF v2 AUC:     0.8560        │ • Celeb-DF v2 AUC:     0.8754        │
-│ • Celeb-DF Recall@0.5: 27.1%         │ • Celeb-DF Recall@0.5: 69.4%         │
+│ • Celeb-DF v2 AUC:     —             │ • Celeb-DF v2 AUC:     0.8754        │
+│ • Celeb-DF Recall@0.5: —             │ • Celeb-DF Recall@0.5: 69.4%         │
 │ • Celeb-DF Calib Prec: —             │ • Celeb-DF Calib Prec: 93.1%         │
 └──────────────────────────────────────┴──────────────────────────────────────┘
 ```
