@@ -15,6 +15,18 @@ import torch
 from sklearn.metrics import roc_auc_score, log_loss
 from torch.utils.data import DataLoader
 
+# Safe globals for PyTorch 2.6+ unpickler
+try:
+    safe_objs = []
+    if hasattr(np, "_core") and hasattr(np._core, "multiarray"):
+        safe_objs.extend([np._core.multiarray._reconstruct, np.ndarray, np.dtype])
+    if hasattr(np, "core") and hasattr(np.core, "multiarray"):
+        safe_objs.extend([np.core.multiarray._reconstruct, np.ndarray, np.dtype])
+    if hasattr(torch.serialization, "add_safe_globals") and safe_objs:
+        torch.serialization.add_safe_globals(safe_objs)
+except Exception:
+    pass
+
 from smsdt.data.video_dataset import EvalClipDataset
 from smsdt.models.clip_encoder import CLIPFrameEncoder, CLIP_MEAN, CLIP_STD
 from smsdt.models.smsdt import SMSDT
