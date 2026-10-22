@@ -765,9 +765,9 @@ Threshold | Celeb-synthesis | Pristine | Total Acc | Balanced Acc
 | **Deepfakes Test AUC** | 0.9450 | 0.9820 | **0.9900** | **+0.80%** |
 | **FaceShifter Test AUC** | 0.7930 | 0.7680 | **0.9440** | **+17.60%** |
 | **DFD Alone Video AUC** | 0.8650 | 0.8640 | **0.8534** | — |
-| **Celeb-DF v2 Alone Video AUC** | 0.8560 | 0.8560 | **0.8754** | **+1.94%** |
-| **Celeb-DF v2 Acc @ 0.50** | 51.9% | 51.9% | **75.9%** | **+24.0%** |
-| **Celeb-DF v2 Fake Recall @ 0.50**| 27.1% | 27.1% | **69.4%** | **+42.3%** |
+| **Celeb-DF v2 Alone Video AUC** | — | 0.8560 | **0.8754** | **+1.94%** |
+| **Celeb-DF v2 Acc @ 0.50** | — | 51.9% | **75.9%** | **+24.0%** |
+| **Celeb-DF v2 Fake Recall @ 0.50**| — | 27.1% | **69.4%** | **+42.3%** |
 | **Celeb-DF v2 Calib Precision** | — | — | **93.1%** | Verified |
 | **FF++ Master Video AUC** | 0.8620 | 0.8640 | **0.8714** | **+0.74%** |
 
