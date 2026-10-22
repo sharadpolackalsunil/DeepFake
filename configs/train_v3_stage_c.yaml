@@ -1,0 +1,67 @@
+# S-MSDTv3 Phase 3: Stage C Spatio-Temporal Video Training
+# Objective: Fine-tune S-MSDTv3 with ResidualStream (SRM + Haar DWT) and EvidenceReadoutV3 (LSE pooling + Perioral Prior)
+# Warm-started from Step 4 ("v2-fixed"): outputs/checkpoints_v2_fixed/best_ema.pt
+# Target: SOTA cross-dataset transfer (Celeb-DF v2 Video AUC >= 0.950+)
+
+stage: stage_c
+init_ckpt: outputs/checkpoints_v2_fixed/best_ema.pt
+
+model:
+  backbone: openai/clip-vit-large-patch14
+  tune: layernorm
+  grad_ckpt: true
+  dim: 384
+  depth: 2
+  heads: 6
+  max_frames: 16
+  grid: 16
+  n_queries: 4
+  r0: 3.0
+  topk_frac: 0.05
+  init_bias: -4.0
+
+data:
+  store: data/store
+  index: data/splits/index.csv
+  frames_per_clip: 8         # T=8 contiguous frames
+  frame_stride: 1
+  crop_size: 224
+  norm: clip                 # Uses CLIP_MEAN and CLIP_STD
+  p_sbi: 0.0
+  jpeg_quality: [50, 100]
+  p_jpeg: 0.3
+  p_blur: 0.1
+  p_flip: 0.5
+  val_k: 8                   # 8 clips per validation video
+  val_methods: ["Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures", "FaceShifter"]  # Pure in-domain FF++
+
+train:
+  epochs: 28                 # 28 epochs (~28 minutes on RTX 5090)
+  freeze_existing_epochs: 3  # Phase C1: Epochs 1-3 freeze CLIP LN & existing head; Phase C2: Epochs 4-28 unfreeze all
+  batch_pairs: 8             # 16 clips per optimizer step
+  grad_accum: 1
+  lr_backbone_ln: 5.0e-6     # Very gentle LR for CLIP LayerNorms
+  lr_head: 1.0e-4            # LR for existing transformer blocks and projection
+  lr_new: 3.0e-4             # Initial LR for newly initialized ResidualStream and EvidenceReadoutV3
+  weight_decay: 0.05
+  warmup_frac: 0.05
+  min_lr_ratio: 0.01
+  grad_clip: 1.0
+  lam_rank: 0.5              # Pairwise margin ranking loss weight
+  lam_mask: 0.5              # Soft patch-mask loss weight
+  lam_freq: 0.3              # Auxiliary frequency loss weight
+  margin: 1.0                # Pairwise ranking margin (optimizes AUC directly)
+  ohem_frac: 0.5             # Keeps all reals + top 50% highest-loss fakes per batch
+  pos_weight: 3.0            # Positive weight multiplier on manipulated pixels in difference masks
+  ema_decay: 0.999
+  precision: bfloat16
+  num_workers: 4
+  pin_memory: true
+  persistent_workers: true
+  prefetch_factor: 2
+  val_batch_size: 8
+  val_workers: 4
+  val_start_epoch: 3         # Starts validation at epoch 3 (end of Phase C1)
+  val_interval: 1
+
+output_dir: outputs/checkpoints_v3_stage_c
