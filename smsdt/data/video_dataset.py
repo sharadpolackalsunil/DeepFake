@@ -13,6 +13,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset
+from smsdt.data.mouth_prior import compute_perioral_prior
 
 METHOD_ID = {
     "real": 0,
@@ -75,7 +76,10 @@ class VideoStore:
         return self._frames
 
     def lmk(self):
-        return np.load(os.path.join(self.dir, "lmk106.npy"))
+        lmk_path = os.path.join(self.dir, "lmk106.npy")
+        if os.path.exists(lmk_path):
+            return np.load(lmk_path)
+        return None
 
 
 def contiguous_starts(fidx, T, stride):
@@ -223,20 +227,39 @@ class PairedClipDataset(Dataset):
             m = torch.zeros(self.T, g, g)
             has_fake_mask = 0.0
 
+        # Compute dynamic perioral prior from 106-point facial landmarks
+        try:
+            lmks = rs.lmk()
+            if lmks is not None:
+                sel_lmk = ri[sel] if 'ri' in locals() and ri is not None else sel
+                real_lmks = lmks[sel_lmk].copy().astype(np.float32)
+                scale = float(self.aug.size) / float(p["crop"])
+                lmk_t = real_lmks
+                lmk_t[:, :, 0] = (lmk_t[:, :, 0] - p["x"]) * scale
+                lmk_t[:, :, 1] = (lmk_t[:, :, 1] - p["y"]) * scale
+                if p["flip"]:
+                    lmk_t[:, :, 0] = float(self.aug.size) - lmk_t[:, :, 0]
+                clip_prior = compute_perioral_prior(lmk_t, grid_size=g, crop_size=float(self.aug.size))
+            else:
+                clip_prior = torch.ones(self.T, g * g, dtype=torch.float32)
+        except Exception:
+            clip_prior = torch.ones(self.T, g * g, dtype=torch.float32)
+
         return {
             "frames": clips,
             "label": torch.tensor([0.0, 1.0]),
             "method": torch.tensor([0, METHOD_ID.get(method, 1)]),
             "mask": torch.stack([torch.zeros_like(m), m]),
             "has_mask": torch.tensor([1.0, has_fake_mask]),
+            "prior": torch.stack([clip_prior, clip_prior]),
         }
 
 
 def paired_collate(batch):
-    """Flatten batch of pairs: frames (2B, T, 3, S, S), label (2B,), mask (2B, T, g, g), has_mask (2B,)."""
+    """Flatten batch of pairs: frames (2B, T, 3, S, S), label (2B,), mask (2B, T, g, g), has_mask (2B,), prior (2B, T, g*g)."""
     return {
         k: torch.cat([b[k] for b in batch])
-        for k in ("frames", "label", "method", "mask", "has_mask")
+        for k in ("frames", "label", "method", "mask", "has_mask", "prior")
     }
 
 
@@ -296,12 +319,19 @@ class EvalClipDataset(Dataset):
                 print(f"\n[WARNING] VideoStore at '{store_root}/{vid}' has no frames (starts=[])! Ensure --store points to the correct frame store directory!\n")
             # Fallback for short tracks: repeat first frame
             clips = torch.zeros(self.K, self.T, 3, self.size, self.size)
+            priors = torch.ones(self.K, self.T, 256, dtype=torch.float32)
         else:
             # Choose K evenly spaced starts
             step = max(1, len(starts) // self.K)
             chosen_starts = [starts[min(j * step, len(starts) - 1)] for j in range(self.K)]
 
             clips_list = []
+            priors_list = []
+            try:
+                lmks = vs.lmk()
+            except Exception:
+                lmks = None
+
             for s in chosen_starts:
                 sel = np.arange(s, s + self.T * self.stride, self.stride)
                 frames_u8 = np.asarray(vs.frames[sel])
@@ -314,7 +344,20 @@ class EvalClipDataset(Dataset):
                     clip_tensor = self.normalize(clip_tensor)
                 clips_list.append(clip_tensor)
 
+                if lmks is not None:
+                    try:
+                        lmk_clip = lmks[sel].copy().astype(np.float32)
+                        lmk_clip[:, :, 0] -= cx
+                        lmk_clip[:, :, 1] -= cy
+                        prior_clip = compute_perioral_prior(lmk_clip, grid_size=16, crop_size=float(self.size))
+                    except Exception:
+                        prior_clip = torch.ones(self.T, 256, dtype=torch.float32)
+                else:
+                    prior_clip = torch.ones(self.T, 256, dtype=torch.float32)
+                priors_list.append(prior_clip)
+
             clips = torch.stack(clips_list)  # (K, T, 3, S, S)
+            priors = torch.stack(priors_list)  # (K, T, 256)
 
         label = float(row["label"])
         return {
@@ -322,4 +365,5 @@ class EvalClipDataset(Dataset):
             "label": torch.tensor(label, dtype=torch.float32),
             "video_id": row["video_id"],
             "method": row["method"],
+            "prior": priors,
         }
