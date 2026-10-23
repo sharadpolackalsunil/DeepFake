@@ -791,6 +791,247 @@ Threshold | Celeb-synthesis | Pristine | Total Acc | Balanced Acc
 6. **Honest Calibration Protocol Established:**
    * Fitting Platt scaling and optimal decision cutoffs strictly on validation ensures zero test-set snooping. Applying this frozen calibration across all test suites guarantees publication-grade, honest biometric utility reporting for top-tier venues (IEEE TIFS / CVPR).
 
+---
+
+## 12. S-MSDTv3 (Stage C Spatio-Temporal Video Evaluation)
+
+**Model Evaluated:** S-MSDTv3 (`CLIP-ViT-L/14` + `Forensic ResidualStream [SRM + 2D Haar DWT]` + `Dynamic Perioral Landmark Prior` + `Smooth Log-Sum-Exp Readout [EvidenceReadoutV3]` + `N-MSSS Transformer with TemporalDiff`)  
+**Checkpoint:** `outputs/checkpoints_v3_stage_c/best_ema.pt` (489/489 parameters matched)  
+**Evaluation Protocol:** Standardized multi-clip ($K=8$, $T=8$ contiguous frames per clip), deterministic center crops (224×224), sub-batched chunked inference (16 clips/sub-batch).  
+**Hardware Platform:** NVIDIA GeForce RTX 5090 (32GB GDDR7, PyTorch 2.6+, CUDA 12.8, BFloat16)  
+**Evaluation Date:** October 23, 2026  
+**Per-Video Scores Export:** `outputs/scores/ffpp_test_v3.csv`  
+
+### 12.1 Master Test Benchmark Results (N = 3,687 Videos)
+
+The evaluation was conducted on the full test cohort consisting of **3,687 videos** (3,304 manipulated videos across all 5 FF++ c23 manipulation methods plus Google/Jigsaw DFD, and 383 pristine authentic reals).
+
+```
+=================================================================================================================================================
+BENCHMARK RESULTS TABLE: FF++ c23 [TEST] (N=3687 videos)
+=================================================================================================================================================
+                Info |    Deepfakes |    Face2Face |     FaceSwap |   NeuralTextures |   FaceShifter |          DFD |     Pristine |        Total
+-------------------------------------------------------------------------------------------------------------------------------------------------
+        Accuracy@0.5 |        0.986 |        0.936 |        0.957 |            0.700 |         0.914 |        0.769 |        0.762 |        0.793
+[Oracle] Acc@EER(0.54) |        0.986 |        0.929 |        0.950 |            0.679 |         0.914 |        0.755 |        0.783 |        0.784
+           Video AUC |        0.989 |        0.958 |        0.966 |            0.819 |         0.942 |        0.852 |            — |        0.870
+-------------------------------------------------------------------------------------------------------------------------------------------------
+  * Video AUC:          0.8697 [95% CI: 0.8537 - 0.8858]
+  * FF++ Macro AUC:     0.9349
+  * Top-50% Clip AUC:   0.8746 | Frame/Clip AUC: 0.8631
+  * Biometric Utility:  TPR@1%FPR = 39.44% | TPR@5%FPR = 52.97%
+  * Calibration:        Raw ECE = 0.1782
+=================================================================================================================================================
+```
+
+### 12.2 Granular Breakdown by Manipulation Method
+
+| Manipulation Method | Test Videos | Video AUC | Acc @ 0.50 | Acc @ EER (0.536) | Primary Forensic Cues Exploited |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **`Deepfakes`** | 140 | **0.989** | **98.6%** | **98.6%** | Face boundary blending seams, color inconsistency |
+| **`FaceSwap`** | 140 | **0.966** | **95.7%** | **95.0%** | Graphics-based swap boundary misalignment |
+| **`Face2Face`** | 140 | **0.958** | **93.6%** | **92.9%** | Expression reenactment, mouth-interior temporal dynamics |
+| **`FaceShifter`** | 140 | **0.942** | **91.4%** | **91.4%** | Neural multi-level occlusion, subtle feature shifts |
+| **`NeuralTextures`** | 140 | **0.819** | **70.0%** | **67.9%** | Perioral high-frequency texture noise (rescued by SRM + DWT) |
+| **`DeepFakeDetection (DFD)`** | 2,604 | **0.852** | **76.9%** | **75.5%** | Cross-domain actor scenes, zero-shot transfer |
+| **`Pristine Reals`** | 383 | — | **76.2%** | **78.3%** | Unmanipulated reference cohort |
+| **Combined Total / Macro** | **3,687** | **0.8697** | **79.31%** | **78.36%** | **FF++ Macro AUC: 0.9349** (Mean of 5 in-domain methods) |
+
+### 12.3 Classification Confusion Matrix (@ Operating Threshold = 0.500)
+
+```
+=====================================================================================
+CALIBRATED CLASSIFICATION REPORT (Threshold = 0.500)
+=====================================================================================
+  * True Positives  (Fakes Correctly Caught):  2632 / 3304 (79.7%)
+  * True Negatives  (Reals Correctly Cleared):  292 /  383 (76.2%)
+  * False Positives (False Alarms on Reals):     91 /  383 (23.8%)
+  * False Negatives (Fakes Missed):             672 / 3304 (20.3%)
+-------------------------------------------------------------------------------------
+  * True Overall Accuracy [(TP+TN)/All]:      79.31% (2924/3687 videos)
+  * Balanced Accuracy [Mean(Sens, Spec)]:      77.95%
+  * Precision: 96.7% | Recall: 79.7% | F1-Score: 0.8734
+=====================================================================================
+```
+
+### 12.4 Threshold Sensitivity Sweep
+
+```
+============================================================================================================================================================
+THRESHOLD SENSITIVITY SWEEP: FF++ c23 [TEST] (Finding Optimal Operating Cutoff)
+============================================================================================================================================================
+       Threshold |    Deepfakes |    Face2Face |     FaceSwap |   NeuralTextures |   FaceShifter |          DFD |     Pristine |    Total Acc |     Balanced
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+           0.300 |        1.000 |        0.964 |        0.971 |            0.771 |         0.950 |        0.828 |        0.697 |        0.834 |        0.774
+           0.400 |        0.993 |        0.943 |        0.971 |            0.743 |         0.921 |        0.802 |        0.744 |        0.817 |        0.785
+           0.500 |        0.986 |        0.936 |        0.957 |            0.700 |         0.914 |        0.769 |        0.762 |        0.793 |        0.780
+     0.536 (EER) |        0.986 |        0.929 |        0.950 |            0.679 |         0.914 |        0.755 |        0.783 |        0.784 |        0.783
+           0.550 |        0.986 |        0.929 |        0.936 |            0.671 |         0.914 |        0.750 |        0.791 |        0.780 |        0.785
+           0.600 |        0.986 |        0.929 |        0.929 |            0.643 |         0.914 |        0.730 |        0.799 |        0.766 |        0.780
+           0.650 |        0.986 |        0.929 |        0.929 |            0.607 |         0.900 |        0.705 |        0.812 |        0.747 |        0.776
+           0.700 |        0.971 |        0.907 |        0.921 |            0.579 |         0.886 |        0.687 |        0.825 |        0.733 |        0.773
+           0.750 |        0.971 |        0.907 |        0.921 |            0.557 |         0.864 |        0.665 |        0.836 |        0.717 |        0.769
+           0.800 |        0.971 |        0.893 |        0.907 |            0.521 |         0.850 |        0.634 |        0.859 |        0.695 |        0.767
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+  * Peak Total Accuracy:     0.834 at threshold = 0.300
+  * Peak Balanced Accuracy:  0.785 at threshold = 0.550
+  * Optimal EER Threshold:   0.536
+============================================================================================================================================================
+```
+
+### 12.5 Historical Evolution Across Generations
+
+| Metric / Evaluation Split | S-MSDT v1 (Phase 1 Baseline) | S-MSDT v2 (Buggy Stage B) | S-MSDT v2-Fixed (Phase 3 Baseline) | S-MSDTv3 (Stage C Checkpoint) |
+| :--- | :---: | :---: | :---: | :---: |
+| **Architecture** | EffNet-B4 + DensePSIT | CLIP ViT-L/14 + TempDiff | CLIP ViT-L/14 + TempDiff (Fixed) | CLIP ViT-L + ResidualStream + Prior + LSE |
+| **FF++ Test Macro AUC** | 0.8510 | 0.8320 | **0.9385** | **0.9349** |
+| **`Deepfakes` Test AUC** | 0.9450 | 0.9820 | 0.9900 | **0.9890** |
+| **`FaceSwap` Test AUC** | 0.8050 | 0.9080 | 0.9700 | **0.9660** |
+| **`Face2Face` Test AUC** | 0.8900 | 0.8740 | 0.9650 | **0.9580** |
+| **`FaceShifter` Test AUC** | 0.7930 | 0.7680 | 0.9440 | **0.9420** |
+| **`NeuralTextures` Test AUC** | 0.8220 | 0.6260 | 0.8230 | **0.8190** |
+| **`NeuralTextures` Acc @ 0.50** | 78.6% | 2.9% | 70.7% | **70.0%** |
+| **DFD Alone Video AUC** | 0.8650 | 0.8640 | 0.8534 | **0.8522** [95% CI: 0.8325 - 0.8696] |
+| **DFD Alone Acc @ 0.50** | 86.8% | — | 78.3% | **76.83%** |
+| **DFD Alone Precision @ 0.50** | 95.9% | — | 95.7% | **95.7%** |
+| **Celeb-DF v2 Video AUC** | 0.8560 | 0.8560 | 0.8754 | **0.8813** [95% CI: 0.8514 - 0.9094] |
+| **Celeb-DF v2 Acc @ 0.50** | 51.9% | 51.9% | 75.9% | **76.64%** |
+| **Celeb-DF v2 Fake Recall @ 0.50**| 27.1% | 27.1% | 69.4% | **70.29%** |
+| **Celeb-DF v2 Balanced Acc @ 0.50**| — | — | 78.8% | **79.53%** |
+| **Celeb-DF v2 Precision @ 0.50** | — | — | 93.1% | **92.28%** |
+| **Master Video AUC (FF++ + DFD)** | 0.8620 | 0.8640 | 0.8714 | **0.8697** [95% CI: 0.8537 - 0.8858] |
+| **Master Total Acc @ 0.50** | 84.2% | — | — | **79.31%** |
+| **Master Precision @ 0.50** | 95.9% | — | — | **96.7%** |
+| **Biometric Utility (TPR@1%FPR)** | — | — | — | **39.44% (Master) / 33.49% (DFD) / 24.12% (CelebDF)** |
+| **Biometric Utility (TPR@5%FPR)** | — | — | — | **52.97% (Master) / 47.77% (DFD) / 47.35% (CelebDF)** |
+
+---
+
+### 12.6 S-MSDTv3 Cross-Dataset Benchmark: Celeb-DF v2 (Test Split, N=518 Videos)
+
+```
+======================================================================
+BENCHMARK RESULTS TABLE: Celeb-DF v2 [TEST] (N=518 videos)
+======================================================================
+                Info |   Celeb-synthesis |     Pristine |        Total
+----------------------------------------------------------------------
+        Accuracy@0.5 |             0.703 |        0.888 |        0.766
+[Oracle] Acc@EER(0.28) |             0.794 |        0.792 |        0.793
+           Video AUC |             0.881 |            — |        0.881
+----------------------------------------------------------------------
+  * Video AUC:          0.8813 [95% CI: 0.8514 - 0.9094]
+  * FF++ Macro AUC:     0.8813
+  * Top-50% Clip AUC:   0.8806 | Frame/Clip AUC: 0.8692
+  * Biometric Utility:  TPR@1%FPR = 24.12% | TPR@5%FPR = 47.35%
+  * Calibration:        Raw ECE = 0.1799
+======================================================================
+```
+
+#### Classification Report (@ Threshold = 0.500)
+```text
+=====================================================================================
+CALIBRATED CLASSIFICATION REPORT (Threshold = 0.500)
+=====================================================================================
+  * True Positives  (Fakes Correctly Caught):   239 /  340 (70.3%)
+  * True Negatives  (Reals Correctly Cleared):  158 /  178 (88.8%)
+  * False Positives (False Alarms on Reals):     20 /  178 (11.2%)
+  * False Negatives (Fakes Missed):             101 /  340 (29.7%)
+-------------------------------------------------------------------------------------
+  * True Overall Accuracy [(TP+TN)/All]:      76.64% (397/518 videos)
+  * Balanced Accuracy [Mean(Sens, Spec)]:      79.53%
+  * Precision: 92.3% | Recall: 70.3% | F1-Score: 0.7980
+=====================================================================================
+```
+
+#### Threshold Sensitivity Profile (Celeb-DF v2 Isolated)
+```text
+=================================================================================
+THRESHOLD SENSITIVITY SWEEP: Celeb-DF v2 [TEST] (Finding Optimal Operating Cutoff)
+=================================================================================
+       Threshold |   Celeb-synthesis |     Pristine |    Total Acc |     Balanced
+---------------------------------------------------------------------------------
+     0.276 (EER) |             0.794 |        0.798 |        0.795 |        0.796
+           0.300 |             0.785 |        0.826 |        0.799 |        0.806
+           0.400 |             0.735 |        0.848 |        0.774 |        0.792
+           0.500 |             0.703 |        0.888 |        0.766 |        0.795
+           0.550 |             0.674 |        0.893 |        0.749 |        0.783
+           0.600 |             0.659 |        0.893 |        0.739 |        0.776
+           0.650 |             0.624 |        0.899 |        0.718 |        0.761
+           0.700 |             0.603 |        0.910 |        0.708 |        0.757
+           0.750 |             0.565 |        0.921 |        0.687 |        0.743
+           0.800 |             0.544 |        0.927 |        0.676 |        0.736
+---------------------------------------------------------------------------------
+  * Peak Total Accuracy:     0.799 at threshold = 0.300
+  * Peak Balanced Accuracy:  0.806 at threshold = 0.300
+  * Optimal EER Threshold:   0.276
+=================================================================================
+```
+
+---
+
+### 12.7 S-MSDTv3 Isolated Benchmark: Google / Jigsaw DFD (Test Split, N=2,987 Videos)
+
+Evaluated on the full standalone DeepFakeDetection benchmark consisting of **2,987 test videos** (2,604 manipulated actor scenes + 383 pristine authentic reference videos) using deterministic $K=8$ clips of $T=8$ frames:
+
+```text
+=================================================================
+BENCHMARK RESULTS TABLE: DFD [TEST] (N=2987 videos)
+=================================================================
+                Info |          DFD |     Pristine |        Total
+-----------------------------------------------------------------
+        Accuracy@0.5 |        0.769 |        0.762 |        0.768
+[Oracle] Acc@EER(0.51) |        0.766 |        0.765 |        0.766
+           Video AUC |        0.852 |            — |        0.852
+-----------------------------------------------------------------
+  * Video AUC:          0.8522 [95% CI: 0.8325 - 0.8696]
+  * FF++ Macro AUC:     0.8522
+  * Top-50% Clip AUC:   0.8580 | Frame/Clip AUC: 0.8455
+  * Biometric Utility:  TPR@1%FPR = 33.49% | TPR@5%FPR = 47.77%
+  * Calibration:        Raw ECE = 0.1963
+=================================================================
+```
+
+#### Classification Report (@ Threshold = 0.500)
+```text
+=====================================================================================
+CALIBRATED CLASSIFICATION REPORT (Threshold = 0.500)
+=====================================================================================
+  * True Positives  (Fakes Correctly Caught):  2003 / 2604 (76.9%)
+  * True Negatives  (Reals Correctly Cleared):  292 /  383 (76.2%)
+  * False Positives (False Alarms on Reals):     91 /  383 (23.8%)
+  * False Negatives (Fakes Missed):             601 / 2604 (23.1%)
+-------------------------------------------------------------------------------------
+  * True Overall Accuracy [(TP+TN)/All]:      76.83% (2295/2987 videos)
+  * Balanced Accuracy [Mean(Sens, Spec)]:      76.58%
+  * Precision: 95.7% | Recall: 76.9% | F1-Score: 0.8527
+=====================================================================================
+```
+
+#### Threshold Sensitivity Profile (DFD Isolated)
+```text
+============================================================================
+THRESHOLD SENSITIVITY SWEEP: DFD [TEST] (Finding Optimal Operating Cutoff)
+============================================================================
+       Threshold |          DFD |     Pristine |    Total Acc |     Balanced
+----------------------------------------------------------------------------
+           0.300 |        0.828 |        0.697 |        0.811 |        0.763
+           0.400 |        0.802 |        0.744 |        0.794 |        0.773
+           0.500 |        0.769 |        0.762 |        0.768 |        0.766
+     0.513 (EER) |        0.765 |        0.765 |        0.765 |        0.765
+           0.550 |        0.750 |        0.791 |        0.755 |        0.770
+           0.600 |        0.730 |        0.799 |        0.739 |        0.764
+           0.650 |        0.705 |        0.812 |        0.719 |        0.759
+           0.700 |        0.687 |        0.825 |        0.704 |        0.756
+           0.750 |        0.665 |        0.836 |        0.687 |        0.750
+           0.800 |        0.634 |        0.859 |        0.663 |        0.747
+----------------------------------------------------------------------------
+  * Peak Total Accuracy:     0.811 at threshold = 0.300
+  * Peak Balanced Accuracy:  0.773 at threshold = 0.400
+  * Optimal EER Threshold:   0.513
+============================================================================
+```
+
+
 
 
 

@@ -15,10 +15,23 @@ import torch
 from sklearn.metrics import roc_auc_score, log_loss
 from torch.utils.data import DataLoader
 
+# Safe globals for PyTorch 2.6+ unpickler
+try:
+    safe_objs = []
+    if hasattr(np, "_core") and hasattr(np._core, "multiarray"):
+        safe_objs.extend([np._core.multiarray._reconstruct, np.ndarray, np.dtype])
+    elif hasattr(np, "core") and hasattr(np.core, "multiarray"):
+        safe_objs.extend([np.core.multiarray._reconstruct, np.ndarray, np.dtype])
+    if hasattr(torch.serialization, "add_safe_globals") and safe_objs:
+        torch.serialization.add_safe_globals(safe_objs)
+except Exception:
+    pass
+
 from smsdt.data.video_dataset import EvalClipDataset
 from smsdt.models.clip_encoder import CLIPFrameEncoder, CLIP_MEAN, CLIP_STD
 from smsdt.models.smsdt import SMSDT
 from smsdt.models.smsdt_v2 import SMSDTv2
+from smsdt.models.smsdt_v3 import SMSDTv3
 from smsdt.train_v2 import get_clip_normalize
 
 
@@ -95,7 +108,10 @@ def boot_ci(y_true, y_scores, n=1000, seed=42):
 
 def load_model(ckpt_path: str, device: torch.device):
     """Load S-MSDT v1 or v2 model from checkpoint with robust dictionary extraction."""
-    ckpt = torch.load(ckpt_path, map_location="cpu")
+    try:
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    except TypeError:
+        ckpt = torch.load(ckpt_path, map_location="cpu")
     cfg = ckpt.get("cfg", {}) if isinstance(ckpt, dict) else {}
 
     # Extract state dict from various checkpoint formats
@@ -131,10 +147,32 @@ def load_model(ckpt_path: str, device: torch.device):
         cleaned[k_clean] = v
     state_dict = cleaned
 
-    # Detect v1 vs v2 architecture
-    is_v2 = any("encoder.vit" in k for k in state_dict.keys()) or cfg.get("stage") is not None
+    # Detect v3 vs v2 vs v1 architecture
+    is_v3 = any(k.startswith("res.") or k.startswith("readout.g_scale") or k.startswith("readout.lse") for k in state_dict.keys()) or cfg.get("stage") == "stage_c"
+    is_v2 = (any("encoder.vit" in k for k in state_dict.keys()) or cfg.get("stage") is not None) and not is_v3
 
-    if is_v2:
+    if is_v3:
+        model_cfg = cfg.get("model", {})
+        enc = CLIPFrameEncoder(
+            name=model_cfg.get("backbone", "openai/clip-vit-large-patch14"),
+            tune=model_cfg.get("tune", "layernorm"),
+            grad_ckpt=False,
+        )
+        model = SMSDTv3(
+            encoder=enc,
+            dim=model_cfg.get("dim", 384),
+            depth=model_cfg.get("depth", 2),
+            heads=model_cfg.get("heads", 6),
+            max_frames=model_cfg.get("max_frames", 16),
+            grid=model_cfg.get("grid", 16),
+            n_queries=model_cfg.get("n_queries", 4),
+            r0=model_cfg.get("r0", 3.0),
+            topk_frac=model_cfg.get("topk_frac", 0.05),
+            init_bias=model_cfg.get("init_bias", -4.0),
+        )
+        norm_fn = get_clip_normalize()
+        model_type = "v3"
+    elif is_v2:
         model_cfg = cfg.get("model", {})
         enc = CLIPFrameEncoder(
             name=model_cfg.get("backbone", "openai/clip-vit-large-patch14"),
@@ -186,6 +224,8 @@ def evaluate_dataset(model, ds, device, batch_size=4, eval_thresh=None, calib_pa
     video_scores_mean, video_logits_mean, video_scores_top50 = [], [], []
     clip_scores_all, clip_labels_all = [], []
 
+    is_v3 = isinstance(model, SMSDTv3) or getattr(model, "has_prior", hasattr(model, "readout") and hasattr(model.readout, "prior_gain"))
+
     with torch.no_grad():
         with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device.type == "cuda")):
             for batch in loader:
@@ -193,11 +233,30 @@ def evaluate_dataset(model, ds, device, batch_size=4, eval_thresh=None, calib_pa
                 y = batch["label"].cpu().numpy()
                 vids = batch["video_id"]
                 meths = batch["method"]
+                prior = batch.get("prior", None)
 
                 B, K, T, C, H, W = frames.shape
                 frames_flat = frames.view(B * K, T, C, H, W)
+                if prior is not None:
+                    prior_flat = prior.to(device, non_blocking=True).view(B * K, T, -1)
+                else:
+                    prior_flat = None
 
-                logits, _ = model(frames_flat)
+                # Process in chunks of max 16 clips to eliminate GPU OOM spikes
+                chunk_size = 16
+                sub_logits = []
+                for start_idx in range(0, B * K, chunk_size):
+                    end_idx = min(start_idx + chunk_size, B * K)
+                    c_frames = frames_flat[start_idx:end_idx]
+                    c_prior = prior_flat[start_idx:end_idx] if prior_flat is not None else None
+                    if is_v3:
+                        out = model(c_frames, prior=c_prior)
+                    else:
+                        out = model(c_frames)
+                    logits_chunk = out[0] if isinstance(out, (tuple, list)) else out
+                    sub_logits.append(logits_chunk)
+
+                logits = torch.cat(sub_logits, dim=0)
                 probs = torch.sigmoid(logits).view(B, K).float().cpu().numpy()
                 logits_np = logits.view(B, K).float().cpu().numpy()
 
@@ -584,7 +643,8 @@ def main():
             print("  * Auto-detected Phase A (Stage A) checkpoint -> evaluating with T=1 frame")
         else:
             actual_T = int(cfg.get("data", {}).get("frames_per_clip", 8))
-            print(f"  * Auto-detected Phase B (Stage B) checkpoint -> evaluating with T={actual_T} frames")
+            stage_name = cfg.get("stage", "video")
+            print(f"  * Auto-detected {stage_name.upper()} checkpoint -> evaluating with T={actual_T} frames")
     else:
         actual_T = args.T
 
