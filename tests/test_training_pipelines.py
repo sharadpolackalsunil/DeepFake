@@ -184,3 +184,37 @@ def test_smsdt_v3_training_loop(shared_encoder):
     metrics = evaluate_metrics(model, val_loader, device=device, top_k_ratio=1.0)
     assert "auc" in metrics
 
+
+def test_eval_cross_load_model(shared_encoder, tmp_path):
+    """Test that eval_cross.load_model correctly identifies and instantiates GenD, v2, and v3."""
+    from smsdt.eval_cross import load_model
+
+    # 1. Test GenD checkpoint
+    gend_model = GenDModel()
+    gend_model.encoder = shared_encoder
+    gend_ckpt_path = str(tmp_path / "gend.pt")
+    torch.save({"model": gend_model.state_dict(), "cfg": {"stage": "gend_ours"}}, gend_ckpt_path)
+
+    loaded_gend, mtype_gend, norm_gend = load_model(gend_ckpt_path, device=torch.device("cpu"))
+    assert mtype_gend == "gend"
+    assert isinstance(loaded_gend, GenDModel)
+
+    # 2. Test SMSDTv2 checkpoint
+    v2_model = SMSDTv2(encoder=shared_encoder, dim=384, heads=6, depth=1)
+    v2_ckpt_path = str(tmp_path / "v2.pt")
+    torch.save({"model": v2_model.state_dict(), "cfg": {"stage": "stage_b", "model": {"dim": 384, "heads": 6, "depth": 1}}}, v2_ckpt_path)
+
+    loaded_v2, mtype_v2, norm_v2 = load_model(v2_ckpt_path, device=torch.device("cpu"))
+    assert mtype_v2 == "v2"
+    assert isinstance(loaded_v2, SMSDTv2)
+
+    # 3. Test SMSDTv3 checkpoint
+    v3_model = SMSDTv3(encoder=shared_encoder, dim=384, heads=6, depth=1, max_frames=2)
+    v3_ckpt_path = str(tmp_path / "v3.pt")
+    torch.save({"model": v3_model.state_dict(), "cfg": {"stage": "stage_c", "model": {"dim": 384, "heads": 6, "depth": 1, "max_frames": 2}}}, v3_ckpt_path)
+
+    loaded_v3, mtype_v3, norm_v3 = load_model(v3_ckpt_path, device=torch.device("cpu"))
+    assert mtype_v3 == "v3"
+    assert isinstance(loaded_v3, SMSDTv3)
+
+
