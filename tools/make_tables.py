@@ -77,14 +77,15 @@ def generate_experiment_matrix(
     scores_dir: str = "results/scores",
     calib_dir: str = "results/calib"
 ) -> pd.DataFrame:
-    """Scan score directory and generate master experiment matrix across all models."""
-    run_dirs = [d for d in glob.glob(os.path.join(scores_dir, "*")) if os.path.isdir(d)]
-    
+    """Scan score directory and generate master experiment matrix across all models.
+    Supports both subdirectories (scores_dir/run_name/*.csv) and flat files (scores_dir/run_name_dataset.csv).
+    """
     records = []
     
+    # 1. Check for run subdirectories
+    run_dirs = [d for d in glob.glob(os.path.join(scores_dir, "*")) if os.path.isdir(d)]
     for rdir in run_dirs:
         run_name = os.path.basename(rdir)
-        # Parse model, seed, date from directory name: e.g., smsdt_s_seed1_20261109
         parts = run_name.split("_")
         seed = 1
         for p in parts:
@@ -94,7 +95,6 @@ def generate_experiment_matrix(
                 except ValueError:
                     pass
                     
-        # Match calibration file if available
         calib_file = os.path.join(calib_dir, f"{run_name}.json")
         tau_val = 0.50
         if os.path.exists(calib_file):
@@ -105,14 +105,12 @@ def generate_experiment_matrix(
             except Exception:
                 pass
                 
-        # Evaluate each score CSV inside run dir
         csvs = glob.glob(os.path.join(rdir, "*.csv"))
         row = {
             "run_name": run_name,
             "seed": seed,
             "tau_val": tau_val
         }
-        
         for cpath in csvs:
             dname = os.path.splitext(os.path.basename(cpath))[0]
             try:
@@ -122,15 +120,73 @@ def generate_experiment_matrix(
                 row[f"{dname}_hter"] = metrics["hter_val"]
                 row[f"{dname}_gap_g"] = metrics["gap_g"]
                 row[f"{dname}_tpr5"] = metrics["tpr_5fpr"]
-                
                 if dname in ["ffpp", "ffpp_c23"]:
                     row["ffpp_pure_macro_auc"] = compute_pure_ffpp_macro_auc(df)
             except Exception as e:
                 row[f"{dname}_err"] = str(e)
-                
         records.append(row)
-        
-    return pd.DataFrame(records)
+
+    # 2. Check for flat score files (e.g. gend_ours_seed1_celebdf.csv)
+    flat_csvs = glob.glob(os.path.join(scores_dir, "*.csv"))
+    flat_groups = {}
+    for cpath in flat_csvs:
+        fname = os.path.splitext(os.path.basename(cpath))[0]
+        # Match pattern: <model>_seed<seed>_<dataset>
+        parts = fname.split("_")
+        seed_idx = -1
+        for idx, p in enumerate(parts):
+            if p.startswith("seed"):
+                seed_idx = idx
+                break
+        if seed_idx != -1 and seed_idx + 1 < len(parts):
+            run_name = "_".join(parts[:seed_idx + 1])
+            dname = "_".join(parts[seed_idx + 1:])
+            flat_groups.setdefault(run_name, []).append((dname, cpath))
+
+    for run_name, file_list in flat_groups.items():
+        parts = run_name.split("_")
+        seed = 1
+        for p in parts:
+            if p.startswith("seed"):
+                try:
+                    seed = int(p.replace("seed", ""))
+                except ValueError:
+                    pass
+        calib_file = os.path.join(calib_dir, f"{run_name}.json")
+        tau_val = 0.50
+        if os.path.exists(calib_file):
+            try:
+                with open(calib_file) as f:
+                    cdata = json.load(f)
+                    tau_val = float(cdata.get("youden_tau", 0.50))
+            except Exception:
+                pass
+        row = {
+            "run_name": run_name,
+            "seed": seed,
+            "tau_val": tau_val
+        }
+        for dname, cpath in file_list:
+            try:
+                df = pd.read_csv(cpath)
+                metrics = compute_dataset_metrics(df, tau_val=tau_val)
+                row[f"{dname}_auc"] = metrics["auc"]
+                row[f"{dname}_hter"] = metrics["hter_val"]
+                row[f"{dname}_gap_g"] = metrics["gap_g"]
+                row[f"{dname}_tpr5"] = metrics["tpr_5fpr"]
+                if dname in ["ffpp", "ffpp_c23"]:
+                    row["ffpp_pure_macro_auc"] = compute_pure_ffpp_macro_auc(df)
+            except Exception as e:
+                row[f"{dname}_err"] = str(e)
+        records.append(row)
+
+    df_out = pd.DataFrame(records)
+    if "run_name" in df_out.columns:
+        df_out = df_out.rename(columns={"run_name": "Model"})
+    return df_out
+
+
+build_experiment_matrix = generate_experiment_matrix
 
 
 def main():

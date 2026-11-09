@@ -29,6 +29,7 @@ except Exception:
 
 from smsdt.data.video_dataset import EvalClipDataset
 from smsdt.models.clip_encoder import CLIPFrameEncoder, CLIP_MEAN, CLIP_STD
+from smsdt.models.gend import GenDModel
 from smsdt.models.smsdt import SMSDT
 from smsdt.models.smsdt_v2 import SMSDTv2
 from smsdt.models.smsdt_v3 import SMSDTv3
@@ -147,9 +148,10 @@ def load_model(ckpt_path: str, device: torch.device):
         cleaned[k_clean] = v
     state_dict = cleaned
 
-    # Detect v3 vs v2 vs v1 architecture
+    # Detect v3 vs GenD vs v2 vs v1 architecture
     is_v3 = any(k.startswith("res.") or k.startswith("readout.g_scale") or k.startswith("readout.lse") for k in state_dict.keys()) or cfg.get("stage") == "stage_c"
-    is_v2 = (any("encoder.vit" in k for k in state_dict.keys()) or cfg.get("stage") is not None) and not is_v3
+    is_gend = cfg.get("stage") == "gend_ours" or cfg.get("model", {}).get("type") == "gend" or ("head.weight" in state_dict and "proj.0.weight" not in state_dict and not is_v3)
+    is_v2 = (any("encoder.vit" in k for k in state_dict.keys()) or cfg.get("stage") is not None) and not is_v3 and not is_gend
 
     if is_v3:
         model_cfg = cfg.get("model", {})
@@ -172,6 +174,15 @@ def load_model(ckpt_path: str, device: torch.device):
         )
         norm_fn = get_clip_normalize()
         model_type = "v3"
+    elif is_gend:
+        model_cfg = cfg.get("model", {})
+        model = GenDModel(
+            name=model_cfg.get("backbone", "openai/clip-vit-large-patch14"),
+            tune=model_cfg.get("tune", "layernorm"),
+            normalize_inputs=model_cfg.get("normalize_inputs", True),
+        )
+        norm_fn = get_clip_normalize()
+        model_type = "gend"
     elif is_v2:
         model_cfg = cfg.get("model", {})
         enc = CLIPFrameEncoder(
