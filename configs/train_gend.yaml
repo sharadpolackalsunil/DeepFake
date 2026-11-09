@@ -49,3 +49,4 @@ train:
   val_interval: 1
 
 output_dir: outputs/checkpoints_gend_ours
+

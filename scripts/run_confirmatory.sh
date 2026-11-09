@@ -53,3 +53,4 @@ echo "Regenerating Master Experiment Tables..."
 python -m tools.make_tables
 
 echo "Confirmatory Evaluation Complete."
+

@@ -32,3 +32,4 @@ Example:
    - FF++ per-method evaluations compare fakes against `real_source == 'ffpp_youtube'` only ($N=140$).
    - DFD evaluations compare DFD fakes against `real_source == 'dfd_actor'` only ($N=243$).
    - Mixed-negative numbers (combining multiple sources) are clearly labeled as `mixed`.
+

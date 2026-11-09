@@ -26,3 +26,4 @@ python tools/overlay_landmarks.py
 echo "======================================================================"
 echo "Reproduction complete. Output tables in results/tables/ and figures in results/figs/."
 echo "======================================================================"
+
