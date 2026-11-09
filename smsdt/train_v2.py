@@ -15,6 +15,7 @@ import torch.nn as nn
 from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader
 from torchvision import transforms
+from typing import Optional
 
 import collections
 from tqdm import tqdm
@@ -84,7 +85,7 @@ def evaluate(model, loader, device, max_videos=None):
     return float(roc_auc_score(all_labels, all_preds))
 
 
-def train_v2(cfg_path: str, resume: bool = True):
+def train_v2(cfg_path: str, resume: bool = True, seed: Optional[int] = None, output_dir_override: Optional[str] = None):
     with open(cfg_path) as f:
         cfg = yaml.safe_load(f)
 
@@ -92,11 +93,28 @@ def train_v2(cfg_path: str, resume: bool = True):
     train_cfg = cfg["train"]
     data_cfg = cfg["data"]
     model_cfg = cfg["model"]
-    output_dir = cfg.get("output_dir", f"outputs/checkpoints_v2_{stage}")
+    
+    # Handle random seed for reproducible multi-seed evaluation
+    if seed is not None:
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+            
+    base_output_dir = cfg.get("output_dir", f"outputs/checkpoints_v2_{stage}")
+    if output_dir_override:
+        output_dir = output_dir_override
+    elif seed is not None:
+        output_dir = os.path.join(base_output_dir, f"seed{seed}")
+    else:
+        output_dir = base_output_dir
+        
     os.makedirs(output_dir, exist_ok=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"=== Starting S-MSDTv2 Training [{stage.upper()}] on {device} ===")
+    seed_str = f" [Seed {seed}]" if seed is not None else ""
+    print(f"=== Starting S-MSDTv2 Training [{stage.upper()}]{seed_str} on {device} ===")
+    print(f"Checkpoints will be saved to: {output_dir}")
 
     # 1. Build Model
     encoder = CLIPFrameEncoder(
@@ -407,6 +425,8 @@ def train_v2(cfg_path: str, resume: bool = True):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True, help="Path to Stage A or Stage B yaml config")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed (e.g. 1 to 5) to isolate checkpoint directories")
+    parser.add_argument("--output-dir", type=str, default=None, help="Explicit output directory override")
     parser.add_argument("--from-scratch", action="store_true", help="Start training from scratch without resuming")
     args = parser.parse_args()
-    train_v2(args.config, resume=not args.from_scratch)
+    train_v2(args.config, resume=not args.from_scratch, seed=args.seed, output_dir_override=args.output_dir)
