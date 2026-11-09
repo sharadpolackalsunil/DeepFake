@@ -45,10 +45,10 @@ train:
   lambda_mask: 0.5
   ema_decay: 0.999
   precision: bfloat16
-  num_workers: 4
+  num_workers: 0
   pin_memory: true
   persistent_workers: false
-  prefetch_factor: 2
+  prefetch_factor: null
   val_batch_size: 8
   val_workers: 0
   val_start_epoch: 5

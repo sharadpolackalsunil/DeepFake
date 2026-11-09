@@ -23,7 +23,7 @@ from smsdt.train import cosine_with_warmup
 from smsdt.train_v2 import save_checkpoint_atomic, get_clip_normalize
 
 
-def train_gend(cfg_path: str, resume: bool = True, seed: Optional[int] = None, output_dir_override: Optional[str] = None):
+def train_gend(cfg_path: str, resume: bool = True, seed: Optional[int] = None, output_dir_override: Optional[str] = None, workers_override: Optional[int] = None):
     with open(cfg_path) as f:
         cfg = yaml.safe_load(f)
 
@@ -95,7 +95,7 @@ def train_gend(cfg_path: str, resume: bool = True, seed: Optional[int] = None, o
         normalize=norm_fn,
     )
 
-    workers = int(train_cfg.get("num_workers", 4))
+    workers = workers_override if workers_override is not None else int(train_cfg.get("num_workers", 0))
     train_loader = DataLoader(
         train_ds,
         batch_size=batch_pairs,
@@ -273,7 +273,8 @@ if __name__ == "__main__":
     parser.add_argument("--config", default="configs/train_gend.yaml")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--output-dir", type=str, default=None)
+    parser.add_argument("--workers", type=int, default=None, help="Override number of DataLoader workers (e.g. 0 for Windows)")
     parser.add_argument("--no-resume", action="store_true")
     args = parser.parse_args()
-    train_gend(args.config, resume=not args.no_resume, seed=args.seed, output_dir_override=args.output_dir)
+    train_gend(args.config, resume=not args.no_resume, seed=args.seed, output_dir_override=args.output_dir, workers_override=args.workers)
 

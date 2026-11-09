@@ -9,6 +9,7 @@ import os
 import csv
 import random
 from collections import defaultdict
+import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -82,14 +83,9 @@ class VideoStore:
         return None
 
     def close(self):
-        """Explicitly release Windows memory mapping file handles to prevent OS commit leaks."""
-        if self._frames is not None:
-            if hasattr(self._frames, "_mmap") and self._frames._mmap is not None:
-                try:
-                    self._frames._mmap.close()
-                except Exception:
-                    pass
-            self._frames = None
+        """Release array references to allow GC to cleanly deallocate memmap objects."""
+        self._frames = None
+        self.fidx = None
 
 
 def contiguous_starts(fidx, T, stride):
@@ -216,12 +212,14 @@ class PairedClipDataset(Dataset):
                 real_lmks_sel = lmks[ri[sel]].copy().astype(np.float32) if lmks is not None else None
 
                 # Difference-derived manipulation mask (D1 fix)
-                # Compute difference in uint8 to eliminate 25MB+ float32 transient memory allocations per item
-                diff_u8 = (np.maximum(fake_u8, real_u8) - np.minimum(fake_u8, real_u8)).max(axis=-1)  # (T, H, W)
-                diff = diff_u8.astype(np.float32)
-                p95 = np.percentile(diff, 95)
-                diff_norm = diff / p95 if p95 > 1e-3 else diff
-                fake_mask = (diff_norm > 0.15).astype(np.float32)
+                # Compute difference directly using cv2.absdiff without transient float allocations
+                diff_u8 = cv2.absdiff(fake_u8, real_u8).max(axis=-1)  # (T, H, W) uint8
+                p95 = float(np.percentile(diff_u8, 95))
+                if p95 > 1e-3:
+                    diff_norm = diff_u8.astype(np.float32) / p95
+                    fake_mask = (diff_norm > 0.15).astype(np.float32)
+                else:
+                    fake_mask = (diff_u8 > 15).astype(np.float32)
                 method = fake["method"]
         finally:
             rs.close()

@@ -85,7 +85,7 @@ def evaluate(model, loader, device, max_videos=None):
     return float(roc_auc_score(all_labels, all_preds))
 
 
-def train_v2(cfg_path: str, resume: bool = True, seed: Optional[int] = None, output_dir_override: Optional[str] = None):
+def train_v2(cfg_path: str, resume: bool = True, seed: Optional[int] = None, output_dir_override: Optional[str] = None, workers_override: Optional[int] = None):
     with open(cfg_path) as f:
         cfg = yaml.safe_load(f)
 
@@ -186,7 +186,7 @@ def train_v2(cfg_path: str, resume: bool = True, seed: Optional[int] = None, out
         methods=val_methods,
     )
 
-    workers = int(train_cfg.get("num_workers", 4))
+    workers = workers_override if workers_override is not None else int(train_cfg.get("num_workers", 0))
     train_loader = DataLoader(
         train_ds,
         batch_size=train_cfg.get("batch_pairs", 8),
@@ -428,5 +428,6 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=None, help="Random seed (e.g. 1 to 5) to isolate checkpoint directories")
     parser.add_argument("--output-dir", type=str, default=None, help="Explicit output directory override")
     parser.add_argument("--from-scratch", action="store_true", help="Start training from scratch without resuming")
+    parser.add_argument("--workers", type=int, default=None, help="Override number of DataLoader workers (e.g. 0 for Windows)")
     args = parser.parse_args()
-    train_v2(args.config, resume=not args.from_scratch, seed=args.seed, output_dir_override=args.output_dir)
+    train_v2(args.config, resume=not args.from_scratch, seed=args.seed, output_dir_override=args.output_dir, workers_override=args.workers)
