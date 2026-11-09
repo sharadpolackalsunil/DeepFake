@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from typing import Optional
 
-from smsdt.data.video_dataset import PairedClipDataset, EvalClipDataset, paired_collate
+from smsdt.data.video_dataset import PairedClipDataset, EvalClipDataset, paired_collate, Augment
 from smsdt.eval import evaluate as evaluate_metrics
 from smsdt.models.gend import GenDModel, slerp
 from smsdt.train import cosine_with_warmup
@@ -78,18 +78,21 @@ def train_gend(cfg_path: str, resume: bool = True, seed: Optional[int] = None, o
 
     # 2. Dataloaders
     norm_fn = get_clip_normalize()
+    aug = Augment(
+        size=int(data_cfg.get("crop_size", 224)),
+        jpeg=tuple(data_cfg.get("jpeg_quality", [50, 100])),
+        p_jpeg=float(data_cfg.get("p_jpeg", 0.3)),
+        p_blur=float(data_cfg.get("p_blur", 0.1)),
+        p_flip=float(data_cfg.get("p_flip", 0.5)),
+    )
     train_ds = PairedClipDataset(
         index_csv=data_cfg.get("index", "data/splits/index.csv"),
         store_root=data_cfg.get("store", "data/store"),
         T=1,
         stride=1,
-        split="train",
         p_sbi=0.0,
-        jpeg_quality=tuple(data_cfg.get("jpeg_quality", [50, 100])),
-        p_jpeg=data_cfg.get("p_jpeg", 0.3),
-        p_blur=data_cfg.get("p_blur", 0.1),
-        p_flip=data_cfg.get("p_flip", 0.5),
-        norm_fn=norm_fn,
+        augment=aug,
+        normalize=norm_fn,
     )
 
     train_loader = DataLoader(
@@ -107,11 +110,11 @@ def train_gend(cfg_path: str, resume: bool = True, seed: Optional[int] = None, o
     val_ds = EvalClipDataset(
         index_csv=data_cfg.get("index", "data/splits/index.csv"),
         store_root=data_cfg.get("store", "data/store"),
+        split="val",
+        K=int(data_cfg.get("val_k", 8)),
         T=1,
         stride=1,
-        K=int(data_cfg.get("val_k", 8)),
-        split="val",
-        norm_fn=norm_fn,
+        normalize=norm_fn,
         methods=data_cfg.get("val_methods", ["Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures", "FaceShifter"]),
     )
 
@@ -120,7 +123,7 @@ def train_gend(cfg_path: str, resume: bool = True, seed: Optional[int] = None, o
         batch_size=int(train_cfg.get("val_batch_size", 16)),
         shuffle=False,
         num_workers=int(train_cfg.get("val_workers", 0)),
-        pin_memory=torch.cuda.is_available(),
+        pin_memory=False,
     )
 
     total_steps = (len(train_loader) // grad_accum) * epochs
@@ -169,22 +172,32 @@ def train_gend(cfg_path: str, resume: bool = True, seed: Optional[int] = None, o
 
     for epoch in range(start_epoch, epochs + 1):
         model.train()
+        train_ds.set_epoch(epoch)
         total_loss, total_bce, total_align, total_unif = 0.0, 0.0, 0.0, 0.0
         pbar = tqdm(train_loader, desc=f"Epoch {epoch:02d}/{epochs:02d} [GenD]", total=len(train_loader))
 
         for step, batch in enumerate(pbar):
-            frames = batch["frames"].squeeze(2).to(device)  # (2B, 3, 224, 224)
+            frames = batch["frames"].to(device)
+            if frames.ndim == 5 and frames.shape[1] == 1:
+                frames = frames.squeeze(1)  # (2B, 3, 224, 224)
             labels = batch["label"].to(device)             # (2B,)
 
             # Slerp latent interpolation between paired items
             do_slerp = (np.random.rand() < slerp_prob) and (frames.size(0) % 2 == 0)
             slerp_t = float(np.random.beta(0.5, 0.5)) if do_slerp else None
+            pair_frames = None
+            target_labels = labels.float()
+            if do_slerp:
+                idx = torch.arange(frames.size(0), device=device)
+                paired_idx = idx ^ 1
+                pair_frames = frames[paired_idx]
+                target_labels = (1.0 - slerp_t) * labels.float() + slerp_t * labels[paired_idx].float()
 
             with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=torch.cuda.is_available()):
-                logits, embeddings = model(frames)
+                logits, embeddings = model(frames, slerp_t=slerp_t, pair_x=pair_frames)
                 loss_dict = model.compute_loss(
                     logits=logits,
-                    labels=labels,
+                    labels=target_labels,
                     embeddings=embeddings,
                     lambda_align=lambda_align,
                     lambda_unif=lambda_unif,
