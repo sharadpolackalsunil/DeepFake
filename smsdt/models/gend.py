@@ -124,3 +124,4 @@ class GenDModel(nn.Module):
             "loss_align": align,
             "loss_unif": unif
         }
+

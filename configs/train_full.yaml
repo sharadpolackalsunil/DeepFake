@@ -60,3 +60,4 @@ train:
   val_interval: 1
 
 output_dir: outputs/checkpoints_smsdt_full
+

@@ -732,27 +732,61 @@ def main():
     # Render threshold sensitivity sweep table
     print_threshold_sweep(res, f"{args.dataset_name} [{args.split.upper()}]", thresholds=args.thresholds)
 
-    # Save per-video scores if requested
+    # Save per-video scores if requested adhering to pre-registered schema
     if args.save_scores:
         os.makedirs(os.path.dirname(args.save_scores) if os.path.dirname(args.save_scores) else ".", exist_ok=True)
         with open(args.save_scores, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["video_id", "method", "label", "raw_score", "mean_logit", "calib_score", "calib_pred"])
-            p_calib_arr = res.get("calib_probs")
-            preds_calib_arr = res.get("preds_calib")
+            writer.writerow([
+                "video_id", "dataset", "split", "label", "real_source",
+                "manipulation", "cluster_id", "n_clips", "logit_mean",
+                "score_mean", "score_topk50"
+            ])
             for i in range(len(res["video_ids"])):
-                c_score = f"{p_calib_arr[i]:.4f}" if p_calib_arr is not None else ""
-                c_pred = str(int(preds_calib_arr[i])) if preds_calib_arr is not None else ""
+                v_id = str(res["video_ids"][i])
+                lbl = int(res["labels"][i])
+                m_name = str(res["methods"][i])
+                
+                # Assign real_source vs manipulation
+                if lbl == 0:
+                    manip_str = ""
+                    if "celeb" in args.dataset_name.lower():
+                        real_src = "celebdf_real"
+                    elif "dfd" in args.dataset_name.lower() or "deepfakedetection" in m_name.lower():
+                        real_src = "dfd_actor"
+                    else:
+                        real_src = "ffpp_youtube"
+                else:
+                    real_src = ""
+                    manip_str = m_name
+                    
+                # Derive cluster_id for paired cluster bootstrap
+                if "id" in v_id and "_" in v_id and v_id.startswith("id"):
+                    cluster_id = v_id.split("_")[0]  # Celeb-DF celebrity id, e.g. id0
+                elif "__" in v_id:
+                    cluster_id = v_id.split("__")[0]  # DFD actor pair, e.g. DFD_01_02
+                elif "_" in v_id:
+                    parts = v_id.split("_")
+                    cluster_id = parts[1] if len(parts) > 1 else v_id
+                else:
+                    cluster_id = v_id
+
+                top50_score = f"{res['scores_top50'][i]:.4f}" if "scores_top50" in res and i < len(res["scores_top50"]) else ""
+                
                 writer.writerow([
-                    res["video_ids"][i],
-                    res["methods"][i],
-                    int(res["labels"][i]),
-                    f"{res['scores_mean'][i]:.4f}",
+                    v_id,
+                    args.dataset_name,
+                    args.split,
+                    lbl,
+                    real_src,
+                    manip_str,
+                    cluster_id,
+                    args.K,
                     f"{res['logits_mean'][i]:.4f}",
-                    c_score,
-                    c_pred,
+                    f"{res['scores_mean'][i]:.4f}",
+                    top50_score
                 ])
-        print(f"Exported per-video scores to {args.save_scores}")
+        print(f"Exported pre-registered per-video scores to {args.save_scores}")
 
     # Append to output CSV
     os.makedirs(os.path.dirname(args.out_csv), exist_ok=True)

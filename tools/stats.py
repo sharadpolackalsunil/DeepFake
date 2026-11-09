@@ -203,3 +203,4 @@ def paired_cluster_boot_dauc(
         "n_samples": int(n_samples),
         "boot_sd": float(np.std(deltas))
     }
+

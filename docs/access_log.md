@@ -19,3 +19,4 @@ This log tracks external dataset access requests, contacts, verification dates, 
 1. Any dataset not obtained and verified by end of **Day 7** is dropped and stated as such in the paper.
 2. At least 2 confirmatory datasets ($K_c \ge 2$) are required for confirmatory claims.
 3. If $K_c < 2$, all H1–H3 claims are strictly designated as **exploratory**.
+

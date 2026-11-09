@@ -28,3 +28,4 @@ Criteria evaluated across recent (2024–2026) literature:
   - **RQ1 (Architectural Efficacy):** Matched-baseline study on whether temporal blocks and forensic streams yield statistically sound gains over LN-tuned CLIP.
   - **RQ2 (Threshold Transfer):** First comprehensive audit of validation-frozen operating point transfer on CLIP video deepfake detectors with explicit per-source FPR/FNR decomposition.
   - **RQ3 (Label-Free Repair):** Systematic evaluation of entropy-minimization TTA and EM prior-shift correction with explicit collapse characterization.
+
