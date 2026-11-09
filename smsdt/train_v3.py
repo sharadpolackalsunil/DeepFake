@@ -58,7 +58,7 @@ def save_checkpoint_atomic(data: dict, filepath: str):
 from smsdt.eval import evaluate
 
 
-def train_v3(cfg_path: str, resume: bool = True, seed: Optional[int] = None, output_dir_override: Optional[str] = None):
+def train_v3(cfg_path: str, resume: bool = True, seed: Optional[int] = None, output_dir_override: Optional[str] = None, workers_override: Optional[int] = None):
     with open(cfg_path) as f:
         cfg = yaml.safe_load(f)
 
@@ -163,7 +163,7 @@ def train_v3(cfg_path: str, resume: bool = True, seed: Optional[int] = None, out
         mask_grid=model_cfg.get("grid", 16),
     )
 
-    workers = int(train_cfg.get("num_workers", 8))
+    workers = workers_override if workers_override is not None else int(train_cfg.get("num_workers", 0))
     train_loader = DataLoader(
         train_dataset,
         batch_size=train_cfg.get("batch_pairs", 8),
@@ -171,7 +171,7 @@ def train_v3(cfg_path: str, resume: bool = True, seed: Optional[int] = None, out
         num_workers=workers,
         collate_fn=paired_collate,
         pin_memory=train_cfg.get("pin_memory", True),
-        persistent_workers=train_cfg.get("persistent_workers", True) if workers > 0 else False,
+        persistent_workers=bool(train_cfg.get("persistent_workers", False)) if workers > 0 else False,
         prefetch_factor=train_cfg.get("prefetch_factor", 2) if workers > 0 else None,
         drop_last=True,
     )
@@ -420,7 +420,8 @@ if __name__ == "__main__":
     parser.add_argument("--config", default="configs/train_v3_stage_c.yaml")
     parser.add_argument("--seed", type=int, default=None, help="Random seed (e.g. 1 to 5) to isolate checkpoint directories")
     parser.add_argument("--output-dir", type=str, default=None, help="Explicit output directory override")
+    parser.add_argument("--workers", type=int, default=None, help="Override number of DataLoader workers (e.g. 0 for Windows)")
     parser.add_argument("--no-resume", action="store_true", help="Start from epoch 0 ignoring existing last.pt")
     args = parser.parse_args()
-    train_v3(args.config, resume=not args.no_resume, seed=args.seed, output_dir_override=args.output_dir)
+    train_v3(args.config, resume=not args.no_resume, seed=args.seed, output_dir_override=args.output_dir, workers_override=args.workers)
 
