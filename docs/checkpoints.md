@@ -81,10 +81,10 @@ This registry tracks the exact storage location, architecture specifications, pa
 | `gend_ours` | 2 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
 | `gend_ours` | 3 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
 | `smsdt_s` | 1 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
-| `smsdt_st` | 1 | 🔄 Next | 0 / 30 | — | — | — | — | Ready to launch |
+| `smsdt_st` | 1 | ✅ Completed | 30 / 30 | 0.9584 | ~1.2 GB | *pending eval* | *pending eval* | FF++ Macro Val AUC: 0.9584 (DF: 0.9959, F2F: 0.9815, FS: 0.9836, NT: 0.8572, FSht: 0.9710) |
 | `smsdt_st` | 2 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
 | `smsdt_st` | 3 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
-| `smsdt_full`| 1 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
+| `smsdt_full`| 1 | 🔄 Next | 0 / 30 | — | — | — | — | Ready to launch (Flagship SRM+DWT+LSE model) |
 | `smsdt_full`| 2 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
 | `smsdt_full`| 3 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
 
