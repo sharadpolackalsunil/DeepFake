@@ -13,13 +13,15 @@
 ## Table of Contents
 1. [Architectural Overview](#architectural-overview)
 2. [Multi-Phase Roadmap & Implementation Status Tracker](#multi-phase-roadmap--implementation-status-tracker)
-3. [Data Protocol & Stateless Balanced Fake Sampling](#data-protocol--stateless-balanced-fake-sampling)
-4. [Training Formulation, Two-Stage Progression & Loss Functions](#training-formulation-two-stage-progression--loss-functions)
-5. [Scientific Evaluation, Calibration & Testing Protocol](#scientific-evaluation-calibration--testing-protocol)
-6. [Live Training Results (Phase 1 Baseline)](#live-training-results-phase-1-baseline)
-7. [Hardware Configuration (NVIDIA RTX 5090)](#hardware-configuration-nvidia-rtx-5090)
-8. [Quick Start & Command Reference](#quick-start--command-reference)
-9. [Repository Structure](#repository-structure)
+3. [Master Model Checkpoint & Weights Registry](#master-model-checkpoint--weights-registry)
+4. [Phase 4: TMLR Empirical Research Study](#phase-4-tmlr-empirical-research-study)
+5. [Data Protocol & Stateless Balanced Fake Sampling](#data-protocol--stateless-balanced-fake-sampling)
+6. [Training Formulation, Two-Stage Progression & Loss Functions](#training-formulation-two-stage-progression--loss-functions)
+7. [Scientific Evaluation, Calibration & Testing Protocol](#scientific-evaluation-calibration--testing-protocol)
+8. [Live Training Results (Phase 1 Baseline)](#live-training-results-phase-1-baseline)
+9. [Hardware Configuration (NVIDIA RTX 5090)](#hardware-configuration-nvidia-rtx-5090)
+10. [Quick Start & Command Reference](#quick-start--command-reference)
+11. [Repository Structure](#repository-structure)
 
 ---
 
@@ -116,6 +118,40 @@ Following [`SOTA Roadmap`](docs/roadmap/SOTA_Roadmap.md) and the comprehensive s
   - **Celeb-DF v2 Zero-Shot Test Video AUC:** **0.8813** [95% CI: 0.8514–0.9094] (*New Project Record*).
   - **DFD Isolated Test Video AUC:** **0.8522** [95% CI: 0.8325–0.8696].
   - **Master Test Video AUC ($N=3,687$):** **0.8697** [95% CI: 0.8537–0.8858], **79.31% Accuracy @ 0.50**, **96.7% Precision**. Checkpoint: `outputs/checkpoints_v3_stage_c/best_ema.pt`.
+
+---
+
+## Master Model Checkpoint & Weights Registry
+
+An exhaustive index of all model checkpoints, parameter footprints, input temporal windows, and storage paths. See the detailed tracking registry in [**`docs/checkpoints.md`**](docs/checkpoints.md) and empirical logs in [**`research_v2.md`**](research_v2.md).
+
+| Model Identifier | Architecture Class | Total Weights | Trainable Weights | Frame Window | Checkpoint Directory | Best Checkpoint File | Configuration File |
+| :--- | :--- | :---: | :---: | :---: | :--- | :--- | :--- |
+| **`gend_ours`** | `GenDModel` | 303.18M | 103,425 (0.034%) | $T=1$ | `outputs/checkpoints_gend_ours/seed{seed}/` | `best_ema.pt` | [`configs/train_gend.yaml`](configs/train_gend.yaml) |
+| **`smsdt_s`** | `SMSDTv2` ($L=0$) | 303.18M | 103,425 (0.034%) | $T=1$ | `outputs/checkpoints_v2_stage_b/seed{seed}/` | `best_ema.pt` | [`configs/train_s.yaml`](configs/train_s.yaml) |
+| **`smsdt_st`** | `SMSDTv2` ($L=2$) | 311.54M | 8,474,881 (2.72%) | $T=8$ | `outputs/checkpoints_st/seed{seed}/` | `best_ema.pt` | [`configs/train_st.yaml`](configs/train_st.yaml) |
+| **`smsdt_full`** | `SMSDTv3` | 312.18M | 9,103,363 (2.92%) | $T=8$ | `outputs/checkpoints_v3_stage_c/seed{seed}/` | `best_ema.pt` | [`configs/train_full.yaml`](configs/train_full.yaml) |
+| **`smsdt_v1`** | `SMSDT` | 26.68M | 26,678,659 (100%) | $T=8$ | `outputs/checkpoints/` | `best_ema.pt` | [`configs/train.yaml`](configs/train.yaml) |
+
+### Checkpoint File Contents:
+Every saved checkpoint (`best_ema.pt` and `last.pt`) is an atomic dictionary:
+- `model`: Raw model state dictionary.
+- `model_ema`: Exponential Moving Average weights (decay $\beta=0.999$) used for evaluation.
+- `optimizer` & `scheduler`: Optimization state for seamless resumption (`--no-resume` flag to disable).
+- `cfg`: Complete training YAML configuration for automatic metadata and architecture recovery in [`smsdt/eval_cross.py`](smsdt/eval_cross.py).
+
+---
+
+## Phase 4: TMLR Empirical Research Study
+
+Targeting **Transactions on Machine Learning Research (TMLR)** via OpenReview (12-page main text). Formulates pre-registered hypotheses to evaluate module utility under strictly matched pipelines:
+
+1. **RQ1 (Module Utility):** Do spatio-temporal heads (`ST`) and forensic residual streams (`Full/v3`) statistically improve out-of-distribution detection on unseen datasets over single-frame LayerNorm tuning (`GenD` / `S`)?
+   - **Hypothesis H1:** Equivalent generalization ($|\Delta \text{AUC}| \le \delta=0.01$).
+2. **RQ2 (Operating Point Transfer):** How far does a validation-frozen threshold ($\tau_{\text{val}}$) degrade on unseen distributions?
+   - **Hypothesis H2:** Degradation gap $g = \text{HTER}(\tau_{\text{val}}) - \min_\tau \text{HTER}(\tau) \ge 0.05$ on at least one confirmatory dataset.
+3. **RQ3 (Test-Time Adaptation):** Can label-free entropy minimization (TTA) and Saerens EM prior correction repair operating point collapse?
+   - **Hypotheses H3a / H3b:** EM prior correction and LayerNorm TTA each reduce HTER by $\ge 0.03$.
 
 ---
 
@@ -367,6 +403,31 @@ python -m tools.eval_robustness --ckpt outputs/checkpoints_v3_stage_c/best_ema.p
 # Diagnostic Probes (Identity Memorization & Domain Shift)
 python -m tools.diag_identity_probe --ckpt outputs/checkpoints_v3_stage_c/best_ema.pt
 python -m tools.diag_domain_shift --ckpt outputs/checkpoints_v3_stage_c/best_ema.pt
+```
+
+### 5. Phase 4 TMLR Multi-Seed Suite (Matched Pipeline Evaluation)
+```powershell
+# 1. Train GenD Baseline (Seed 1, 2, 3)
+python -m smsdt.train_gend --config configs/train_gend.yaml --seed 1
+
+# 2. Train S-MSDT-S Spatial-Only Baseline (Seed 1, 2, 3)
+python -m smsdt.train_v2 --config configs/train_s.yaml --seed 1
+
+# 3. Train S-MSDT-ST Spatio-Temporal Model (Seed 1, 2, 3)
+python -m smsdt.train_v2 --config configs/train_st.yaml --seed 1
+
+# 4. Train S-MSDTv3 Full Proposed Architecture (Seed 1, 2, 3)
+python -m smsdt.train_v3 --config configs/train_full.yaml --seed 1
+
+# 5. Cross-Dataset Evaluation on Celeb-DF v2 & DFD
+python -m smsdt.eval_cross --ckpt outputs/checkpoints_gend_ours/seed1/best_ema.pt --index data/splits/celebdf_test.csv --store data/store_celebdf --split test --dataset-name "Celeb-DF-v2" --save-scores results/scores/gend_ours_seed1_celebdf.csv --fit-calib results/calib/gend_ours_seed1.json --ci
+python -m smsdt.eval_cross --ckpt outputs/checkpoints_gend_ours/seed1/best_ema.pt --index data/splits/index.csv --store data/store --split test --methods DeepFakeDetection --dataset-name "DFD" --save-scores results/scores/gend_ours_seed1_dfd.csv --calib results/calib/gend_ours_seed1.json --ci
+
+# 6. Auto-generate Master Experiment Matrix Table
+python tools/make_tables.py
+
+# 7. Pre-registered Statistical Testing & 10,000-resample Bootstrap
+python tools/stats.py --baseline results/scores/gend_ours_seed1_celebdf.csv --proposed results/scores/smsdt_full_seed1_celebdf.csv --n-boot 10000
 ```
 
 ---
