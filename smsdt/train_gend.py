@@ -261,3 +261,4 @@ if __name__ == "__main__":
     parser.add_argument("--no-resume", action="store_true")
     args = parser.parse_args()
     train_gend(args.config, resume=not args.no_resume, seed=args.seed, output_dir_override=args.output_dir)
+
