@@ -1,0 +1,53 @@
+# Controlled Baseline: S-MSDT-S (Single-frame LN-tuned CLIP)
+# Protocol: Matched baseline (No chaining A->B->C, starts directly from pretrained CLIP LN)
+
+stage: smsdt_s
+model:
+  type: smsdt_s
+  backbone: openai/clip-vit-large-patch14
+  tune: layernorm
+  grad_ckpt: true
+  dim: 384
+  depth: 0                   # 0 temporal blocks
+  use_residual: false        # No forensic stream
+  readout_type: linear       # Simple linear head
+
+data:
+  store: data/store
+  index: data/splits/index.csv
+  frames_per_clip: 1         # T=1
+  frame_stride: 1
+  crop_size: 224
+  norm: clip
+  p_sbi: 0.0
+  jpeg_quality: [50, 100]
+  p_jpeg: 0.3
+  p_blur: 0.1
+  p_flip: 0.5
+  val_k: 8
+  val_methods: ["Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures", "FaceShifter"]
+
+train:
+  epochs: 30
+  batch_pairs: 16            # Matched pairs per step
+  grad_accum: 1
+  lr_backbone_ln: 1.0e-4     # Matched LR
+  lr_head: 5.0e-4            # Matched head LR
+  weight_decay: 0.05
+  warmup_frac: 0.03
+  min_lr_ratio: 0.01
+  grad_clip: 1.0
+  label_smoothing: 0.05
+  lambda_mask: 0.0
+  ema_decay: 0.999
+  precision: bfloat16
+  num_workers: 4
+  pin_memory: true
+  persistent_workers: true
+  prefetch_factor: 2
+  val_batch_size: 16
+  val_workers: 0
+  val_start_epoch: 5
+  val_interval: 1
+
+output_dir: outputs/checkpoints_smsdt_s
