@@ -127,18 +127,19 @@ def train_gend(cfg_path: str, resume: bool = True, seed: Optional[int] = None, o
     )
 
     total_steps = (len(train_loader) // grad_accum) * epochs
-    warmup_steps = int(total_steps * train_cfg.get("warmup_frac", 0.03))
 
     optimizer = torch.optim.AdamW(param_groups, betas=(0.9, 0.999), eps=1e-8)
     scheduler = cosine_with_warmup(
         optimizer,
-        warmup_steps=warmup_steps,
         total_steps=total_steps,
-        min_ratio=train_cfg.get("min_lr_ratio", 0.01),
+        warmup_frac=float(train_cfg.get("warmup_frac", 0.03)),
+        min_ratio=float(train_cfg.get("min_lr_ratio", 0.01)),
     )
 
     ema_decay = train_cfg.get("ema_decay", 0.999)
     model_ema = copy.deepcopy(model)
+    for p in model_ema.parameters():
+        p.requires_grad = False
     model_ema.eval()
 
     val_start_epoch = int(train_cfg.get("val_start_epoch", 5))
