@@ -95,14 +95,15 @@ def train_gend(cfg_path: str, resume: bool = True, seed: Optional[int] = None, o
         normalize=norm_fn,
     )
 
+    workers = int(train_cfg.get("num_workers", 4))
     train_loader = DataLoader(
         train_ds,
         batch_size=batch_pairs,
         shuffle=True,
-        num_workers=int(train_cfg.get("num_workers", 4)),
+        num_workers=workers,
         pin_memory=train_cfg.get("pin_memory", True) and torch.cuda.is_available(),
-        persistent_workers=train_cfg.get("persistent_workers", True),
-        prefetch_factor=int(train_cfg.get("prefetch_factor", 2)),
+        persistent_workers=bool(train_cfg.get("persistent_workers", False)) if workers > 0 else False,
+        prefetch_factor=int(train_cfg.get("prefetch_factor", 2)) if workers > 0 else None,
         collate_fn=paired_collate,
         drop_last=True,
     )

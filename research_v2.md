@@ -135,3 +135,4 @@ Compiled via `tools/make_tables.py` into [`results/tables/experiment_matrix.csv`
    ```powershell
    python -m smsdt.train_v3 --config configs/train_full.yaml --seed 1
    ```
+

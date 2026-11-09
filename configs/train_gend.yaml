@@ -41,7 +41,7 @@ train:
   precision: bfloat16
   num_workers: 4
   pin_memory: true
-  persistent_workers: true
+  persistent_workers: false
   prefetch_factor: 2
   val_batch_size: 16
   val_workers: 0

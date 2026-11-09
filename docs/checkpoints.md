@@ -106,3 +106,4 @@ Every saved checkpoint (`best_ema.pt` and `last.pt`) is an atomic Python diction
 ```
 
 This guarantees bit-identical reproduction and allows `smsdt/eval_cross.py` to auto-detect architecture, temporal window size ($T$), backbone type, and normalizations directly from the file itself.
+
