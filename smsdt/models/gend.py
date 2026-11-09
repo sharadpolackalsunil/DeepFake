@@ -80,13 +80,15 @@ class GenDModel(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
+        *args,
         slerp_t: Optional[float] = None,
-        pair_x: Optional[torch.Tensor] = None
+        pair_x: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Forward pass.
         
         Args:
-            x: (B, 3, 224, 224) input frames
+            x: (B, 3, 224, 224) or (B, T, 3, 224, 224) input frames
             slerp_t: Optional interpolation factor for latent Slerp
             pair_x: Matching real/fake pair frames for Slerp
             
@@ -94,15 +96,29 @@ class GenDModel(nn.Module):
             logits: (B,) logit predictions
             l2_embeddings: (B, 1024) unit-normalized feature embeddings
         """
+        orig_5d = False
+        if x.ndim == 5:
+            orig_5d = True
+            B, T, C, H, W = x.shape
+            x = x.view(B * T, C, H, W)
+
         raw_feat, l2_feat = self.extract_features(x)
 
         if slerp_t is not None and pair_x is not None and self.training:
+            if pair_x.ndim == 5:
+                pair_x = pair_x.view(-1, pair_x.shape[-3], pair_x.shape[-2], pair_x.shape[-1])
             _, pair_l2 = self.extract_features(pair_x)
             l2_feat = slerp(l2_feat, pair_l2, slerp_t)
             raw_feat = l2_feat
 
         inp = l2_feat if self.normalize_inputs else raw_feat
         logit = self.head(inp).squeeze(-1)
+
+        if orig_5d:
+            logit = logit.view(B, T).mean(dim=1)
+            l2_feat = l2_feat.view(B, T, -1).mean(dim=1)
+            l2_feat = F.normalize(l2_feat, p=2, dim=-1)
+
         return logit, l2_feat
 
     def compute_loss(
