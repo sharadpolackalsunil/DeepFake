@@ -77,7 +77,7 @@ This registry tracks the exact storage location, architecture specifications, pa
 
 | Model | Seed | Training Status | Epochs Completed | Best Val AUC | Checkpoint Size | Celeb-DF AUC | DFD AUC | Notes |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| `gend_ours` | 1 | ✅ Completed | 30 / 30 | — | ~1.2 GB | *pending re-eval* | *pending re-eval* | Initial run evaluated with unmatched V2 loader; pending reload with GEND class |
+| `gend_ours` | 1 | ✅ Completed | 30 / 30 | 0.9047 (test) | ~1.2 GB | 0.8321 | 0.8776 | Reference GenD anchor: FF++ Test AUC 0.9047, Celeb-DF 0.8321, DFD 0.8776 |
 | `gend_ours` | 2 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
 | `gend_ours` | 3 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
 | `smsdt_s` | 1 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
