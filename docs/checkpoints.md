@@ -81,7 +81,7 @@ This registry tracks the exact storage location, architecture specifications, pa
 | `gend_ours` | 2 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
 | `gend_ours` | 3 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
 | `smsdt_s` | 1 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
-| `smsdt_st` | 1 | ✅ Completed | 30 / 30 | 0.9584 | ~1.2 GB | *pending eval* | *pending eval* | FF++ Macro Val AUC: 0.9584 (DF: 0.9959, F2F: 0.9815, FS: 0.9836, NT: 0.8572, FSht: 0.9710) |
+| `smsdt_st` | 1 | ✅ Completed | 30 / 30 | 0.9584 | ~1.2 GB | 0.8706 | 0.8682 | Spatio-temporal baseline: FF++ Test AUC 0.9604, Celeb-DF 0.8706, DFD 0.8682 |
 | `smsdt_st` | 2 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
 | `smsdt_st` | 3 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
 | `smsdt_full`| 1 | ✅ Completed | 30 / 30 | 0.9591 | ~1.2 GB | 0.8915 | 0.8604 | Flagship model (SRM+DWT+LSE): FF++ Test AUC 0.9631, Celeb-DF 0.8915, DFD 0.8604 |
