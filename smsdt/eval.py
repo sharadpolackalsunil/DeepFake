@@ -82,14 +82,14 @@ def compute_metrics(probs, labels):
     }
 
 
-def evaluate(model, loader, device, top_k_ratio=0.5, max_batches=None):
+def evaluate(model, loader, device, top_k_ratio=1.0, max_batches=None):
     """Run evaluation and compute frame-level and video-level metrics.
 
     Args:
         model: S-MSDT model
         loader: validation/test DataLoader
         device: "cuda" or "cpu"
-        top_k_ratio: fraction of highest-scoring chunks per video to average for video-level score
+        top_k_ratio: fraction of highest-scoring chunks per video to average (default: 1.0 = mean aggregation)
         max_batches: optional cap on number of batches to evaluate (None for full split)
 
     Returns:
@@ -193,6 +193,7 @@ def evaluate(model, loader, device, top_k_ratio=0.5, max_batches=None):
         v_labels = np.array(v_labels)
         metrics["video_level"] = compute_metrics(v_probs, v_labels)
         metrics["num_videos"] = len(video_dict)
+        metrics["aggregation"] = "mean" if top_k_ratio >= 0.99 else f"top_{int(top_k_ratio*100)}%"
 
     # Per-manipulation-type breakdown (each fake type evaluated against ALL real samples)
     if all_manip_types:

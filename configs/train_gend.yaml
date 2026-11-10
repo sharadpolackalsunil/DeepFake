@@ -1,0 +1,52 @@
+# GenD Reference Baseline Config (Our Pipeline: FF++ c23 720/140/140)
+# Model: GenD / LNCLIP-DF (CLIP ViT-L/14 with LayerNorm-only PEFT + Linear Probe)
+# Losses: BCE + Alignment Loss + Uniformity Loss + Slerp Augmentation
+
+stage: gend_ours
+model:
+  type: gend
+  backbone: openai/clip-vit-large-patch14
+  tune: layernorm
+  normalize_inputs: true
+  lambda_align: 0.5
+  lambda_unif: 0.5
+  slerp_prob: 0.5
+
+data:
+  store: data/store
+  index: data/splits/index.csv
+  frames_per_clip: 1         # T=1 frame-level training
+  frame_stride: 1
+  crop_size: 224
+  norm: clip
+  p_sbi: 0.0
+  jpeg_quality: [50, 100]
+  p_jpeg: 0.3
+  p_blur: 0.1
+  p_flip: 0.5
+  val_k: 8                   # 8 clips/frames per validation video (matching S-MSDT protocol)
+  val_methods: ["Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures", "FaceShifter"]
+
+train:
+  epochs: 30
+  batch_pairs: 32            # 64 frames per optimizer step
+  grad_accum: 1
+  lr_backbone_ln: 1.0e-4     # LayerNorm parameter learning rate
+  lr_head: 5.0e-4            # Linear probe learning rate
+  weight_decay: 0.05
+  warmup_frac: 0.03
+  min_lr_ratio: 0.01
+  grad_clip: 1.0
+  ema_decay: 0.999
+  precision: bfloat16
+  num_workers: 0
+  pin_memory: true
+  persistent_workers: false
+  prefetch_factor: null
+  val_batch_size: 16
+  val_workers: 0
+  val_start_epoch: 5
+  val_interval: 1
+
+output_dir: outputs/checkpoints_gend_ours
+

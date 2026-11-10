@@ -29,6 +29,7 @@ except Exception:
 
 from smsdt.data.video_dataset import EvalClipDataset
 from smsdt.models.clip_encoder import CLIPFrameEncoder, CLIP_MEAN, CLIP_STD
+from smsdt.models.gend import GenDModel
 from smsdt.models.smsdt import SMSDT
 from smsdt.models.smsdt_v2 import SMSDTv2
 from smsdt.models.smsdt_v3 import SMSDTv3
@@ -147,9 +148,10 @@ def load_model(ckpt_path: str, device: torch.device):
         cleaned[k_clean] = v
     state_dict = cleaned
 
-    # Detect v3 vs v2 vs v1 architecture
+    # Detect v3 vs GenD vs v2 vs v1 architecture
     is_v3 = any(k.startswith("res.") or k.startswith("readout.g_scale") or k.startswith("readout.lse") for k in state_dict.keys()) or cfg.get("stage") == "stage_c"
-    is_v2 = (any("encoder.vit" in k for k in state_dict.keys()) or cfg.get("stage") is not None) and not is_v3
+    is_gend = cfg.get("stage") == "gend_ours" or cfg.get("model", {}).get("type") == "gend" or ("head.weight" in state_dict and "proj.0.weight" not in state_dict and not is_v3)
+    is_v2 = (any("encoder.vit" in k for k in state_dict.keys()) or cfg.get("stage") is not None) and not is_v3 and not is_gend
 
     if is_v3:
         model_cfg = cfg.get("model", {})
@@ -172,6 +174,15 @@ def load_model(ckpt_path: str, device: torch.device):
         )
         norm_fn = get_clip_normalize()
         model_type = "v3"
+    elif is_gend:
+        model_cfg = cfg.get("model", {})
+        model = GenDModel(
+            name=model_cfg.get("backbone", "openai/clip-vit-large-patch14"),
+            tune=model_cfg.get("tune", "layernorm"),
+            normalize_inputs=model_cfg.get("normalize_inputs", True),
+        )
+        norm_fn = get_clip_normalize()
+        model_type = "gend"
     elif is_v2:
         model_cfg = cfg.get("model", {})
         enc = CLIPFrameEncoder(
@@ -628,6 +639,7 @@ def main():
     parser.add_argument("--calib", type=str, default=None, help="Path to frozen calibration JSON file (a, b, tau)")
     parser.add_argument("--save-scores", type=str, default=None, help="Path to export per-video score CSV")
     parser.add_argument("--ci", action="store_true", help="Compute 95%% bootstrap confidence intervals for primary metrics")
+    parser.add_argument("--skip-sweep", action="store_true", help="Skip printing threshold sensitivity sweep table")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -730,29 +742,64 @@ def main():
     print_classification_report(res, thresh=report_thresh)
 
     # Render threshold sensitivity sweep table
-    print_threshold_sweep(res, f"{args.dataset_name} [{args.split.upper()}]", thresholds=args.thresholds)
+    if not args.skip_sweep:
+        print_threshold_sweep(res, f"{args.dataset_name} [{args.split.upper()}]", thresholds=args.thresholds)
 
-    # Save per-video scores if requested
+    # Save per-video scores if requested adhering to pre-registered schema
     if args.save_scores:
         os.makedirs(os.path.dirname(args.save_scores) if os.path.dirname(args.save_scores) else ".", exist_ok=True)
         with open(args.save_scores, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["video_id", "method", "label", "raw_score", "mean_logit", "calib_score", "calib_pred"])
-            p_calib_arr = res.get("calib_probs")
-            preds_calib_arr = res.get("preds_calib")
+            writer.writerow([
+                "video_id", "dataset", "split", "label", "real_source",
+                "manipulation", "cluster_id", "n_clips", "logit_mean",
+                "score_mean", "score_topk50"
+            ])
             for i in range(len(res["video_ids"])):
-                c_score = f"{p_calib_arr[i]:.4f}" if p_calib_arr is not None else ""
-                c_pred = str(int(preds_calib_arr[i])) if preds_calib_arr is not None else ""
+                v_id = str(res["video_ids"][i])
+                lbl = int(res["labels"][i])
+                m_name = str(res["methods"][i])
+                
+                # Assign real_source vs manipulation
+                if lbl == 0:
+                    manip_str = ""
+                    if "celeb" in args.dataset_name.lower():
+                        real_src = "celebdf_real"
+                    elif "dfd" in args.dataset_name.lower() or "deepfakedetection" in m_name.lower():
+                        real_src = "dfd_actor"
+                    else:
+                        real_src = "ffpp_youtube"
+                else:
+                    real_src = ""
+                    manip_str = m_name
+                    
+                # Derive cluster_id for paired cluster bootstrap
+                if "id" in v_id and "_" in v_id and v_id.startswith("id"):
+                    cluster_id = v_id.split("_")[0]  # Celeb-DF celebrity id, e.g. id0
+                elif "__" in v_id:
+                    cluster_id = v_id.split("__")[0]  # DFD actor pair, e.g. DFD_01_02
+                elif "_" in v_id:
+                    parts = v_id.split("_")
+                    cluster_id = parts[1] if len(parts) > 1 else v_id
+                else:
+                    cluster_id = v_id
+
+                top50_score = f"{res['scores_top50'][i]:.4f}" if "scores_top50" in res and i < len(res["scores_top50"]) else ""
+                
                 writer.writerow([
-                    res["video_ids"][i],
-                    res["methods"][i],
-                    int(res["labels"][i]),
-                    f"{res['scores_mean'][i]:.4f}",
+                    v_id,
+                    args.dataset_name,
+                    args.split,
+                    lbl,
+                    real_src,
+                    manip_str,
+                    cluster_id,
+                    args.K,
                     f"{res['logits_mean'][i]:.4f}",
-                    c_score,
-                    c_pred,
+                    f"{res['scores_mean'][i]:.4f}",
+                    top50_score
                 ])
-        print(f"Exported per-video scores to {args.save_scores}")
+        print(f"Exported pre-registered per-video scores to {args.save_scores}")
 
     # Append to output CSV
     os.makedirs(os.path.dirname(args.out_csv), exist_ok=True)

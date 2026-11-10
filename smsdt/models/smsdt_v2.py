@@ -68,7 +68,14 @@ class SMSDTv2(nn.Module):
         for blk in self.blocks:
             blk.set_gradient_checkpointing(enable)
 
-    def forward(self, frames: torch.Tensor, conf: torch.Tensor | None = None):
+    def forward(
+        self,
+        frames: torch.Tensor,
+        conf: torch.Tensor | None = None,
+        *args,
+        prior: torch.Tensor | None = None,
+        **kwargs,
+    ):
         """
         Args:
             frames: (B, T, 3, 224, 224) RGB tensor in CLIP normalization

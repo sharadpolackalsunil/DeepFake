@@ -7,12 +7,14 @@ try:
     from .clip_encoder import CLIPFrameEncoder
     from .smsdt_v2 import SMSDTv2
     from .smsdt_v3 import SMSDTv3
+    from .gend import GenDModel
     from .v3_modules import ResidualStream, EvidenceReadoutV3, haar_dwt
     _has_clip = True
 except ImportError:
     CLIPFrameEncoder = None
     SMSDTv2 = None
     SMSDTv3 = None
+    GenDModel = None
     ResidualStream = None
     EvidenceReadoutV3 = None
     haar_dwt = None
@@ -22,6 +24,7 @@ __all__ = [
     "SMSDT",
     "SMSDTv2",
     "SMSDTv3",
+    "GenDModel",
     "EvidenceReadout",
     "EvidenceReadoutV3",
     "ResidualStream",
