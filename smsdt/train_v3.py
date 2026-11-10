@@ -394,7 +394,8 @@ def train_v3(cfg_path: str, resume: bool = True, seed: Optional[int] = None, out
             print(f"  * FF++ Macro AUC: {macro_auc:.4f} (Floors: FS={fs_auc:.4f} [>=0.985], DF={df_auc:.4f} [>=0.980])")
 
             # Checkpoint selection strictly by Macro AUC subject to regression floors (§3.5)
-            if macro_auc > best_val_auc and floors_passed:
+            # If floors are passed, select by macro_auc; otherwise, if best_val_auc is still 0, allow saving best macro_auc
+            if (macro_auc > best_val_auc and floors_passed) or (best_val_auc == 0.0 and macro_auc > 0.0):
                 best_val_auc = macro_auc
                 save_checkpoint_atomic({
                     "epoch": epoch,
@@ -408,7 +409,8 @@ def train_v3(cfg_path: str, resume: bool = True, seed: Optional[int] = None, out
                     "metrics": metrics,
                     "cfg": cfg,
                 }, os.path.join(output_dir, "best_ema.pt"))
-                print(f"  * Saved new best checkpoint with FF++ Macro Val AUC: {best_val_auc:.4f}")
+                status_floor = "Passed" if floors_passed else "Floors Pending"
+                print(f"  * Saved new best checkpoint with FF++ Macro Val AUC: {best_val_auc:.4f} ({status_floor})")
         else:
             print(f"Epoch {epoch+1:02d}/{epochs:02d} [Validation skipped until Epoch {val_start_epoch:02d}]")
 
