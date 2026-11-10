@@ -130,6 +130,10 @@ def paired_cluster_boot_dauc(
     n_seeds = len(dfs_a)
     
     # Verify alignment on reference dataframe
+    if "video_id" in dfs_a[0].columns:
+        dfs_a = [df.sort_values("video_id").reset_index(drop=True) for df in dfs_a]
+        dfs_b = [df.sort_values("video_id").reset_index(drop=True) for df in dfs_b]
+
     ref_df = dfs_a[0]
     clusters = ref_df[cluster_col].unique()
     n_clusters = len(clusters)
@@ -203,4 +207,109 @@ def paired_cluster_boot_dauc(
         "n_samples": int(n_samples),
         "boot_sd": float(np.std(deltas))
     }
+
+
+def main():
+    import glob
+    import os
+    import argparse
+    from tools.make_tables import df_to_markdown
+
+    parser = argparse.ArgumentParser(description="Statistical Testing & Hypothesis Evaluation (H1)")
+    parser.add_argument("--scores-dir", type=str, default="results/scores", help="Scores directory")
+    parser.add_argument("--n-boot", type=int, default=2000, help="Number of bootstrap iterations")
+    parser.add_argument("--delta", type=float, default=0.01, help="Equivalence margin delta")
+    args = parser.parse_args()
+
+    score_files = glob.glob(os.path.join(args.scores_dir, "*.csv"))
+    if not score_files:
+        print(f"No score CSVs found in {args.scores_dir}.")
+        return
+
+    runs = {}
+    for sf in score_files:
+        base = os.path.splitext(os.path.basename(sf))[0]
+        parts = base.split("_")
+        seed_idx = -1
+        for idx, p in enumerate(parts):
+            if p.startswith("seed"):
+                seed_idx = idx
+                break
+        if seed_idx != -1 and seed_idx + 1 < len(parts):
+            model = "_".join(parts[:seed_idx])
+            seed = parts[seed_idx]
+            dataset = "_".join(parts[seed_idx + 1:])
+            df = pd.read_csv(sf)
+            if "video_id" in df.columns:
+                df = df.sort_values("video_id").reset_index(drop=True)
+            runs.setdefault((model, dataset), {})[seed] = df
+
+    candidate_pairs = [
+        ("smsdt_full", "gend_ours", "Flagship S-MSDTv3 Full vs GenD Reference Anchor"),
+        ("smsdt_full", "smsdt_st", "Residual Stream & LSE Pooling Ablation (Full vs ST)"),
+        ("smsdt_st", "smsdt_s", "Spatio-Temporal Attention Ablation (ST vs Spatial-only)"),
+        ("smsdt_s", "gend_ours", "Single-Frame Recipe Ablation (SMSDT-S vs GenD)"),
+    ]
+
+    datasets = ["ffpp", "celebdf", "dfd"]
+    results = []
+
+    print("=" * 90)
+    print("HYPOTHESIS H1: PAIRED CLUSTER BOOTSTRAP ΔAUC TESTS (95% CI, Equivalence δ=0.01)")
+    print("=" * 90)
+
+    for mod_a, mod_b, desc in candidate_pairs:
+        for ds in datasets:
+            if (mod_a, ds) not in runs or (mod_b, ds) not in runs:
+                continue
+            seeds_a = set(runs[(mod_a, ds)].keys())
+            seeds_b = set(runs[(mod_b, ds)].keys())
+            common_seeds = sorted(list(seeds_a.intersection(seeds_b)))
+            if not common_seeds:
+                continue
+
+            dfs_a = [runs[(mod_a, ds)][s] for s in common_seeds]
+            dfs_b = [runs[(mod_b, ds)][s] for s in common_seeds]
+
+            # Run paired cluster bootstrap
+            stats = paired_cluster_bootstrap(
+                dfs_a, dfs_b,
+                cluster_col="cluster_id" if "cluster_id" in dfs_a[0].columns else "video_id",
+                n_boot=args.n_boot,
+                delta=args.delta
+            )
+
+            results.append({
+                "Dataset": ds.upper(),
+                "Model A": mod_a,
+                "Model B": mod_b,
+                "Comparison": desc,
+                "AUC (A)": stats["mean_a"],
+                "AUC (B)": stats["mean_b"],
+                "ΔAUC (A-B)": stats["mean_delta"],
+                "95% CI Lower": stats["ci_lower"],
+                "95% CI Upper": stats["ci_upper"],
+                "Classification": stats["classification"],
+                "Seeds": len(common_seeds),
+                "Clusters": stats["n_clusters"],
+                "Samples": stats["n_samples"]
+            })
+
+    if results:
+        res_df = pd.DataFrame(results)
+        print("\n" + df_to_markdown(res_df) + "\n")
+        print("=" * 90)
+
+        os.makedirs("results/tables", exist_ok=True)
+        res_df.to_csv("results/tables/hypothesis_h1_stats.csv", index=False)
+        with open("results/tables/hypothesis_h1_stats.md", "w") as f:
+            f.write("# Hypothesis H1: Statistical Equivalence & ΔAUC Bootstrap Tests\n\n")
+            f.write(df_to_markdown(res_df) + "\n")
+        print("✓ Statistical test matrix successfully saved to results/tables/hypothesis_h1_stats.csv and .md\n")
+    else:
+        print("No matching model pairs found in scores.")
+
+
+if __name__ == "__main__":
+    main()
 

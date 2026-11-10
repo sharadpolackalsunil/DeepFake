@@ -157,44 +157,94 @@ def print_audit_report(res: Dict, dataset_name: str = "Evaluation Dataset"):
     print("=" * 80)
 
 
+def main():
+    import glob
+    import json
+    import argparse
+    from tools.make_tables import df_to_markdown
+
+    parser = argparse.ArgumentParser(description="Operating Point Transfer & Error Decomposition (H2)")
+    parser.add_argument("--scores", type=str, default=None, help="Specific score CSV path to audit")
+    parser.add_argument("--scores-dir", type=str, default="results/scores", help="Scores directory to audit")
+    parser.add_argument("--calib-dir", type=str, default="results/calib", help="Calibration parameters directory")
+    parser.add_argument("--tau-val", type=float, default=None, help="Explicit validation threshold override")
+    args = parser.parse_args()
+
+    if args.scores:
+        if not os.path.exists(args.scores):
+            print(f"File not found: {args.scores}")
+            return
+        df = pd.read_csv(args.scores)
+        tau = args.tau_val if args.tau_val is not None else 0.50
+        res = audit_threshold_transfer(df, tau_val=tau)
+        print_audit_report(res, dataset_name=os.path.basename(args.scores))
+        return
+
+    # Batch scan
+    score_files = glob.glob(os.path.join(args.scores_dir, "*.csv"))
+    if not score_files:
+        print(f"No score CSVs found in {args.scores_dir}.")
+        return
+
+    summary_rows = []
+    print("=" * 90)
+    print("HYPOTHESIS H2: OPERATING POINT TRANSFER & THRESHOLD DEGRADATION AUDIT")
+    print("=" * 90)
+
+    for sf in sorted(score_files):
+        fname = os.path.splitext(os.path.basename(sf))[0]
+        parts = fname.split("_")
+        seed_idx = -1
+        for idx, p in enumerate(parts):
+            if p.startswith("seed"):
+                seed_idx = idx
+                break
+        if seed_idx == -1 or seed_idx + 1 >= len(parts):
+            continue
+        run_name = "_".join(parts[:seed_idx + 1])
+        dname = "_".join(parts[seed_idx + 1:])
+
+        tau_val = 0.50
+        calib_file = os.path.join(args.calib_dir, f"{run_name}.json")
+        if os.path.exists(calib_file):
+            try:
+                with open(calib_file) as f:
+                    cdata = json.load(f)
+                    tau_val = float(cdata.get("tau", cdata.get("youden_tau", 0.50)))
+            except Exception:
+                pass
+
+        try:
+            df = pd.read_csv(sf)
+            res = audit_threshold_transfer(df, tau_val=tau_val)
+            summary_rows.append({
+                "Model": run_name,
+                "Dataset": dname.upper(),
+                "tau_val": res["tau_val"],
+                "tau_oracle": res["tau_oracle"],
+                "HTER@0.50": res["hter_raw_05"],
+                "HTER(tau_val)": res["hter_val_frozen"],
+                "HTER(tau*)": res["hter_oracle"],
+                "Gap g": res["gap_g"],
+                "FPR(tau_val)": res["fpr_val_frozen"],
+                "FNR(tau_val)": res["fnr_val_frozen"]
+            })
+        except Exception as e:
+            print(f"Error auditing {sf}: {e}")
+
+    if summary_rows:
+        sum_df = pd.DataFrame(summary_rows)
+        print("\n" + df_to_markdown(sum_df) + "\n")
+        print("=" * 90)
+
+        os.makedirs("results/tables", exist_ok=True)
+        sum_df.to_csv("results/tables/threshold_transfer_audit.csv", index=False)
+        with open("results/tables/threshold_transfer_audit.md", "w") as f:
+            f.write("# Hypothesis H2: Operating Point Transfer & Threshold Degradation Audit\n\n")
+            f.write(df_to_markdown(sum_df) + "\n")
+        print("✓ Threshold transfer audit successfully saved to results/tables/threshold_transfer_audit.csv and .md\n")
+
+
 if __name__ == "__main__":
-    # Test on synthetic dataset matching schema
-    rng = np.random.RandomState(42)
-    synthetic_records = []
-    
-    # Authentic reals: 178 Celeb-DF reals
-    for i in range(178):
-        synthetic_records.append({
-            "video_id": f"real_{i:04d}",
-            "dataset": "celebdf",
-            "split": "test",
-            "label": 0,
-            "real_source": "celebdf_real",
-            "manipulation": "",
-            "cluster_id": f"actor_{i % 50}",
-            "n_clips": 8,
-            "logit_mean": float(rng.normal(-2.5, 0.8)),
-            "score_mean": float(1.0 / (1.0 + np.exp(-rng.normal(-2.5, 0.8)))),
-            "score_topk50": 0.1
-        })
-        
-    # Manipulated fakes: 340 Celeb-DF swaps
-    for i in range(340):
-        synthetic_records.append({
-            "video_id": f"fake_{i:04d}",
-            "dataset": "celebdf",
-            "split": "test",
-            "label": 1,
-            "real_source": "",
-            "manipulation": "celeb_swap",
-            "cluster_id": f"actor_{i % 50}",
-            "n_clips": 8,
-            "logit_mean": float(rng.normal(0.2, 1.2)),
-            "score_mean": float(1.0 / (1.0 + np.exp(-rng.normal(0.2, 1.2)))),
-            "score_topk50": 0.8
-        })
-        
-    test_df = pd.DataFrame(synthetic_records)
-    audit = audit_threshold_transfer(test_df, tau_val=0.536)
-    print_audit_report(audit, dataset_name="Celeb-DF v2 (Audit Test)")
+    main()
 
