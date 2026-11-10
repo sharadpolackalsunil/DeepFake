@@ -147,19 +147,63 @@ def run_prior_sweep(
     return pd.DataFrame(results)
 
 
+def main():
+    import glob
+    import argparse
+    from tools.make_tables import df_to_markdown
+
+    parser = argparse.ArgumentParser(description="Prior Shift & Saerens EM Prior Correction Audit (H3)")
+    parser.add_argument("--scores", type=str, default=None, help="Specific score CSV path to sweep")
+    parser.add_argument("--scores-dir", type=str, default="results/scores", help="Scores directory")
+    parser.add_argument("--n-repeats", type=int, default=50, help="Number of subsampling repeats per prior")
+    parser.add_argument("--tau-val", type=float, default=0.50, help="Frozen decision threshold")
+    args = parser.parse_args()
+
+    target_files = []
+    if args.scores:
+        if os.path.exists(args.scores):
+            target_files.append(args.scores)
+        else:
+            print(f"File not found: {args.scores}")
+            return
+    else:
+        # Prioritize Celeb-DF cross-dataset evaluations
+        celeb_files = glob.glob(os.path.join(args.scores_dir, "*celebdf.csv"))
+        target_files = celeb_files if celeb_files else glob.glob(os.path.join(args.scores_dir, "*.csv"))
+
+    if not target_files:
+        print(f"No score CSVs found to audit in {args.scores_dir}.")
+        return
+
+    all_dfs = []
+    print("=" * 90)
+    print("HYPOTHESIS H3: PRIOR-SHIFT SWEEP & SAERENS EM CORRECTION AUDIT")
+    print("=" * 90)
+
+    for sf in sorted(target_files):
+        model_name = os.path.splitext(os.path.basename(sf))[0]
+        try:
+            df = pd.read_csv(sf)
+            if "label" not in df.columns or "score_mean" not in df.columns:
+                continue
+            sweep_df = run_prior_sweep(df, tau_val=args.tau_val, priors=[0.1, 0.3, 0.5, 0.7, 0.9], n_repeats=args.n_repeats)
+            sweep_df.insert(0, "model", model_name)
+            all_dfs.append(sweep_df)
+            print(f"\n--- Model: {model_name} (Target Prior Sweep, N_repeats={args.n_repeats}) ---")
+            print(df_to_markdown(sweep_df))
+        except Exception as e:
+            print(f"Error sweeping {sf}: {e}")
+
+    if all_dfs:
+        combined_df = pd.concat(all_dfs, ignore_index=True)
+        os.makedirs("results/tables", exist_ok=True)
+        combined_df.to_csv("results/tables/prior_shift_sweep.csv", index=False)
+        with open("results/tables/prior_shift_sweep.md", "w") as f:
+            f.write("# Hypothesis H3: Operational Prior Shift Sweep & Saerens EM Correction\n\n")
+            f.write(df_to_markdown(combined_df) + "\n")
+        print("\n" + "=" * 90)
+        print("✓ Prior shift audit successfully saved to results/tables/prior_shift_sweep.csv and .md\n")
+
+
 if __name__ == "__main__":
-    # Smoke test on synthetic data
-    rng = np.random.RandomState(42)
-    syn_records = []
-    for i in range(200):
-        syn_records.append({"label": 0, "score_mean": float(rng.beta(2, 8))})
-    for i in range(300):
-        syn_records.append({"label": 1, "score_mean": float(rng.beta(8, 2))})
-    test_df = pd.DataFrame(syn_records)
-    
-    sweep_df = run_prior_sweep(test_df, tau_val=0.50, priors=[0.1, 0.3, 0.5, 0.7, 0.9], n_repeats=20)
-    print("=" * 80)
-    print("PRIOR SWEEP SMOKE TEST RESULTS")
-    print("=" * 80)
-    print(sweep_df.to_string(index=False))
-    print("=" * 80)
+    main()
