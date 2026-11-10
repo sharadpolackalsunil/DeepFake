@@ -399,7 +399,7 @@ def train_v2(cfg_path: str, resume: bool = True, seed: Optional[int] = None, out
             }
             save_checkpoint_atomic(ckpt_data, os.path.join(output_dir, "last.pt"))
 
-            if macro_auc > best_val_auc and floors_passed:
+            if macro_auc > best_val_auc:
                 best_val_auc = macro_auc
                 save_checkpoint_atomic(ckpt_data, os.path.join(output_dir, "best_ema.pt"))
                 print(f"  * New best Macro Val AUC: {best_val_auc:.4f} saved to {output_dir}/best_ema.pt")

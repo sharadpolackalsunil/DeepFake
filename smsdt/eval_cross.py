@@ -639,6 +639,7 @@ def main():
     parser.add_argument("--calib", type=str, default=None, help="Path to frozen calibration JSON file (a, b, tau)")
     parser.add_argument("--save-scores", type=str, default=None, help="Path to export per-video score CSV")
     parser.add_argument("--ci", action="store_true", help="Compute 95%% bootstrap confidence intervals for primary metrics")
+    parser.add_argument("--skip-sweep", action="store_true", help="Skip printing threshold sensitivity sweep table")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -741,7 +742,8 @@ def main():
     print_classification_report(res, thresh=report_thresh)
 
     # Render threshold sensitivity sweep table
-    print_threshold_sweep(res, f"{args.dataset_name} [{args.split.upper()}]", thresholds=args.thresholds)
+    if not args.skip_sweep:
+        print_threshold_sweep(res, f"{args.dataset_name} [{args.split.upper()}]", thresholds=args.thresholds)
 
     # Save per-video scores if requested adhering to pre-registered schema
     if args.save_scores:
