@@ -212,6 +212,24 @@ def paired_cluster_boot_dauc(
 paired_cluster_bootstrap = paired_cluster_boot_dauc
 
 
+def resolve_cluster_id(df: pd.DataFrame) -> pd.Series:
+    """Ensure fine-grained identity/video cluster IDs for cluster bootstrap."""
+    if "cluster_id" in df.columns and df["cluster_id"].nunique() > 10:
+        return df["cluster_id"]
+    
+    # Derive from video_id
+    clusters = []
+    import re
+    for vid in df["video_id"]:
+        vid_str = str(vid)
+        m = re.search(r"id\d+", vid_str)
+        if m:
+            clusters.append(m.group(0))
+        else:
+            clusters.append(vid_str)
+    return pd.Series(clusters, index=df.index)
+
+
 def main():
     import glob
     import os
@@ -245,6 +263,9 @@ def main():
             df = pd.read_csv(sf)
             if "video_id" in df.columns:
                 df = df.sort_values("video_id").reset_index(drop=True)
+                df["resolved_cluster_id"] = resolve_cluster_id(df)
+            else:
+                df["resolved_cluster_id"] = df["cluster_id"] if "cluster_id" in df.columns else df.index.astype(str)
             runs.setdefault((model, dataset), {})[seed] = df
 
     candidate_pairs = [
@@ -277,7 +298,7 @@ def main():
             # Run paired cluster bootstrap
             stats = paired_cluster_boot_dauc(
                 dfs_a, dfs_b,
-                cluster_col="cluster_id" if "cluster_id" in dfs_a[0].columns else "video_id",
+                cluster_col="resolved_cluster_id",
                 n_boot=args.n_boot,
                 delta=args.delta
             )
@@ -304,8 +325,8 @@ def main():
         print("=" * 90)
 
         os.makedirs("results/tables", exist_ok=True)
-        res_df.to_csv("results/tables/hypothesis_h1_stats.csv", index=False)
-        with open("results/tables/hypothesis_h1_stats.md", "w") as f:
+        res_df.to_csv("results/tables/hypothesis_h1_stats.csv", index=False, encoding="utf-8")
+        with open("results/tables/hypothesis_h1_stats.md", "w", encoding="utf-8") as f:
             f.write("# Hypothesis H1: Statistical Equivalence & ΔAUC Bootstrap Tests\n\n")
             f.write(df_to_markdown(res_df) + "\n")
         print("✓ Statistical test matrix successfully saved to results/tables/hypothesis_h1_stats.csv and .md\n")
