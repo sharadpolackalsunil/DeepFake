@@ -101,7 +101,7 @@ def generate_experiment_matrix(
             try:
                 with open(calib_file) as f:
                     cdata = json.load(f)
-                    tau_val = float(cdata.get("youden_tau", 0.50))
+                    tau_val = float(cdata.get("tau", cdata.get("youden_tau", 0.50)))
             except Exception:
                 pass
                 
@@ -158,7 +158,7 @@ def generate_experiment_matrix(
             try:
                 with open(calib_file) as f:
                     cdata = json.load(f)
-                    tau_val = float(cdata.get("youden_tau", 0.50))
+                    tau_val = float(cdata.get("tau", cdata.get("youden_tau", 0.50)))
             except Exception:
                 pass
         row = {
