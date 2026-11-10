@@ -108,7 +108,20 @@ def boot_ci(y_true, y_scores, n=1000, seed=42):
 
 
 def load_model(ckpt_path: str, device: torch.device):
-    """Load S-MSDT v1 or v2 model from checkpoint with robust dictionary extraction."""
+    """Load S-MSDT v1 or v2 model from checkpoint with robust dictionary extraction.
+
+    `ckpt_path` may also be `hf:<repo_id>` (e.g. `hf:yermandy/GenD_CLIP_L_14`) to evaluate
+    the official GenD weights through this pipeline (gate G1, Branch B). Score files for
+    it should be saved as `gend_official_seed0_<dataset>.csv`.
+    """
+    if str(ckpt_path).startswith("hf:"):
+        from smsdt.models.gend_official import load_official_gend
+        model = load_official_gend(str(ckpt_path)[3:])
+        model.to(device)
+        model.eval()
+        model.cfg = {"stage": "gend_official", "data": {"frames_per_clip": 1}}
+        print(f"Loaded official GenD weights from Hugging Face: {str(ckpt_path)[3:]}")
+        return model, "gend_official", get_clip_normalize()
     try:
         ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     except TypeError:
