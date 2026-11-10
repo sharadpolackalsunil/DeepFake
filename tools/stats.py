@@ -128,11 +128,13 @@ def paired_cluster_boot_dauc(
     """
     assert len(dfs_a) == len(dfs_b), "Must provide identical number of seed runs for A and B"
     n_seeds = len(dfs_a)
-    
-    # Verify alignment on reference dataframe
+
+    # Align every run on the same set of videos. Sorting alone is not enough: if one
+    # run is missing a video, row i of A and row i of B would silently refer to
+    # different videos and the paired bootstrap would be meaningless.
+    n_dropped = 0
     if "video_id" in dfs_a[0].columns:
-        dfs_a = [df.sort_values("video_id").reset_index(drop=True) for df in dfs_a]
-        dfs_b = [df.sort_values("video_id").reset_index(drop=True) for df in dfs_b]
+        dfs_a, dfs_b, n_dropped = align_runs_on_video_id(dfs_a, dfs_b, label_col=label_col)
 
     ref_df = dfs_a[0]
     clusters = ref_df[cluster_col].unique()
@@ -162,16 +164,18 @@ def paired_cluster_boot_dauc(
     deltas = np.zeros(n_boot, dtype=np.float64)
     
     for b in range(n_boot):
-        # Resample clusters with replacement
-        boot_clusters = rng.choice(clusters, size=n_clusters, replace=True)
-        # Gather all row indices
-        boot_idx = np.concatenate([cluster_indices[c] for c in boot_clusters])
-        
-        boot_y = labels[boot_idx]
-        if np.all(boot_y == 0) or np.all(boot_y == 1):
-            # Degenerate resample; re-try draw
-            continue
-            
+        # Resample clusters with replacement. A resample containing a single class has
+        # no AUC; redraw it. (The previous `continue` left deltas[b] = 0, which pulled
+        # the interval toward zero.)
+        for _attempt in range(1000):
+            boot_clusters = rng.choice(clusters, size=n_clusters, replace=True)
+            boot_idx = np.concatenate([cluster_indices[c] for c in boot_clusters])
+            boot_y = labels[boot_idx]
+            if not (np.all(boot_y == 0) or np.all(boot_y == 1)):
+                break
+        else:
+            raise RuntimeError("Could not draw a two-class bootstrap resample in 1000 attempts.")
+
         boot_auc_a = np.mean([fast_auc(boot_y, scores_a[k][boot_idx]) for k in range(n_seeds)])
         boot_auc_b = np.mean([fast_auc(boot_y, scores_b[k][boot_idx]) for k in range(n_seeds)])
         deltas[b] = boot_auc_a - boot_auc_b
@@ -205,8 +209,160 @@ def paired_cluster_boot_dauc(
         "classification": classification,
         "n_clusters": int(n_clusters),
         "n_samples": int(n_samples),
-        "boot_sd": float(np.std(deltas))
+        "n_dropped_unaligned": int(n_dropped),
+        "boot_sd": float(np.std(deltas)),
+        "ci_half_width": float((ci_upper - ci_lower) / 2.0),
     }
+
+
+# ---------------------------------------------------------------------------
+# Alignment, pure-source negatives, dataset roles and pre-registered verdicts
+# ---------------------------------------------------------------------------
+
+# Which real videos count as negatives for each dataset (docs/score_schema.md,
+# "Pure Negatives"). None means "all reals in the file".
+PURE_NEGATIVE_SOURCES = {
+    "ffpp": ["ffpp_youtube"],
+    "ffpp_c23": ["ffpp_youtube"],
+    "dfd": ["dfd_actor"],
+    "celebdf": None,
+    "dfdc": None,
+    "wdf": None,
+    "ffiw": None,
+}
+
+# Dataset roles. Only "confirmatory" datasets decide H1 (pre-registration: "on
+# unseen datasets"). FF++ is the training distribution. DFD reals and fakes are in
+# the validation (dev) set used for calibration, so DFD is not unseen either.
+DEFAULT_DATASET_ROLES = {
+    "ffpp": "in_domain",
+    "ffpp_c23": "in_domain",
+    "dfd": "dev_overlap",
+    "celebdf": "confirmatory",
+    "dfdc": "confirmatory",
+    "wdf": "confirmatory",
+    "ffiw": "confirmatory",
+}
+
+# Comparisons. H1 is pre-registered against S ("Neither ST nor Full improves AUC
+# over S"), so only those two pairs are confirmatory. Everything else is exploratory.
+CONFIRMATORY_PAIRS = [
+    ("smsdt_st", "smsdt_s", "H1: ST vs S"),
+    ("smsdt_full", "smsdt_s", "H1: Full vs S"),
+]
+EXPLORATORY_PAIRS = [
+    ("smsdt_full", "smsdt_st", "Exploratory: Full vs ST (forensic stream + LSE readout)"),
+    ("smsdt_s", "gend_ours", "Exploratory: S vs gend_ours (training recipe, same pipeline)"),
+    ("smsdt_full", "gend_ours", "Exploratory: Full vs gend_ours"),
+    ("smsdt_s", "gend_official", "G1: S vs official GenD weights (same pipeline)"),
+    ("gend_ours", "gend_official", "G1: gend_ours vs official GenD weights (same pipeline)"),
+]
+
+
+def align_runs_on_video_id(
+    dfs_a: List[pd.DataFrame],
+    dfs_b: List[pd.DataFrame],
+    label_col: str = "label",
+) -> Tuple[List[pd.DataFrame], List[pd.DataFrame], int]:
+    """Restrict every run to the videos present in all runs, sorted by video_id.
+
+    Raises ValueError if a video has different labels in different runs, or if a
+    run contains duplicate video_ids.
+
+    Returns:
+        (aligned_a, aligned_b, n_dropped) where n_dropped is the number of videos of
+        the largest run that were not present in every run.
+    """
+    all_dfs = list(dfs_a) + list(dfs_b)
+    for df in all_dfs:
+        if df["video_id"].duplicated().any():
+            dup = df.loc[df["video_id"].duplicated(), "video_id"].iloc[0]
+            raise ValueError(f"Duplicate video_id in a score file: {dup}")
+    common = set(all_dfs[0]["video_id"])
+    for df in all_dfs[1:]:
+        common &= set(df["video_id"])
+    if not common:
+        raise ValueError("Runs share no video_id; cannot pair them.")
+    n_max = max(len(df) for df in all_dfs)
+
+    def _restrict(df):
+        out = df[df["video_id"].isin(common)].sort_values("video_id").reset_index(drop=True)
+        return out
+
+    aligned_a = [_restrict(df) for df in dfs_a]
+    aligned_b = [_restrict(df) for df in dfs_b]
+    ref_labels = aligned_a[0][label_col].values
+    for df in aligned_a[1:] + aligned_b:
+        if not np.array_equal(df[label_col].values, ref_labels):
+            raise ValueError("Label mismatch between runs for the same video_id.")
+    return aligned_a, aligned_b, int(n_max - len(common))
+
+
+def dataset_key(dataset_name: str) -> str:
+    """Normalise a dataset token from a file name (e.g. 'celebdf', 'FFPP') to a key."""
+    return str(dataset_name).strip().lower()
+
+
+def apply_pure_negatives(df: pd.DataFrame, dataset_name: str) -> Tuple[pd.DataFrame, Dict]:
+    """Keep all fakes and only the reals that belong to the dataset itself.
+
+    Example: DFD score files contain 383 reals (140 FF++ YouTube + 243 DFD actors).
+    The pure DFD AUC uses the 243 DFD-actor reals only.
+
+    Returns:
+        (filtered_df, info) where info records how many reals were kept and removed.
+    """
+    key = dataset_key(dataset_name)
+    sources = PURE_NEGATIVE_SOURCES.get(key, None)
+    n_real = int((df["label"] == 0).sum())
+    if sources is None or "real_source" not in df.columns:
+        return df, {"pure": sources is None, "n_real_kept": n_real, "n_real_removed": 0}
+    keep = (df["label"] == 1) | (df["real_source"].astype(str).isin(sources))
+    out = df[keep].reset_index(drop=True)
+    kept = int((out["label"] == 0).sum())
+    if kept == 0:
+        raise ValueError(
+            f"No reals with real_source in {sources} for dataset '{dataset_name}'. "
+            "Check the real_source column before trusting any pure-source number."
+        )
+    return out, {"pure": True, "n_real_kept": kept, "n_real_removed": n_real - kept}
+
+
+def bonferroni_level(n_comparisons: int, family_alpha: float = 0.05) -> float:
+    """Two-sided confidence level for each of m comparisons (pre-registered: 1 - 0.05/m)."""
+    m = max(1, int(n_comparisons))
+    return 1.0 - family_alpha / m
+
+
+def h1_verdict(classifications: List[str]) -> str:
+    """Pre-registered H1 rule (docs/decisions.md, section 1.1).
+
+    Supported if every confirmatory comparison is 'equivalent' or 'worse'.
+    Falsified if any confirmatory comparison is 'better'.
+    Otherwise (some 'inconclusive', none 'better') the study cannot decide H1.
+    """
+    if not classifications:
+        return "not_evaluated"
+    if any(c == "better" for c in classifications):
+        return "falsified"
+    if all(c in ("equivalent", "worse") for c in classifications):
+        return "supported"
+    return "undetermined (underpowered)"
+
+
+def required_size_multiplier(ci_half_width: float, point_delta: float, delta: float) -> float:
+    """Rough factor by which the evaluation set must grow so that the CI can resolve
+    the comparison against the equivalence margin.
+
+    For an equivalence verdict the interval must fit inside (-delta, +delta), i.e. the
+    half-width must shrink below delta - |point_delta|. Half-width scales like
+    1/sqrt(N), so N must grow by (current / target)^2. Returns inf when |point_delta|
+    >= delta (equivalence cannot be shown; only 'better'/'worse' remain possible).
+    """
+    target = delta - abs(point_delta)
+    if target <= 0:
+        return float("inf")
+    return float((ci_half_width / target) ** 2)
 
 
 paired_cluster_bootstrap = paired_cluster_boot_dauc
@@ -230,16 +386,36 @@ def resolve_cluster_id(df: pd.DataFrame) -> pd.Series:
     return pd.Series(clusters, index=df.index)
 
 
+def _parse_score_filename(path: str):
+    """'smsdt_full_seed2_celebdf.csv' -> ('smsdt_full', 'seed2', 'celebdf')."""
+    import os
+    base = os.path.splitext(os.path.basename(path))[0]
+    parts = base.split("_")
+    for idx, p in enumerate(parts):
+        if p.startswith("seed") and idx + 1 < len(parts):
+            return "_".join(parts[:idx]), p, "_".join(parts[idx + 1:])
+    return None
+
+
 def main():
     import glob
+    import json
     import os
     import argparse
     from tools.make_tables import df_to_markdown
 
     parser = argparse.ArgumentParser(description="Statistical Testing & Hypothesis Evaluation (H1)")
     parser.add_argument("--scores-dir", type=str, default="results/scores", help="Scores directory")
-    parser.add_argument("--n-boot", type=int, default=2000, help="Number of bootstrap iterations")
-    parser.add_argument("--delta", type=float, default=0.01, help="Equivalence margin delta")
+    parser.add_argument("--n-boot", type=int, default=10000,
+                        help="Bootstrap iterations (pre-registered: 10,000)")
+    parser.add_argument("--delta", type=float, default=None,
+                        help="Equivalence margin. Default: pre-registered rule (0.01, or min(2*sd_S, 0.02) "
+                             "if the seed SD of S on Celeb-DF exceeds 0.005)")
+    parser.add_argument("--confirmatory", nargs="*", default=None,
+                        help="Override the confirmatory datasets (default: celebdf, dfdc, wdf, ffiw if present)")
+    parser.add_argument("--mixed-negatives", action="store_true",
+                        help="Use all reals in each file (old behaviour). Default is pure-source negatives.")
+    parser.add_argument("--out-dir", type=str, default="results/tables")
     args = parser.parse_args()
 
     score_files = glob.glob(os.path.join(args.scores_dir, "*.csv"))
@@ -248,92 +424,154 @@ def main():
         return
 
     runs = {}
+    purity = {}
     for sf in score_files:
-        base = os.path.splitext(os.path.basename(sf))[0]
-        parts = base.split("_")
-        seed_idx = -1
-        for idx, p in enumerate(parts):
-            if p.startswith("seed"):
-                seed_idx = idx
-                break
-        if seed_idx != -1 and seed_idx + 1 < len(parts):
-            model = "_".join(parts[:seed_idx])
-            seed = parts[seed_idx]
-            dataset = "_".join(parts[seed_idx + 1:])
-            df = pd.read_csv(sf)
-            if "video_id" in df.columns:
-                df = df.sort_values("video_id").reset_index(drop=True)
-                df["resolved_cluster_id"] = resolve_cluster_id(df)
-            else:
-                df["resolved_cluster_id"] = df["cluster_id"] if "cluster_id" in df.columns else df.index.astype(str)
-            runs.setdefault((model, dataset), {})[seed] = df
+        parsed = _parse_score_filename(sf)
+        if parsed is None:
+            continue
+        model, seed, dataset = parsed
+        df = pd.read_csv(sf)
+        if not args.mixed_negatives:
+            df, info = apply_pure_negatives(df, dataset)
+            purity[(model, seed, dataset)] = info
+        if "video_id" in df.columns:
+            df = df.sort_values("video_id").reset_index(drop=True)
+            df["resolved_cluster_id"] = resolve_cluster_id(df).values
+        else:
+            df["resolved_cluster_id"] = df["cluster_id"] if "cluster_id" in df.columns else df.index.astype(str)
+        runs.setdefault((model, dataset), {})[seed] = df
 
-    candidate_pairs = [
-        ("smsdt_full", "gend_ours", "Flagship S-MSDTv3 Full vs GenD Reference Anchor"),
-        ("smsdt_full", "smsdt_st", "Residual Stream & LSE Pooling Ablation (Full vs ST)"),
-        ("smsdt_st", "smsdt_s", "Spatio-Temporal Attention Ablation (ST vs Spatial-only)"),
-        ("smsdt_s", "gend_ours", "Single-Frame Recipe Ablation (SMSDT-S vs GenD)"),
-    ]
+    datasets = sorted({ds for (_, ds) in runs.keys()})
+    roles = {ds: DEFAULT_DATASET_ROLES.get(dataset_key(ds), "unknown") for ds in datasets}
+    if args.confirmatory is not None:
+        conf = {dataset_key(d) for d in args.confirmatory}
+        roles = {ds: ("confirmatory" if dataset_key(ds) in conf else
+                      ("in_domain" if roles[ds] == "in_domain" else "exploratory")) for ds in datasets}
 
-    datasets = ["ffpp", "celebdf", "dfd"]
+    # Pre-registered margin rule
+    delta = args.delta
+    delta_note = "explicit --delta"
+    if delta is None:
+        delta, delta_note = 0.01, "pre-registered default"
+        s_runs = runs.get(("smsdt_s", "celebdf"), {})
+        if len(s_runs) >= 2:
+            s_aucs = [fast_auc(d["label"].values, d["score_mean"].values) for d in s_runs.values()]
+            sd = float(np.std(s_aucs, ddof=1))
+            if sd > 0.005:
+                delta = min(2 * sd, 0.02)
+                delta_note = f"pre-registered rule: sd_S(Celeb-DF)={sd:.4f} > 0.005"
+
+    # Bonferroni family = confirmatory pairs x confirmatory datasets that exist
+    conf_ds = [ds for ds in datasets if roles[ds] == "confirmatory"]
+    m_family = sum(1 for (a, b, _) in CONFIRMATORY_PAIRS for ds in conf_ds
+                   if (a, ds) in runs and (b, ds) in runs)
+    level_conf = bonferroni_level(m_family) if m_family > 0 else 0.95
+
+    print("=" * 90)
+    print("HYPOTHESIS H1: PAIRED CLUSTER BOOTSTRAP DELTA-AUC TESTS")
+    print(f"  delta = {delta:.4f} ({delta_note}); n_boot = {args.n_boot}; "
+          f"confirmatory family m = {m_family}; per-comparison level = {level_conf:.4f}")
+    print(f"  negatives: {'MIXED (all reals)' if args.mixed_negatives else 'pure-source'}")
+    print(f"  dataset roles: {roles}")
+    print("=" * 90)
+
     results = []
+    for pair_list, kind in ((CONFIRMATORY_PAIRS, "confirmatory"), (EXPLORATORY_PAIRS, "exploratory")):
+        for mod_a, mod_b, desc in pair_list:
+            for ds in datasets:
+                if (mod_a, ds) not in runs or (mod_b, ds) not in runs:
+                    continue
+                common_seeds = sorted(set(runs[(mod_a, ds)]) & set(runs[(mod_b, ds)]))
+                if not common_seeds and (mod_b == "gend_official" or mod_a == "gend_official"):
+                    # Official weights have no training seed: pair every seed of the
+                    # other model with the single official run.
+                    off = runs[(mod_b, ds)] if mod_b == "gend_official" else runs[(mod_a, ds)]
+                    off_df = list(off.values())[0]
+                    other = runs[(mod_a, ds)] if mod_b == "gend_official" else runs[(mod_b, ds)]
+                    common_seeds = sorted(other)
+                    dfs_a = [other[s] for s in common_seeds] if mod_b == "gend_official" else [off_df] * len(common_seeds)
+                    dfs_b = [off_df] * len(common_seeds) if mod_b == "gend_official" else [other[s] for s in common_seeds]
+                elif not common_seeds:
+                    continue
+                else:
+                    dfs_a = [runs[(mod_a, ds)][s] for s in common_seeds]
+                    dfs_b = [runs[(mod_b, ds)][s] for s in common_seeds]
 
-    print("=" * 90)
-    print("HYPOTHESIS H1: PAIRED CLUSTER BOOTSTRAP ΔAUC TESTS (95% CI, Equivalence δ=0.01)")
-    print("=" * 90)
+                is_conf = kind == "confirmatory" and roles[ds] == "confirmatory"
+                level = level_conf if is_conf else 0.95
+                st = paired_cluster_boot_dauc(
+                    dfs_a, dfs_b,
+                    cluster_col="resolved_cluster_id",
+                    n_boot=args.n_boot,
+                    level=level,
+                    delta=delta,
+                )
+                results.append({
+                    "Dataset": ds.upper(),
+                    "Role": roles[ds],
+                    "Kind": "confirmatory" if is_conf else "exploratory",
+                    "Model A": mod_a,
+                    "Model B": mod_b,
+                    "Comparison": desc,
+                    "AUC (A)": st["mean_a"],
+                    "AUC (B)": st["mean_b"],
+                    "dAUC (A-B)": st["mean_delta"],
+                    "CI level": level,
+                    "CI Lower": st["ci_lower"],
+                    "CI Upper": st["ci_upper"],
+                    "Classification": st["classification"],
+                    "N multiplier to resolve": required_size_multiplier(
+                        st["ci_half_width"], st["mean_delta"], delta),
+                    "Seeds": len(common_seeds),
+                    "Clusters": st["n_clusters"],
+                    "Samples": st["n_samples"],
+                    "Dropped (unaligned)": st["n_dropped_unaligned"],
+                })
 
-    for mod_a, mod_b, desc in candidate_pairs:
-        for ds in datasets:
-            if (mod_a, ds) not in runs or (mod_b, ds) not in runs:
-                continue
-            seeds_a = set(runs[(mod_a, ds)].keys())
-            seeds_b = set(runs[(mod_b, ds)].keys())
-            common_seeds = sorted(list(seeds_a.intersection(seeds_b)))
-            if not common_seeds:
-                continue
-
-            dfs_a = [runs[(mod_a, ds)][s] for s in common_seeds]
-            dfs_b = [runs[(mod_b, ds)][s] for s in common_seeds]
-
-            # Run paired cluster bootstrap
-            stats = paired_cluster_boot_dauc(
-                dfs_a, dfs_b,
-                cluster_col="resolved_cluster_id",
-                n_boot=args.n_boot,
-                delta=args.delta
-            )
-
-            results.append({
-                "Dataset": ds.upper(),
-                "Model A": mod_a,
-                "Model B": mod_b,
-                "Comparison": desc,
-                "AUC (A)": stats["mean_a"],
-                "AUC (B)": stats["mean_b"],
-                "ΔAUC (A-B)": stats["mean_delta"],
-                "95% CI Lower": stats["ci_lower"],
-                "95% CI Upper": stats["ci_upper"],
-                "Classification": stats["classification"],
-                "Seeds": len(common_seeds),
-                "Clusters": stats["n_clusters"],
-                "Samples": stats["n_samples"]
-            })
-
-    if results:
-        res_df = pd.DataFrame(results)
-        print("\n" + df_to_markdown(res_df) + "\n")
-        print("=" * 90)
-
-        os.makedirs("results/tables", exist_ok=True)
-        res_df.to_csv("results/tables/hypothesis_h1_stats.csv", index=False, encoding="utf-8")
-        with open("results/tables/hypothesis_h1_stats.md", "w", encoding="utf-8") as f:
-            f.write("# Hypothesis H1: Statistical Equivalence & ΔAUC Bootstrap Tests\n\n")
-            f.write(df_to_markdown(res_df) + "\n")
-        print("✓ Statistical test matrix successfully saved to results/tables/hypothesis_h1_stats.csv and .md\n")
-    else:
+    if not results:
         print("No matching model pairs found in scores.")
+        return
+
+    res_df = pd.DataFrame(results)
+    conf_rows = res_df[res_df["Kind"] == "confirmatory"]
+    verdict = h1_verdict(conf_rows["Classification"].tolist())
+    seeds_available = sorted({int(s.replace("seed", "")) for (m, ds), d in runs.items() for s in d
+                              if s.replace("seed", "").isdigit()})
+
+    print("\n" + df_to_markdown(res_df) + "\n")
+    print(f"H1 VERDICT (pre-registered rule): {verdict}")
+    if len(seeds_available) < 5:
+        print(f"  NOTE: pre-registration specifies seeds 1-5; available seeds: {seeds_available}. "
+              "Log this as a deviation until all seeds exist.")
+    print("=" * 90)
+
+    os.makedirs(args.out_dir, exist_ok=True)
+    res_df.to_csv(os.path.join(args.out_dir, "hypothesis_h1_stats.csv"), index=False, encoding="utf-8")
+    meta = {
+        "verdict": verdict,
+        "delta": delta,
+        "delta_rule": delta_note,
+        "n_boot": args.n_boot,
+        "bonferroni_m": m_family,
+        "confirmatory_level": level_conf,
+        "negatives": "mixed" if args.mixed_negatives else "pure",
+        "dataset_roles": roles,
+        "seeds_available": seeds_available,
+        "purity": {f"{k[0]}_{k[1]}_{k[2]}": v for k, v in purity.items()},
+    }
+    with open(os.path.join(args.out_dir, "hypothesis_h1_meta.json"), "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2)
+    with open(os.path.join(args.out_dir, "hypothesis_h1_stats.md"), "w", encoding="utf-8") as f:
+        f.write("# Hypothesis H1: Paired Cluster Bootstrap Delta-AUC\n\n")
+        f.write(f"- Verdict (pre-registered rule): **{verdict}**\n")
+        f.write(f"- delta = {delta:.4f} ({delta_note}); n_boot = {args.n_boot}; "
+                f"Bonferroni m = {m_family}, per-comparison level = {level_conf:.4f}\n")
+        f.write(f"- Negatives: {'mixed' if args.mixed_negatives else 'pure-source'}; seeds: {seeds_available}\n")
+        f.write("- Only rows with Kind = confirmatory decide H1. 'N multiplier to resolve' is the rough factor "
+                "by which the evaluation set must grow before an equivalence verdict is possible.\n\n")
+        f.write(df_to_markdown(res_df) + "\n")
+    print(f"Saved {args.out_dir}/hypothesis_h1_stats.csv, .md and hypothesis_h1_meta.json")
 
 
 if __name__ == "__main__":
     main()
-

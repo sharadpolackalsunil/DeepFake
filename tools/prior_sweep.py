@@ -100,9 +100,20 @@ def run_prior_sweep(
     tau_val: float = 0.50,
     priors: List[float] = [0.1, 0.3, 0.5, 0.7, 0.9],
     n_repeats: int = 200,
-    random_seed: int = 42
+    random_seed: int = 42,
+    prob_col: str = "score_mean",
 ) -> pd.DataFrame:
-    """Perform prior sweep experiment across multiple simulated operational priors."""
+    """Perform prior sweep experiment across multiple simulated operational priors.
+
+    `prob_col` must hold posteriors calibrated under a balanced source prior (class-
+    balanced Platt), because that is what Saerens EM assumes. Pass a calibrated column.
+
+    Note on metrics: HTER = (FPR + FNR) / 2 does not depend on the class prior, and EM
+    only re-weights posteriors monotonically, so EM cannot be expected to lower HTER at a
+    fixed threshold. What EM targets is the Bayes decision under the new prior, i.e.
+    accuracy (or expected cost). Both are reported: `acc_frozen` thresholds the source
+    posterior at tau_val; `acc_em_bayes` thresholds the EM-adjusted posterior at 0.5.
+    """
     rng = np.random.RandomState(random_seed)
     results = []
     
@@ -110,11 +121,13 @@ def run_prior_sweep(
         prior_errors = []
         pre_hters = []
         post_hters = []
+        acc_pre = []
+        acc_post = []
         
         for rep in range(n_repeats):
             sub_df = resample_to_prior(df, target_prior=pi, rng=rng)
             y = sub_df["label"].values.astype(np.int32)
-            p_source = sub_df["score_mean"].values.astype(np.float64)
+            p_source = sub_df[prob_col].values.astype(np.float64)
             
             # Pre-correction HTER at frozen threshold
             fpr_pre = float(np.mean(p_source[y == 0] >= tau_val))
@@ -132,6 +145,8 @@ def run_prior_sweep(
             prior_errors.append(abs(pi_hat - pi))
             pre_hters.append(hter_pre)
             post_hters.append(hter_post)
+            acc_pre.append(float(np.mean((p_source >= tau_val).astype(int) == y)))
+            acc_post.append(float(np.mean((p_adjusted >= 0.5).astype(int) == y)))
             
         results.append({
             "target_prior_pi": pi,
@@ -141,7 +156,10 @@ def run_prior_sweep(
             "std_hter_frozen": float(np.std(pre_hters)),
             "mean_hter_em_corrected": float(np.mean(post_hters)),
             "std_hter_em_corrected": float(np.std(post_hters)),
-            "hter_reduction": float(np.mean(pre_hters) - np.mean(post_hters))
+            "hter_reduction": float(np.mean(pre_hters) - np.mean(post_hters)),
+            "acc_frozen": float(np.mean(acc_pre)),
+            "acc_em_bayes": float(np.mean(acc_post)),
+            "acc_gain": float(np.mean(acc_post) - np.mean(acc_pre)),
         })
         
     return pd.DataFrame(results)
@@ -156,8 +174,13 @@ def main():
     parser.add_argument("--scores", type=str, default=None, help="Specific score CSV path to sweep")
     parser.add_argument("--scores-dir", type=str, default="results/scores", help="Scores directory")
     parser.add_argument("--n-repeats", type=int, default=50, help="Number of subsampling repeats per prior")
-    parser.add_argument("--tau-val", type=float, default=0.50, help="Frozen decision threshold")
+    parser.add_argument("--tau-val", type=float, default=0.50, help="Frozen decision threshold (raw mode only)")
+    parser.add_argument("--calib-dir", type=str, default="results/calib",
+                        help="Use Platt-calibrated posteriors and the frozen tau from this directory")
+    parser.add_argument("--allow-raw", action="store_true",
+                        help="Allow runs without calibration (raw score_mean treated as a posterior; labelled raw)")
     args = parser.parse_args()
+    from tools.calib_utils import load_calib, calibrated_probs
 
     target_files = []
     if args.scores:
@@ -186,7 +209,20 @@ def main():
             df = pd.read_csv(sf)
             if "label" not in df.columns or "score_mean" not in df.columns:
                 continue
-            sweep_df = run_prior_sweep(df, tau_val=args.tau_val, priors=[0.1, 0.3, 0.5, 0.7, 0.9], n_repeats=args.n_repeats)
+            run_name = model_name.rsplit("_", 1)[0] if "_seed" in model_name else model_name
+            calib = load_calib(run_name, args.calib_dir)
+            if calib is not None:
+                df = df.copy()
+                df["p_cal"] = calibrated_probs(df, calib)
+                prob_col, tau, mode = "p_cal", float(calib["tau"]), "calibrated"
+            elif args.allow_raw:
+                prob_col, tau, mode = "score_mean", args.tau_val, "raw"
+            else:
+                print(f"Skipping {model_name}: no calibration file for {run_name} (use --allow-raw to force).")
+                continue
+            sweep_df = run_prior_sweep(df, tau_val=tau, priors=[0.1, 0.3, 0.5, 0.7, 0.9],
+                                       n_repeats=args.n_repeats, prob_col=prob_col)
+            sweep_df.insert(0, "posteriors", mode)
             sweep_df.insert(0, "model", model_name)
             all_dfs.append(sweep_df)
             print(f"\n--- Model: {model_name} (Target Prior Sweep, N_repeats={args.n_repeats}) ---")
