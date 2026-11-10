@@ -9,6 +9,7 @@ import os
 import csv
 import random
 from collections import defaultdict
+import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -80,6 +81,11 @@ class VideoStore:
         if os.path.exists(lmk_path):
             return np.load(lmk_path)
         return None
+
+    def close(self):
+        """Release array references to allow GC to cleanly deallocate memmap objects."""
+        self._frames = None
+        self.fidx = None
 
 
 def contiguous_starts(fidx, T, stride):
@@ -174,38 +180,51 @@ class PairedClipDataset(Dataset):
         rs = VideoStore(self.root, real["video_id"])
         use_sbi = self.sbi_fn is not None and (random.random() < self.p_sbi or not self.fakes[real["target_id"]])
 
-        if use_sbi:
-            starts = contiguous_starts(rs.fidx, self.T, self.stride)
-            if not starts:
-                return self.__getitem__((i + 1) % len(self))
-            s = random.choice(starts)
-            sel = np.arange(s, s + self.T * self.stride, self.stride)
-            real_u8 = np.asarray(rs.frames[sel]).copy()
-            fake_u8, fake_mask = self.sbi_fn(real_u8, rs.lmk()[sel])
-            method = "SBI"
-        else:
-            fakes_list = self.fakes[real["target_id"]]
-            # Stateless balanced sampling: ensures all methods train evenly under persistent_workers=True
-            fake = pick_fake(fakes_list, self.method_weights)
-            if fake is None:
-                fake = fakes_list[self.epoch % len(fakes_list)]
-            fs = VideoStore(self.root, fake["video_id"])
-            common, ri, fi = np.intersect1d(rs.fidx, fs.fidx, return_indices=True)
-            starts = contiguous_starts(common, self.T, self.stride)
-            if not starts:
-                return self.__getitem__((i + 1) % len(self))
-            s = random.choice(starts)
-            sel = np.arange(s, s + self.T * self.stride, self.stride)
-            real_u8 = np.asarray(rs.frames[ri[sel]]).copy()
-            fake_u8 = np.asarray(fs.frames[fi[sel]]).copy()
+        fs = None
+        try:
+            if use_sbi:
+                starts = contiguous_starts(rs.fidx, self.T, self.stride)
+                if not starts:
+                    return self.__getitem__((i + 1) % len(self))
+                s = random.choice(starts)
+                sel = np.arange(s, s + self.T * self.stride, self.stride)
+                real_u8 = np.asarray(rs.frames[sel]).copy()
+                lmks = rs.lmk()
+                real_lmks_sel = lmks[sel].copy().astype(np.float32) if lmks is not None else None
+                fake_u8, fake_mask = self.sbi_fn(real_u8, lmks[sel] if lmks is not None else None)
+                method = "SBI"
+            else:
+                fakes_list = self.fakes[real["target_id"]]
+                # Stateless balanced sampling: ensures all methods train evenly
+                fake = pick_fake(fakes_list, self.method_weights)
+                if fake is None:
+                    fake = fakes_list[self.epoch % len(fakes_list)]
+                fs = VideoStore(self.root, fake["video_id"])
+                common, ri, fi = np.intersect1d(rs.fidx, fs.fidx, return_indices=True)
+                starts = contiguous_starts(common, self.T, self.stride)
+                if not starts:
+                    return self.__getitem__((i + 1) % len(self))
+                s = random.choice(starts)
+                sel = np.arange(s, s + self.T * self.stride, self.stride)
+                real_u8 = np.asarray(rs.frames[ri[sel]]).copy()
+                fake_u8 = np.asarray(fs.frames[fi[sel]]).copy()
+                lmks = rs.lmk()
+                real_lmks_sel = lmks[ri[sel]].copy().astype(np.float32) if lmks is not None else None
 
-            # Difference-derived manipulation mask (D1 fix)
-            # Pixel-aligned difference between fake and real crops
-            diff = np.abs(fake_u8.astype(np.float32) - real_u8.astype(np.float32)).max(axis=-1)  # (T, H, W)
-            p95 = np.percentile(diff, 95)
-            diff_norm = diff / p95 if p95 > 1e-3 else diff
-            fake_mask = (diff_norm > 0.15).astype(np.float32)
-            method = fake["method"]
+                # Difference-derived manipulation mask (D1 fix)
+                # Compute difference directly using cv2.absdiff without transient float allocations
+                diff_u8 = cv2.absdiff(fake_u8, real_u8).max(axis=-1)  # (T, H, W) uint8
+                p95 = float(np.percentile(diff_u8, 95))
+                if p95 > 1e-3:
+                    diff_norm = diff_u8.astype(np.float32) / p95
+                    fake_mask = (diff_norm > 0.15).astype(np.float32)
+                else:
+                    fake_mask = (diff_u8 > 15).astype(np.float32)
+                method = fake["method"]
+        finally:
+            rs.close()
+            if fs is not None:
+                fs.close()
 
         p = self.aug.sample(real_u8.shape[1])
         real_clip = self.aug.apply(real_u8, p)
@@ -229,12 +248,9 @@ class PairedClipDataset(Dataset):
 
         # Compute dynamic perioral prior from 106-point facial landmarks
         try:
-            lmks = rs.lmk()
-            if lmks is not None:
-                sel_lmk = ri[sel] if 'ri' in locals() and ri is not None else sel
-                real_lmks = lmks[sel_lmk].copy().astype(np.float32)
+            if real_lmks_sel is not None:
                 scale = float(self.aug.size) / float(p["crop"])
-                lmk_t = real_lmks
+                lmk_t = real_lmks_sel
                 lmk_t[:, :, 0] = (lmk_t[:, :, 0] - p["x"]) * scale
                 lmk_t[:, :, 1] = (lmk_t[:, :, 1] - p["y"]) * scale
                 if p["flip"]:
@@ -311,53 +327,56 @@ class EvalClipDataset(Dataset):
                     store_root = alt
                     break
         vs = VideoStore(store_root, vid)
-        starts = contiguous_starts(vs.fidx, self.T, self.stride)
+        try:
+            starts = contiguous_starts(vs.fidx, self.T, self.stride)
 
-        if not starts:
-            if not hasattr(self, "_warned_missing"):
-                self._warned_missing = True
-                print(f"\n[WARNING] VideoStore at '{store_root}/{vid}' has no frames (starts=[])! Ensure --store points to the correct frame store directory!\n")
-            # Fallback for short tracks: repeat first frame
-            clips = torch.zeros(self.K, self.T, 3, self.size, self.size)
-            priors = torch.ones(self.K, self.T, 256, dtype=torch.float32)
-        else:
-            # Choose K evenly spaced starts
-            step = max(1, len(starts) // self.K)
-            chosen_starts = [starts[min(j * step, len(starts) - 1)] for j in range(self.K)]
+            if not starts:
+                if not hasattr(self, "_warned_missing"):
+                    self._warned_missing = True
+                    print(f"\n[WARNING] VideoStore at '{store_root}/{vid}' has no frames (starts=[])! Ensure --store points to the correct frame store directory!\n")
+                # Fallback for short tracks: repeat first frame
+                clips = torch.zeros(self.K, self.T, 3, self.size, self.size)
+                priors = torch.ones(self.K, self.T, 256, dtype=torch.float32)
+            else:
+                # Choose K evenly spaced starts
+                step = max(1, len(starts) // self.K)
+                chosen_starts = [starts[min(j * step, len(starts) - 1)] for j in range(self.K)]
 
-            clips_list = []
-            priors_list = []
-            try:
-                lmks = vs.lmk()
-            except Exception:
-                lmks = None
+                clips_list = []
+                priors_list = []
+                try:
+                    lmks = vs.lmk()
+                except Exception:
+                    lmks = None
 
-            for s in chosen_starts:
-                sel = np.arange(s, s + self.T * self.stride, self.stride)
-                frames_u8 = np.asarray(vs.frames[sel])
-                H, W = frames_u8.shape[1:3]
-                # Deterministic center crop
-                cy, cx = (H - self.size) // 2, (W - self.size) // 2
-                cropped = frames_u8[:, cy:cy + self.size, cx:cx + self.size].copy()
-                clip_tensor = torch.from_numpy(np.ascontiguousarray(cropped)).permute(0, 3, 1, 2).float() / 255.0
-                if self.normalize is not None:
-                    clip_tensor = self.normalize(clip_tensor)
-                clips_list.append(clip_tensor)
+                for s in chosen_starts:
+                    sel = np.arange(s, s + self.T * self.stride, self.stride)
+                    frames_u8 = np.asarray(vs.frames[sel])
+                    H, W = frames_u8.shape[1:3]
+                    # Deterministic center crop
+                    cy, cx = (H - self.size) // 2, (W - self.size) // 2
+                    cropped = frames_u8[:, cy:cy + self.size, cx:cx + self.size].copy()
+                    clip_tensor = torch.from_numpy(np.ascontiguousarray(cropped)).permute(0, 3, 1, 2).float() / 255.0
+                    if self.normalize is not None:
+                        clip_tensor = self.normalize(clip_tensor)
+                    clips_list.append(clip_tensor)
 
-                if lmks is not None:
-                    try:
-                        lmk_clip = lmks[sel].copy().astype(np.float32)
-                        lmk_clip[:, :, 0] -= cx
-                        lmk_clip[:, :, 1] -= cy
-                        prior_clip = compute_perioral_prior(lmk_clip, grid_size=16, crop_size=float(self.size))
-                    except Exception:
+                    if lmks is not None:
+                        try:
+                            lmk_clip = lmks[sel].copy().astype(np.float32)
+                            lmk_clip[:, :, 0] -= cx
+                            lmk_clip[:, :, 1] -= cy
+                            prior_clip = compute_perioral_prior(lmk_clip, grid_size=16, crop_size=float(self.size))
+                        except Exception:
+                            prior_clip = torch.ones(self.T, 256, dtype=torch.float32)
+                    else:
                         prior_clip = torch.ones(self.T, 256, dtype=torch.float32)
-                else:
-                    prior_clip = torch.ones(self.T, 256, dtype=torch.float32)
-                priors_list.append(prior_clip)
+                    priors_list.append(prior_clip)
 
-            clips = torch.stack(clips_list)  # (K, T, 3, S, S)
-            priors = torch.stack(priors_list)  # (K, T, 256)
+                clips = torch.stack(clips_list)  # (K, T, 3, S, S)
+                priors = torch.stack(priors_list)  # (K, T, 256)
+        finally:
+            vs.close()
 
         label = float(row["label"])
         return {
