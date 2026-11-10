@@ -209,6 +209,9 @@ def paired_cluster_boot_dauc(
     }
 
 
+paired_cluster_bootstrap = paired_cluster_boot_dauc
+
+
 def main():
     import glob
     import os
@@ -272,7 +275,7 @@ def main():
             dfs_b = [runs[(mod_b, ds)][s] for s in common_seeds]
 
             # Run paired cluster bootstrap
-            stats = paired_cluster_bootstrap(
+            stats = paired_cluster_boot_dauc(
                 dfs_a, dfs_b,
                 cluster_col="cluster_id" if "cluster_id" in dfs_a[0].columns else "video_id",
                 n_boot=args.n_boot,
