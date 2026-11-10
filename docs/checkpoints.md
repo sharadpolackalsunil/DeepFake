@@ -78,14 +78,15 @@ This registry tracks the exact storage location, architecture specifications, pa
 | Model | Seed | Training Status | Epochs Completed | Best Val AUC | Checkpoint Size | Celeb-DF AUC | DFD AUC | Notes |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
 | `gend_ours` | 1 | ✅ Completed | 30 / 30 | 0.9047 (test) | ~1.2 GB | 0.8321 | 0.8776 | Reference GenD anchor: FF++ Test AUC 0.9047, Celeb-DF 0.8321, DFD 0.8776 |
-| `gend_ours` | 2 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
+| `gend_ours` | 2 | ✅ Completed | 30 / 30 | 0.9040 (test) | ~1.2 GB | 0.8273 | 0.8820 | Seed 2: FF++ Test AUC 0.9040, Celeb-DF 0.8273, DFD 0.8820 |
 | `gend_ours` | 3 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
 | `smsdt_s` | 1 | ✅ Completed | 30 / 30 | 0.9514 | ~1.2 GB | 0.8837 | 0.8742 | Controlled single-frame baseline: FF++ Test AUC 0.9587, Celeb-DF 0.8837, DFD 0.8742 |
+| `smsdt_s` | 2 | ✅ Completed | 30 / 30 | 0.9613 | ~1.2 GB | 0.8825 | 0.8807 | Seed 2: FF++ Test AUC 0.9613, Celeb-DF 0.8825, DFD 0.8807 |
 | `smsdt_st` | 1 | ✅ Completed | 30 / 30 | 0.9584 | ~1.2 GB | 0.8706 | 0.8682 | Spatio-temporal baseline: FF++ Test AUC 0.9604, Celeb-DF 0.8706, DFD 0.8682 |
-| `smsdt_st` | 2 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
+| `smsdt_st` | 2 | ✅ Completed | 30 / 30 | 0.9664 | ~1.2 GB | 0.8779 | 0.8748 | Seed 2: FF++ Test AUC 0.9664, Celeb-DF 0.8779, DFD 0.8748 |
 | `smsdt_st` | 3 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
 | `smsdt_full`| 1 | ✅ Completed | 30 / 30 | 0.9591 | ~1.2 GB | 0.8915 | 0.8604 | Flagship model (SRM+DWT+LSE): FF++ Test AUC 0.9631, Celeb-DF 0.8915, DFD 0.8604 |
-| `smsdt_full`| 2 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
+| `smsdt_full`| 2 | ✅ Completed | 30 / 30 | 0.9621 | ~1.2 GB | 0.8960 | 0.8689 | Seed 2: FF++ Test AUC 0.9621, Celeb-DF 0.8960, DFD 0.8689 (Peak cross-dataset) |
 | `smsdt_full`| 3 | ⏳ Queued | 0 / 30 | — | — | — | — | — |
 
 ---
