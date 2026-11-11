@@ -20,3 +20,13 @@ where a replacement needs a new number it says `[RERUN]`.
 | 10, verdict 1 | "H4 CONFIRMED" | Use the `h4a` block of `fpr_control_verdicts.json`. Seeds 1-2 are exploratory. Wilson bounds from the reported point estimates: Full lower bound > 0.10 on seeds 1-3; ST only on seed 3. Until seeds 4-5 exist write "H4a supported for Full, not established for ST". Report H4b from `fpr_control_h4b.csv`. |
 | 10.3 | `degenerate_rate = 0.0` next to TPR = 0.000 / FPR = 0.000 | `[RERUN]`; the fixed tool now flags thresholds outside the logit support as degenerate. The H5 verdict stays "falsified" but the explanation must come from the re-run. |
 | 11.2 | "Overclaiming scrubbed" ticked | Untick until the rows above are done. |
+
+## Addendum 2026-11-11 (after the post-PR-#11 rerun)
+
+| Section | Problem | Action |
+|---|---|---|
+| All DFD rows | D14: the DFD score files still include the 140 FF++ test reals, labelled `dfd_actor`. Pure DFD has 243 reals and 18 actor identities, not 383 and 41 | `[RERUN]` every tool after this patch. DFD stays exploratory |
+| 5 (H2) | D13: the gap CI was bootstrapped on Celeb-DF's 3-valued `cluster_id` (for example [0.0984, 0.1023]) | `[RERUN]` `python -m tools.threshold_transfer`; until then write "H2: CIs pending re-run" |
+| 9.2, 10.2 ("general failure mode") | One external checkpoint, one seed; `gend_ours` and `smsdt_s` stay within budget | Write "also occurs for the official GenD checkpoint" instead of "general" |
+| 10.4 | D15: the ablation left the CLS head, residual stream and temporal blocks untouched | Replace the conclusion with "swapping the token readout at evaluation time does not change FPR (11.99 to 12.17%)". Run `--branch-ablation cls_only|token_only` before naming a cause. Drop "points to representation/capacity" |
+| new section | Real-shot benchmark (H7) | Add from `docs/real_shot_benchmark.md`, clearly marked as development results |

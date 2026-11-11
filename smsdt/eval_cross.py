@@ -652,6 +652,9 @@ def main():
     parser.add_argument("--calib", type=str, default=None, help="Path to frozen calibration JSON file (a, b, tau)")
     parser.add_argument("--save-scores", type=str, default=None, help="Path to export per-video score CSV")
     parser.add_argument("--ci", action="store_true", help="Compute 95%% bootstrap confidence intervals for primary metrics")
+    parser.add_argument("--branch-ablation", default="learned", choices=["learned", "token_only", "cls_only"],
+                        help="Eval-time diagnostic for S-MSDTv3: use only the token readout or only the "
+                             "global CLS head (the final logit blends both with sigmoid(beta)).")
     parser.add_argument("--readout-ablation", default="learned",
                         choices=["learned", "mean_patch", "lse_only", "att_only"],
                         help="Eval-time diagnostic for S-MSDTv3 readout (H4 mechanism check). "
@@ -662,6 +665,12 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Loading checkpoint: {args.ckpt} on {device}")
     model, model_type, norm_fn = load_model(args.ckpt, device)
+    if args.branch_ablation != "learned":
+        if not hasattr(model, "beta"):
+            raise SystemExit("--branch-ablation requires an S-MSDTv3 checkpoint (no beta blend found).")
+        model.branch_mode = args.branch_ablation
+        print(f"  * Branch ablation active: {args.branch_ablation} (sigmoid(beta) = "
+              f"{float(torch.sigmoid(model.beta)):.3f})")
     if args.readout_ablation != "learned":
         n_set = 0
         for m in model.modules():
