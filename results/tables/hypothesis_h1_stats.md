@@ -16,3 +16,4 @@
 | FFPP | smsdt_s | gend_ours | Single-Frame Recipe Ablation (SMSDT-S vs GenD) | 0.9627 | 0.9044 | 0.0583 | 0.0447 | 0.0715 | better | 3 | 140 | 840 |
 | CELEBDF | smsdt_s | gend_ours | Single-Frame Recipe Ablation (SMSDT-S vs GenD) | 0.8826 | 0.8294 | 0.0532 | 0.0209 | 0.0866 | better | 3 | 124 | 518 |
 | DFD | smsdt_s | gend_ours | Single-Frame Recipe Ablation (SMSDT-S vs GenD) | 0.8841 | 0.8785 | 0.0056 | -0.0121 | 0.0236 | inconclusive | 3 | 413 | 2987 |
+

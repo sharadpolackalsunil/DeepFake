@@ -19,12 +19,17 @@ from tools.stats import fast_auc
 
 
 def get_layernorm_params(model: nn.Module) -> List[nn.Parameter]:
-    """Collect only LayerNorm affine parameters (gamma, beta) from the vision tower and heads."""
+    """Collect only LayerNorm affine parameters (gamma, beta) from the vision tower and heads.
+    
+    Freezes all non-LayerNorm parameters and ensures LayerNorm parameters have requires_grad=True.
+    """
     ln_params = []
     for name, param in model.named_parameters():
         if "norm" in name.lower() or "ln" in name.lower():
-            if param.requires_grad:
-                ln_params.append(param)
+            param.requires_grad = True
+            ln_params.append(param)
+        else:
+            param.requires_grad = False
     return ln_params
 
 
@@ -76,13 +81,17 @@ class TTAAdapter:
         self.ln_params = get_layernorm_params(self.model)
         self.optimizer = torch.optim.Adam(self.ln_params, lr=self.lr)
 
-    def adapt_batch(self, x: torch.Tensor) -> Tuple[torch.Tensor, float]:
+    def adapt_batch(self, x: torch.Tensor, prior: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, float]:
         """Perform one step of entropy minimization on unlabeled test batch."""
         self.model.eval()
         self.optimizer.zero_grad()
         
         # Forward pass
-        logits = self.model(x)
+        if prior is not None:
+            logits = self.model(x, prior=prior)
+        else:
+            logits = self.model(x)
+            
         if isinstance(logits, tuple):
             logits = logits[0]
             
