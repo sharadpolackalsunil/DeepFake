@@ -1,6 +1,6 @@
 # S-MSDT Phase 2 / TMLR Study Evaluation & Research Report (`research_v2.md`)
 
-**Date:** November 9, 2026  
+**Date:** November 11, 2026  
 **Venue Target:** Transactions on Machine Learning Research (TMLR)  
 **Hardware:** NVIDIA GeForce RTX 5090 (32GB GDDR7, CUDA 12.8, BFloat16)  
 **Branch:** `tmlr-research-study`  
@@ -511,9 +511,9 @@ This audit evaluates the degradation gap $g = \text{HTER}(\tau_{\text{val}}) - \
 | `smsdt_st_seed1` | FFPP | 0.5000 | 0.3858 | 0.0979 | 0.0979 | 0.0857 | **0.0121 (1.21%)** | 8.57% | 11.00% |
 
 #### Scientific Findings (H2):
-1. **Zero Threshold Catastrophe:** Across all 12 experimental conditions, the degradation gap $g$ ranges strictly between **0.0019 and 0.0166**, well within our pre-registered safety envelope of $\delta = 0.05$ (5.0%).
-2. **Superior Generalization Efficiency:** Validation-frozen operating cutoffs preserve $\ge 98.3\%$ of optimal oracle performance across novel deepfake generators, unseen actors, and cross-compression domains.
-3. **Lowest Absolute Error Rates:** `smsdt_full` achieves the lowest in-domain HTER (0.0871 on FF++), while `smsdt_s` achieves the lowest cross-domain HTER (0.1820 on Celeb-DF v2, $g=0.0051$).
+1. **Zero Threshold Catastrophe Across All 36 Conditions:** Across all 36 experimental evaluations (4 architectures × 3 seeds × 3 datasets documented in [`results/tables/threshold_transfer_audit.md`](file:///e:/DEEPFAKE/results/tables/threshold_transfer_audit.md)), the degradation gap $g$ strictly satisfies $g \le 0.0374$, well below our pre-registered safety envelope of $\delta = 0.05$ (5.0%).
+2. **Superior Generalization Efficiency:** Validation-frozen operating cutoffs preserve $\ge 96.3\%$ of optimal oracle performance across novel deepfake generators, unseen actors, and cross-compression domains.
+3. **Lowest Absolute Error Rates:** `smsdt_full` achieves the lowest in-domain HTER (0.0864 on FF++), while `smsdt_s` achieves the lowest cross-domain HTER (0.1593 on DFD, $g=0.0019$).
 
 ---
 

@@ -8,3 +8,4 @@
 | smsdt_full_seed1 | Celeb-DF-v2 | batch_episodic | 0.8880 | 0.8880 | 0.0000 | 0.2679 | 61.0 | 65.6 | False |
 | smsdt_full_seed1 | DFD | online | 0.8583 | 0.2390 | -0.6193 | 0.0252 | 0.6 | 87.2 | True |
 | smsdt_full_seed1 | DFD | batch_episodic | 0.8583 | 0.8583 | 0.0000 | 0.2091 | 70.7 | 87.2 | False |
+
