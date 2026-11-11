@@ -1,0 +1,49 @@
+{
+  "h5": {
+    "target_gmm@alpha=0.05": {
+      "verdict": "falsified",
+      "per_dataset": {
+        "celebdf": {
+          "err_policy": 0.07011596061645632,
+          "err_source": 0.07392224215528909,
+          "degenerate_rate": 0.0
+        }
+      }
+    },
+    "target_gmm@alpha=0.1": {
+      "verdict": "falsified",
+      "per_dataset": {
+        "celebdf": {
+          "err_policy": 0.08350024286868304,
+          "err_source": 0.0851836921285368,
+          "degenerate_rate": 0.0
+        }
+      }
+    },
+    "target_gmm_anchored@alpha=0.05": {
+      "verdict": "falsified",
+      "per_dataset": {
+        "celebdf": {
+          "err_policy": 0.07018470504306591,
+          "err_source": 0.07392224215528909,
+          "degenerate_rate": 0.0
+        }
+      }
+    },
+    "target_gmm_anchored@alpha=0.1": {
+      "verdict": "falsified",
+      "per_dataset": {
+        "celebdf": {
+          "err_policy": 0.08337233762418823,
+          "err_source": 0.0851836921285368,
+          "degenerate_rate": 0.0
+        }
+      }
+    }
+  },
+  "notes": [
+    "gend_official_seed0/celebdf: no source file"
+  ],
+  "h4_failures": 14,
+  "h4_rows": 48
+}
