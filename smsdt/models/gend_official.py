@@ -135,6 +135,11 @@ class GenDConfig(PretrainedConfig):
 
 class GenD(PreTrainedModel):
     config_class = GenDConfig
+    all_tied_weights_keys = {}
+
+    @classmethod
+    def get_init_context(cls, *args, **kwargs):
+        return []
 
     def __init__(self, config):
         super().__init__(config)
@@ -224,6 +229,13 @@ def load_official_gend(repo_id: str = "yermandy/GenD_CLIP_L_14") -> OfficialGenD
     Requires `transformers` and network access to huggingface.co (or a warm cache;
     set HF_HUB_OFFLINE=1 to force the cache).
     """
-    model = GenD.from_pretrained(repo_id)
+    model = GenD.from_pretrained(repo_id, low_cpu_mem_usage=False)
+    # Ensure position_ids buffer is initialized to valid sequential indices
+    if hasattr(model, "feature_extractor") and hasattr(model.feature_extractor, "vision_model"):
+        vm = model.feature_extractor.vision_model
+        if hasattr(vm, "embeddings") and hasattr(vm.embeddings, "position_embedding"):
+            n_pos = vm.embeddings.position_embedding.weight.shape[0]
+            dev = vm.embeddings.position_embedding.weight.device
+            vm.embeddings.position_ids = torch.arange(n_pos, device=dev).unsqueeze(0)
     model.eval()
     return OfficialGenDAdapter(model)
