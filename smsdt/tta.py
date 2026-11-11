@@ -139,7 +139,7 @@ class TTAAdapter:
             b, k = x.shape[:2]
             x_flat = x.reshape(b * k, *x.shape[2:])
             if prior is not None:
-                p_flat = prior.reshape(b * k, *prior.shape[2:])
+                p_flat = prior.to(x.device).reshape(b * k, *prior.shape[2:])
                 out = self.model(x_flat, prior=p_flat)
             else:
                 out = self.model(x_flat)
