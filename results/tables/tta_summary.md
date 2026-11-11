@@ -1,0 +1,11 @@
+# Test-Time Adaptation (TTA) Benchmark Summary
+
+*Evaluated with pre-registered LayerNorm entropy minimization (lr=1e-4)*
+
+| Model | Dataset | Mode | Pre_AUC | Post_AUC | Delta_AUC | Mean_Entropy | Pred_Pos_Pct | True_Pos_Pct | Collapsed |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| smsdt_full_seed1 | Celeb-DF-v2 | online | 0.8880 | 0.3386 | -0.5494 | 0.1187 | 6.6 | 65.6 | True |
+| smsdt_full_seed1 | Celeb-DF-v2 | batch_episodic | 0.8880 | 0.8880 | 0.0000 | 0.2679 | 61.0 | 65.6 | False |
+| smsdt_full_seed1 | DFD | online | 0.8583 | 0.2390 | -0.6193 | 0.0252 | 0.6 | 87.2 | True |
+| smsdt_full_seed1 | DFD | batch_episodic | 0.8583 | 0.8583 | 0.0000 | 0.2091 | 70.7 | 87.2 | False |
+

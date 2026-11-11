@@ -1,0 +1,54 @@
+\section{Methodology: S-MSDTv3}
+\label{sec:method}
+
+\begin{figure*}[t]
+\centering
+\fbox{\rule{0pt}{2.2in} \rule{0.95\linewidth}{0pt}}
+\caption{\textbf{Overview of S-MSDTv3 Architecture.} Video clips of $T$ frames pass through a CLIP ViT-L/14 foundation encoder with LayerNorm PEFT. The patch features are augmented via a zero-initialized sigmoid gate with multi-scale high-frequency residuals extracted via 3 SRM filters and 2D Haar DWT. Spatio-temporal interactions are captured across $L=2$ NMSSS blocks. An EvidenceReadoutV3 module incorporates a 106-point perioral landmark prior and Log-Sum-Exp (LSE) temperature pooling to produce calibrated video anomaly logits.}
+\label{fig:architecture}
+\end{figure*}
+
+\subsection{Architectural Formulation}
+An input video clip $\mathbf{V} \in \mathbb{R}^{T \times 3 \times H \times W}$ consisting of $T=8$ consecutive facial crops is mapped into a sequence of patch embeddings. S-MSDTv3 decomposes representation learning into four coordinated components: (i) a frozen foundation vision encoder with LayerNorm PEFT, (ii) a multi-scale high-frequency residual injection stream, (iii) a spatio-temporal attention backbone, and (iv) a landmark-guided Log-Sum-Exp evidence readout.
+
+\subsection{Foundation Backbone with LayerNorm PEFT}
+We leverage OpenAI's CLIP ViT-L/14 \citep{radford2021learning} ($H=W=224$, patch size $P=14$, embedding dimension $D_{\text{enc}}=1024$). To prevent catastrophic forgetting of general visual semantic representations while fitting downstream forensic boundaries, we freeze all self-attention projections, feed-forward networks, and positional embeddings, unfreezing \emph{exclusively} the LayerNorm scale ($\gamma$) and shift ($\beta$) parameters:
+\begin{equation}
+\text{LN}(\mathbf{z}; \gamma, \beta) = \frac{\mathbf{z} - \mu}{\sqrt{\sigma^2 + \epsilon}} \odot \gamma + \beta
+\end{equation}
+This Parameter-Efficient Fine-Tuning (PEFT) strategy optimizes only $103{,}425$ parameters ($<0.034\%$ of the 304M backbone parameters), preventing over-parameterized memorization of dataset-specific artifacts.
+
+\subsection{Dual High-Frequency Residual Stream (ResidualStream)}
+Standard self-attention mechanisms inherently act as low-pass filters, dampening localized high-frequency manipulation artifacts. To retain pixel-level forensic cues, we extract multi-scale residual signatures directly from raw pixel space $\mathbf{X}_0 \in [0, 1]^{BT \times 3 \times H \times W}$:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Spatial Rich Models (SRM):} We apply 3 fixed, non-trainable steganographic convolutional filters $\mathbf{K}_{\text{SRM}} \in \mathbb{R}^{3 \times 1 \times 5 \times 5}$ (1st-order, 2nd-order, and SQUARE filters \citep{fridrich2012rich}) across RGB channels to compute localized noise residuals $\mathbf{R}_{\text{SRM}} = \text{Conv2D}(\mathbf{X}_0, \mathbf{K}_{\text{SRM}})$.
+    \item \textbf{Discrete 2D Haar Wavelet Transform (DWT):} To expose multi-scale frequency discontinuities, we compute two decomposition levels of the discrete 2D Haar wavelet transform, extracting high-frequency sub-bands (Horizontal $LH$, Vertical $HL$, and Diagonal $HH$).
+\end{enumerate}
+The concatenated residual representations are processed through a lightweight residual projection network and injected into the latent patch tokens $\mathbf{S} \in \mathbb{R}^{BT \times N \times D}$ ($N=256$, $D=384$) via a learnable, zero-initialized sigmoid gate:
+\begin{align}
+g &= \sigma(\mathbf{w}_g), \quad \text{with } \mathbf{w}_g \text{ initialized to } -4.0 \quad (\implies g \approx 0.018) \\
+\mathbf{S}_{\text{fused}} &= \mathbf{S} + g \cdot \mathbf{S}_{\text{res}}
+\end{align}
+This zero-initialization ensures training stability, allowing the model to smoothly integrate forensic high frequencies without destabilizing pretrained CLIP representations.
+
+\subsection{Spatio-Temporal NMSSS Attention}
+To capture inter-frame dynamic inconsistencies (e.g., temporal jitter and unnatural boundary warping), the patch tokens are reshaped into spatio-temporal tensors $\mathbf{Z} \in \mathbb{R}^{B \times T \times N \times D}$ and augmented with learned temporal positional embeddings. 
+
+We process the tokens through $L=2$ Non-Monotonic Spatial-Spectral-Spatial (NMSSS) transformer layers. Between spatial self-attention operations, temporal difference features are extracted via replicate-padded forward finite differences:
+\begin{equation}
+\Delta \mathbf{Z}_t = \mathbf{Z}_t - \mathbf{Z}_{t-1}, \quad \text{with } \Delta \mathbf{Z}_0 = \mathbf{0}
+\end{equation}
+The temporal difference maps are fused into the query projections, forcing the attention heads to attend explicitly to localized velocity deviations and temporal phase jumps.
+
+\subsection{EvidenceReadoutV3 with Perioral Mouth Prior}
+Rather than relying on naive global average pooling, which dilutes subtle forgery cues across pristine facial regions, we introduce \textbf{EvidenceReadoutV3}:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Learned Query Cross-Attention:} $K_q=4$ learned queries $\mathbf{Q} \in \mathbb{R}^{4 \times D}$ attend over the spatio-temporal tokens via cross-attention, aggregating localized anomaly evidence into $4$ compact summary vectors.
+    \item \textbf{Perioral Mouth Prior Bias:} A large proportion of deepfake manipulations in modern benchmarks concentrate around the mouth and lip boundaries (e.g., audio-driven lip synchronization in Face2Face and NeuralTextures). We project 106-point facial landmarks into a binary mouth mask $\mathbf{M} \in \{0, 1\}^{H \times W}$, downsampled to the patch grid ($16 \times 16$). The spatial prior provides a soft additive bias $\alpha_{\text{prior}} \cdot \mathbf{M}_{\text{patch}}$ to the readout attention logits.
+    \item \textbf{Log-Sum-Exp (LSE) Smooth Maximum Pooling:} Across spatial patch anomaly logits $\mathbf{u} \in \mathbb{R}^{N}$, we pool evidence using a parameterized Log-Sum-Exp operator:
+    \begin{equation}
+    \text{LSE}(\mathbf{u}; r) = \frac{1}{r} \ln \left( \frac{1}{N} \sum_{i=1}^N \exp(r \cdot u_i) \right)
+    \end{equation}
+    where $r$ is a learnable scaling temperature initialized at $r_0 = 3.0$. For small $r$, LSE behaves as average pooling; for large $r$, it smoothly approximates the hard maximum, capturing sparse, localized manipulation artifacts without suffering gradient vanishing.
+\end{enumerate}
+
