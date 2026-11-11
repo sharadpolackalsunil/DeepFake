@@ -1,0 +1,24 @@
+\section{Introduction}
+\label{sec:intro}
+
+The proliferation of hyper-realistic facial manipulation algorithms has destabilized the evidential integrity of digital video media. Modern generative pipelines—spanning autoencoder-based face swaps \citep{faceswap2018}, neural texture synthesis \citep{thies2019neural}, and diffusion-based identity reenactment \citep{ho2020denoising, ramesh2022hierarchical}—now produce synthetic artifacts that are imperceptible to human scrutiny. Consequently, automated facial forgery detection has emerged as a critical societal safeguard for digital forensics, biometric authentication, and content moderation platforms.
+
+Despite significant advances in in-domain detection, the primary failure mode of contemporary deepfake detectors remains their vulnerability to \emph{cross-dataset generalization collapse} \citep{zi2020wilddeepfake, li2020celeb}. Detectors optimized solely on benchmark training distributions such as FaceForensics++ (FF++) \citep{rossler2019faceforensics} routinely fail when evaluated against novel generation artifacts, alternative face reenactment codecs, unseen demographic distributions, and heavy real-world compression schemes. Prior studies attribute this vulnerability to detectors over-relying on dataset-specific semantic artifacts (e.g., landmark misalignments or distinct facial boundaries) rather than learning intrinsic, generator-agnostic physical inconsistencies.
+
+To combat domain overfitting, recent literature has increasingly adopted large-scale pretrained Vision Transformers (ViTs), notably multimodal foundation models such as CLIP \citep{radford2021learning}. For example, GenD \citep{gend2024} demonstrated that freezing the pretrained transformer backbone and fine-tuning only the LayerNorm parameters (Parameter-Efficient Fine-Tuning, or PEFT) yields strong cross-manipulation transfer. However, single-frame CLIP-based detectors inherently possess two critical limitations:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{High-Frequency Residual Filtering:} Standard self-attention layers act predominantly as low-pass semantic filters, obscuring microscopic spatial inconsistencies (such as pixel grid discontinuities and phase errors) produced by upsampling operations.
+    \item \textbf{Temporal Blindness:} By evaluating isolated video frames independently ($T=1$), single-frame detectors fail to register inter-frame temporal incoherence, flickering across facial boundaries, and unnatural eyelid/mouth dynamics that persist even in highly compressed videos.
+\end{enumerate}
+
+\paragraph{Our Contributions.}
+In this work, we propose \textbf{S-MSDTv3} (\textbf{S}patio-\textbf{M}ulti-\textbf{S}cale \textbf{D}eepfake \textbf{T}ransformer, Version 3), a unified forensic foundation architecture engineered for robust cross-dataset video deepfake detection. Under a strictly controlled evaluation protocol matching optimization recipes and parameter budgets, we systematically evaluate the individual and collective utility of spatio-temporal modeling and high-frequency forensic streams. 
+
+Specifically, this paper delivers the following contributions:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Unified Foundation Architecture (S-MSDTv3):} We augment a CLIP ViT-L/14 backbone with a zero-initialized dual high-frequency residual stream—combining Spatial Rich Models (SRM) and discrete 2D Haar Wavelet Transforms (DWT)—alongside Non-Monotonic Spatial-Spectral-Spatial (NMSSS) spatio-temporal attention blocks and a perioral landmark-guided Log-Sum-Exp (LSE) evidence readout.
+    \item \textbf{Rigorous 3-Seed Multi-Run Study:} Across 12 fully trained and evaluated models (3 random seeds across 4 matched architectures), we establish that S-MSDTv3 significantly outperforms the reproduced GenD literature anchor by $\mathbf{+5.82\%}$ AUC on in-domain FF++ c23 ($0.9626$ vs $0.9044$) and by $\mathbf{+5.88\%}$ AUC on cross-dataset Celeb-DF v2 ($0.8882$ vs $0.8294$), peaking at $0.8960$ on Celeb-DF v2.
+    \item \textbf{Pre-Registered Statistical Hypothesis Testing (H1):} Using paired cluster bootstrap tests ($N_{\text{boot}}=2000$, equivalence margin $\delta=0.01$) resampled over true video and identity clusters, we confirm that the dual forensic stream provides a statistically positive $+1.78\%$ $\Delta\text{AUC}$ gain ($95\%$ CI: $[+0.0055, +0.0325]$) over spatio-temporal attention alone on unseen web deepfakes.
+    \item \textbf{Operating Point Transfer \& Prior-Shift Audits (H2, H3):} We demonstrate that validation-frozen operating cutoffs exhibit zero catastrophic degradation ($g \le 0.0374 \ll 0.05$) when transferred out-of-domain, and that Saerens Expectation-Maximization accurately tracks operational base-rate shifts $\pi \in [0.1, 0.9]$ with prior estimation error as low as $0.0068$.
+\end{itemize}
+

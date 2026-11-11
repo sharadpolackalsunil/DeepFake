@@ -19,12 +19,17 @@ from tools.stats import fast_auc
 
 
 def get_layernorm_params(model: nn.Module) -> List[nn.Parameter]:
-    """Collect only LayerNorm affine parameters (gamma, beta) from the vision tower and heads."""
+    """Collect only LayerNorm affine parameters (gamma, beta) from the vision tower and heads.
+    
+    Freezes all non-LayerNorm parameters and ensures LayerNorm parameters have requires_grad=True.
+    """
     ln_params = []
     for name, param in model.named_parameters():
         if "norm" in name.lower() or "ln" in name.lower():
-            if param.requires_grad:
-                ln_params.append(param)
+            param.requires_grad = True
+            ln_params.append(param)
+        else:
+            param.requires_grad = False
     return ln_params
 
 
@@ -76,21 +81,55 @@ class TTAAdapter:
         self.ln_params = get_layernorm_params(self.model)
         self.optimizer = torch.optim.Adam(self.ln_params, lr=self.lr)
 
-    def adapt_batch(self, x: torch.Tensor) -> Tuple[torch.Tensor, float]:
-        """Perform one step of entropy minimization on unlabeled test batch."""
+    def adapt_batch(self, x: torch.Tensor, prior: Optional[torch.Tensor] = None, max_chunk: int = 4) -> Tuple[torch.Tensor, float]:
+        """Perform one step of entropy minimization on unlabeled test batch with memory-safe sub-chunking.
+        
+        Args:
+            x: Tensor of shape (N, T, C, H, W) where N = B * K clips
+            prior: Optional soft prior tensor of shape (N, T, ...)
+            max_chunk: Maximum number of clips to pass through autograd simultaneously (prevents CUDA OOM)
+        """
         self.model.eval()
         self.optimizer.zero_grad()
         
-        # Forward pass
-        logits = self.model(x)
-        if isinstance(logits, tuple):
-            logits = logits[0]
+        N = x.size(0)
+        if N <= max_chunk:
+            if prior is not None:
+                out = self.model(x, prior=prior)
+            else:
+                out = self.model(x)
+            logits = out[0] if isinstance(out, (tuple, list)) else out
+            loss = binary_entropy_loss(logits)
+            loss.backward()
+            self.optimizer.step()
+            return logits.detach(), float(loss.item())
+
+        # Sub-batch gradient accumulation across chunks of max_chunk clips
+        logits_list = []
+        total_loss = 0.0
+        for i in range(0, N, max_chunk):
+            x_chunk = x[i:i + max_chunk]
+            p_chunk = prior[i:i + max_chunk] if prior is not None else None
             
-        loss = binary_entropy_loss(logits)
-        loss.backward()
+            if p_chunk is not None:
+                out = self.model(x_chunk, prior=p_chunk)
+            else:
+                out = self.model(x_chunk)
+                
+            chunk_logits = out[0] if isinstance(out, (tuple, list)) else out
+            chunk_weight = x_chunk.size(0) / float(N)
+            chunk_loss = binary_entropy_loss(chunk_logits) * chunk_weight
+            chunk_loss.backward()
+            
+            logits_list.append(chunk_logits.detach())
+            total_loss += float(chunk_loss.item())
+
         self.optimizer.step()
-        
-        return logits.detach(), float(loss.item())
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            
+        all_logits = torch.cat(logits_list, dim=0)
+        return all_logits, total_loss
 
     def adapt_stream(
         self,
