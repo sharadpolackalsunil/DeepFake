@@ -1,0 +1,18 @@
+# Hypothesis H1: Paired Cluster Bootstrap ΔAUC Tests (Auto-Generated)
+
+*Parameters: N_boot=2000, Equivalence margin δ=0.01, Canonical 3-Seed Multi-Run Aggregation*
+
+| Dataset | Model A | Model B | Comparison | AUC (A) | AUC (B) | ΔAUC (A-B) | 95% CI Lower | 95% CI Upper | Classification | Seeds | Clusters | Samples |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| FFPP | smsdt_full | gend_ours | Flagship S-MSDTv3 Full vs GenD Reference Anchor | 0.9625 | 0.9044 | 0.0582 | 0.0422 | 0.0733 | better | 3 | 140 | 840 |
+| CELEBDF | smsdt_full | gend_ours | Flagship S-MSDTv3 Full vs GenD Reference Anchor | 0.8882 | 0.8294 | 0.0588 | 0.0233 | 0.0952 | better | 3 | 124 | 518 |
+| DFD | smsdt_full | gend_ours | Flagship S-MSDTv3 Full vs GenD Reference Anchor | 0.8649 | 0.8785 | -0.0136 | -0.0350 | 0.0081 | inconclusive | 3 | 413 | 2987 |
+| FFPP | smsdt_full | smsdt_st | Residual Stream & LSE Pooling Ablation (Full vs ST) | 0.9625 | 0.9629 | -0.0004 | -0.0059 | 0.0053 | equivalent | 3 | 140 | 840 |
+| CELEBDF | smsdt_full | smsdt_st | Residual Stream & LSE Pooling Ablation (Full vs ST) | 0.8882 | 0.8704 | 0.0178 | 0.0055 | 0.0325 | inconclusive | 3 | 124 | 518 |
+| DFD | smsdt_full | smsdt_st | Residual Stream & LSE Pooling Ablation (Full vs ST) | 0.8649 | 0.8779 | -0.0130 | -0.0210 | -0.0054 | inconclusive | 3 | 413 | 2987 |
+| FFPP | smsdt_st | smsdt_s | Spatio-Temporal Attention Ablation (ST vs Spatial-only) | 0.9629 | 0.9627 | 0.0002 | -0.0066 | 0.0073 | equivalent | 3 | 140 | 840 |
+| CELEBDF | smsdt_st | smsdt_s | Spatio-Temporal Attention Ablation (ST vs Spatial-only) | 0.8704 | 0.8826 | -0.0122 | -0.0299 | 0.0041 | inconclusive | 3 | 124 | 518 |
+| DFD | smsdt_st | smsdt_s | Spatio-Temporal Attention Ablation (ST vs Spatial-only) | 0.8779 | 0.8841 | -0.0061 | -0.0146 | 0.0028 | inconclusive | 3 | 413 | 2987 |
+| FFPP | smsdt_s | gend_ours | Single-Frame Recipe Ablation (SMSDT-S vs GenD) | 0.9627 | 0.9044 | 0.0583 | 0.0447 | 0.0715 | better | 3 | 140 | 840 |
+| CELEBDF | smsdt_s | gend_ours | Single-Frame Recipe Ablation (SMSDT-S vs GenD) | 0.8826 | 0.8294 | 0.0532 | 0.0209 | 0.0866 | better | 3 | 124 | 518 |
+| DFD | smsdt_s | gend_ours | Single-Frame Recipe Ablation (SMSDT-S vs GenD) | 0.8841 | 0.8785 | 0.0056 | -0.0121 | 0.0236 | inconclusive | 3 | 413 | 2987 |
