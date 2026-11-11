@@ -33,3 +33,18 @@ Example:
    - DFD evaluations compare DFD fakes against `real_source == 'dfd_actor'` only ($N=243$).
    - Mixed-negative numbers (combining multiple sources) are clearly labeled as `mixed`.
 
+
+---
+
+## Additional Files (2026-11-10)
+
+The audit tools look up files by name. Flat layout under `results/scores/`:
+
+| File | Contents | Used by |
+|:---|:---|:---|
+| `{model}_seed{n}_{dataset}.csv` | Test-split scores (`dataset` in `ffpp`, `dfd`, `celebdf`, `dfdc`, `wdf`, `ffiw`) | all tools |
+| `{model}_seed{n}_ffppval.csv` | **Dev-split** scores of the same run (the split used for `--fit-calib`) | `tools/fpr_control.py` (source thresholds) |
+| `gend_official_seed0_{dataset}.csv` | Official GenD weights through this pipeline (`--ckpt hf:yermandy/GenD_CLIP_L_14`); `seed0` = no training seed | `tools/stats.py` (G1 rows) |
+| `results/calib/{model}_seed{n}.json` | Frozen Platt + Youden calibration `{a, b, tau}`, tau on the CALIBRATED scale | `tools/threshold_transfer.py`, `tools/prior_sweep.py` |
+
+`logit_mean` is required for every file: frozen thresholds and FPR control work on logits.
