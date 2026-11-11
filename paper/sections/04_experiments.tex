@@ -3,7 +3,7 @@
 
 \subsection{Experimental Setup}
 \paragraph{Datasets and Splits.}
-All models are trained strictly on the standard training split of **FaceForensics++ (FF++ c23)** \citep{rossler2019faceforensics}, comprising five distinct manipulation methods: Deepfakes, Face2Face, FaceSwap, NeuralTextures, and FaceShifter, paired with authentic YouTube videos (720 train, 140 val, and 140 test videos per method; $N=840$ test videos total).
+All models are trained strictly on the standard training split of \textbf{FaceForensics++ (FF++ c23)} \citep{rossler2019faceforensics}, comprising five distinct manipulation methods: Deepfakes, Face2Face, FaceSwap, NeuralTextures, and FaceShifter, paired with authentic YouTube videos (720 train, 140 val, and 140 test videos per method; $N=840$ test videos total).
 
 To evaluate cross-generator and cross-domain generalization, we deploy trained checkpoints without fine-tuning to two independent, challenging external benchmarks:
 \begin{enumerate}[leftmargin=*]
@@ -54,7 +54,7 @@ Following the pre-registered benchmark protocol, each test video is evaluated us
 \begin{table}[t]
 \centering
 \small
-\caption{\textbf{Canonical 3-Seed Aggregated Performance ($\text{Mean} \pm \text{Std Dev}$).} Multi-run validation across 3 independent training seeds on in-domain and unseen external evaluation distributions.}
+\caption{\textbf{Canonical 3-Seed Aggregated Performance ($\text{Mean} \pm \text{Std Dev}$) and External Anchor.} Multi-run validation across 3 independent FF++ c23 training seeds on in-domain and unseen external evaluation distributions. $^\dagger$External published checkpoint (\texttt{yermandy/GenD\_CLIP\_L\_14}) evaluated on Celeb-DF-v2 ($N=518$) under the identical protocol (Gate G1 anchor); bold denotes best among our controlled FF++ c23 trained models.}
 \label{tab:aggregated_results}
 \begin{tabular}{l c c c}
 \toprule
@@ -64,6 +64,8 @@ Following the pre-registered benchmark protocol, each test video is evaluated us
 \texttt{smsdt\_s}    & $0.9627 \pm 0.0049$ & $0.8826 \pm 0.0011$ & $\mathbf{0.8841 \pm 0.0120}$ \\
 \texttt{smsdt\_st}   & $0.9629 \pm 0.0031$ & $0.8704 \pm 0.0076$ & $0.8779 \pm 0.0116$ \\
 \textbf{\texttt{smsdt\_full}} (Ours) & $\mathbf{0.9626 \pm 0.0005}$ & $\mathbf{0.8882 \pm 0.0098}$ & $0.8649 \pm 0.0043$ \\
+\midrule
+\texttt{gend\_official}$^\dagger$ (HF Pretrained) & --- & $0.9327$ & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -71,6 +73,9 @@ Following the pre-registered benchmark protocol, each test video is evaluated us
 \subsection{Benchmark Analysis and Scientific Findings}
 \paragraph{Disentangling Optimization Recipe from Architecture.}
 A central empirical finding emerges when comparing the two single-frame models in Table~\ref{tab:aggregated_results}. Both \texttt{gend\_ours} and \texttt{smsdt\_s} utilize identical parameter counts ($103{,}425$ trainable LayerNorm and probe weights on CLIP ViT-L/14) and identical frame sampling ($T=1$). Yet \texttt{smsdt\_s} achieves a $+5.83\%$ in-domain AUC advantage on FF++ ($0.9627$ vs $0.9044$) and a $+5.32\%$ cross-dataset advantage on Celeb-DF v2 ($0.8826$ vs $0.8294$). This substantial delta, achieved without changing the parameter footprint, demonstrates that training recipe (loss balancing, curriculum scheduling, and gradient management) accounts for performance variations that prior literature frequently attributed to architectural innovation.
+
+\paragraph{Gate G1 External Anchor (\texttt{yermandy/GenD\_CLIP\_L\_14}).}
+To avoid benchmark-blind self-comparison, we evaluated the official published GenD checkpoint (\texttt{hf:yermandy/GenD\_CLIP\_L\_14}) under the exact same Celeb-DF-v2 clip-sampling pipeline ($N=518$ test videos). It obtains $0.9327$ Video AUC ($0.9277$ Top-50\% Clip AUC, $0.8841$ Frame/Clip AUC), surpassing our controlled FF++ c23-trained ablation suite (\texttt{smsdt\_full}: $0.8882$, \texttt{gend\_ours}: $0.8294$). Consistent with pre-registered Gate G1 (Branch B), we explicitly do not claim state-of-the-art cross-dataset AUC over the published multi-source checkpoint; instead, all comparisons isolate the causal effect of training recipe and forensic head capacity under identical FF++ c23 supervision. Critically, however, the official checkpoint's $0.9327$ ranking AUC coexists with severe operating-point miscalibration under distribution shift: at $\tau = 0.500$, it incurs $98/178$ false alarms on authentic Celeb-DF-v2 videos ($55.1\%$ FPR; TPR $98.5\%$, overall accuracy $80.12\%$, balanced accuracy $71.74\%$, raw ECE $0.1362$), requiring an oracle EER threshold shift to $\tau = 0.82$ to balance accuracy ($0.842$; $0.841$ Fake / $0.843$ Real).
 
 \paragraph{Utility of Spatio-Temporal and Forensic Heads.}
 Contrasting single-frame tuning (\texttt{smsdt\_s}) with multi-frame spatio-temporal attention (\texttt{smsdt\_st}, $8.5\text{M}$ params) and full forensic residual streams (\texttt{smsdt\_full}, $9.1\text{M}$ params) reveals an unexpected empirical trend. On Celeb-DF v2, \texttt{smsdt\_full} obtains $0.8882$ AUC, representing a marginal $+0.0056$ AUC gain over \texttt{smsdt\_s} ($0.8826$), while \texttt{smsdt\_st} slightly declines to $0.8704$ ($-0.0122$). On DFD, \texttt{smsdt\_s} achieves the highest mean performance ($0.8841$), surpassing \texttt{smsdt\_st} ($0.8779$) and \texttt{smsdt\_full} ($0.8649$, $-0.0192$). Consequently, scaling trainable capacity by nearly two orders of magnitude ($103\text{K} \rightarrow 9.1\text{M}$) does not yield consistent generalization gains across unseen datasets, supporting the pre-registered hypothesis that additional heads do not reliably improve upon clean single-frame LayerNorm adaptation.
