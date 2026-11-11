@@ -8,13 +8,18 @@
 
 ---
 
-> **Audit & Execution Update (2026-11-11, branch `feat/eval-and-benchmarks`).** Read `docs/novelty_audit.md` and
-> `docs/decisions.md` (D1-D9) for pre-registration context. All **37** per-video score CSVs ([`results/scores/`](file:///e:/DEEPFAKE/results/scores)) and **17** summary table/JSON files ([`results/tables/`](file:///e:/DEEPFAKE/results/tables)) are committed in the repository.
-> - **Gate G1 Resolved (§9):** Official author checkpoint `hf:yermandy/GenD_CLIP_L_14` (`gend_official`) evaluated on Celeb-DF v2 ($N=518$): achieves **0.9327 AUC**, **98.5% recall**, but **55.1% False Alarm Rate (98/178 false positives)** on authentic reals at $\tau=0.50$ (`reals` median logit `+0.2136`).
-> - **FPR Control Audit — H4, H5 & Prior Stress Completed (§10):** Executed across all 12 training runs via [`tools/fpr_control.py`](file:///e:/DEEPFAKE/tools/fpr_control.py) (`--source ffpp`). Confirms **H4** (`14 / 48` `source_quantile` failures overall; `smsdt_full` inflates FPR `3.4x–4.5x` to `16.9%–22.5%` on Celeb-DF reals at $\alpha=0.05$), formally **falsifies H5** (`target_gmm`, `target_gmm_anchored` across $\alpha \in \{0.05, 0.10\}$), and documents all `576` prior-stress evaluations ($\pi_{\text{fake}} \in \{0.50, 0.66, 0.91\}$).
-> - **Robustness Bug Fixed & Re-run (§8):** Corrected the [`PerturbedEvalDataset`](file:///e:/DEEPFAKE/tools/eval_robustness.py) uint8 RGB normalization pipeline bug; verified smooth degradation curves on Celeb-DF v2 (JPEG Q=90 retains `0.8972` AUC vs clean `0.8884`).
-> - **Clip-Consistency TTA — H6 Completed (§7):** Evaluated `--objective consistency`; Online mode collapses (`0.5409` AUC) under small-batch streaming, while Batch-Episodic remains stable (`0.8877` vs `0.8880`).
-> - **Legacy Scope Note (§3–§6):** Earlier tables in §§3–6 retain legacy DFD mixed reals (`383` reals) and `N=2000` bootstrap / unscaled H2 runs (`hypothesis_h1_stats.md`, `threshold_transfer_audit.md`) preserved for audit provenance.
+> **Audit & Execution Update (2026-11-11, branch `feat/eval-and-benchmarks`).** Read `docs/novelty_audit.md`,
+> `docs/decisions.md` (D1-D12), `docs/credibility_plan.md`, and `docs/research_v2_corrections.md` for pre-registration context.
+> Repository state on `feat/eval-and-benchmarks`: **`52`** per-video score CSVs ([`results/scores/`](file:///e:/DEEPFAKE/results/scores)),
+> **`13`** Platt calibration JSONs ([`results/calib/`](file:///e:/DEEPFAKE/results/calib)), **`18`** readout-ablation CSVs
+> ([`results/scores_ablation/`](file:///e:/DEEPFAKE/results/scores_ablation)), **`20`** files in [`results/tables/`](file:///e:/DEEPFAKE/results/tables),
+> and **`18`** files in [`results/tables_ablation/`](file:///e:/DEEPFAKE/results/tables_ablation).
+> - **Gate G1 Resolved (§9):** Official author checkpoint `hf:yermandy/GenD_CLIP_L_14` (`gend_official_seed0`) evaluated across all four splits: `0.9452` FF++ Test, `0.9371` FF++ Val, `0.9076` DFD, and **`0.9327` Celeb-DF v2** — above every S-MSDT variant (`smsdt_full`: `0.8882`, `smsdt_s`: `0.8826`, `gend_ours`: `0.8294`). Using matched dev-split `source_quantile` calibration (`--source ffppval`), `gend_official` itself inflates Celeb-DF FPR **`3.15x`** to **`15.73%`** at $\alpha=0.05$ (`31.46%` at $\alpha=0.10$), showing cross-domain FPR inflation is shared by the stronger official baseline.
+> - **H1 & H2 Post-PR-#11 Reruns (§§4.3, 5):** Updated `tools.stats` ($N_{\text{boot}}=10{,}000$, Bonferroni $m=2$, pure-source negatives) leaves **H1 `undetermined (underpowered)`** (`ST vs S`: `-0.0122`, `97.5% CI [-0.0312, +0.0068]`; `Full vs S`: `+0.0056`, `97.5% CI [-0.0142, +0.0262]`). Updated `tools.threshold_transfer` using dev-split Platt calibration (`tau_cal`) yields **H2 `undetermined`** (`smsdt_s` seed 1 clears $g \ge 0.05$ at `0.0984`, while seeds 2–3 stay at `0.0259` and `0.0389`).
+> - **FPR Control Audit — H4a/H4b, H5 & Prior Stress (§10):** Re-run via [`tools/fpr_control.py`](file:///e:/DEEPFAKE/tools/fpr_control.py) with dev-split `--source ffppval`, `--confirmatory-seeds 3 4 5`, and cluster-conservative Wilson/bootstrap bounds (`fpr_ci_low_cons`). Under dev thresholds on Celeb-DF ($\alpha=0.05$), `smsdt_full` mean FPR is `12.17%` (`2.43x`; `seed3` confirmatory passes `h4_failure` at `15.73%`, cons CI `[0.1046, 0.2180]`), `smsdt_st` is `8.43%` (`1.69x`; `0/3`), `smsdt_s` is `5.81%` (`1.16x`), and `gend_official` is `15.73%` (`3.15x`). Formal **H4a is `undetermined (fewer than 3 confirmatory seeds)`** (`supported for Full on seed 3 under dev calibration; not established for ST`), paired **H4b** `Full - S` is `+0.0674`, `+0.0337`, `+0.0899`, and **H5 remains `falsified (degenerate fits)`** (`10` DFD rows flagged `degenerate = True`).
+> - **Eval-Time Readout Ablation (§10.4):** Replacing `smsdt_full` learned LSE readout with `mean_patch`, `lse_only`, or `att_only` at eval time leaves Celeb-DF mean FPR at `11.99%` (`mean_patch`), `12.17%` (`lse_only`), and `11.99%` (`att_only`) vs `12.17%` baseline (`mean` Celeb-DF AUC `0.8886 / 0.8885 / 0.8845` vs `0.8882`), ruling out eval-time LSE pooling as the cause of FPR inflation.
+> - **H3a, H6 & Robustness (§§6–8):** **H3a `falsified`** on HTER under calibrated EM (`prior_sweep.py`; Bayes accuracy improves at extreme priors $\pi \in \{0.1, 0.9\}$); **H6 `falsified`** (online consistency TTA collapses to `0.5409` AUC; single model/seed/dataset); robustness perturbation curve verified on `smsdt_full_seed1` Celeb-DF only.
+> - **Provenance Note:** Section 3 retains the per-run raw-`0.5` RTX 5090 evaluation logs for traceability; §§4.3–11 reflect the regenerated post-PR-#11 audited tables.
 
 ---
 
@@ -33,7 +38,7 @@ The core research questions are:
 
 | Model Identifier | Architecture | Trainable Params | Frame Count ($T$) | Checkpoint Path | Purpose |
 | :--- | :--- | :---: | :---: | :--- | :--- |
-| `gend_ours` | CLIP ViT-L/14 + LN PEFT + Linear Probe + Slerp | 103,425 (0.034%) | $T=1$ | `outputs/checkpoints_gend_ours/seed1/` | Reference anchor (reproduced GenD baseline) |
+| `gend_ours` | CLIP ViT-L/14 + LN PEFT + Linear Probe + Slerp | 103,425 (0.034%) | $T=1$ | `outputs/checkpoints_gend_ours/seed1/` | GenD-style in-house baseline (not a reproduction; Celeb-DF 0.83 vs 0.933 for the official weights) |
 | `smsdt_s` | CLIP ViT-L/14 + LN PEFT + Linear Probe | 103,425 (0.034%) | $T=1$ | `outputs/checkpoints_smsdt_s/seed1/` | Internal controlled single-frame baseline |
 | `smsdt_st` | CLIP ViT-L/14 + LN PEFT + Spatio-Temporal Transformer | 8,474,881 (2.72%) | $T=8$ | `outputs/checkpoints_st/seed1/` | Tests temporal attention utility (RQ1) |
 | `smsdt_full` | S-MSDTv3 (Dual SRM + Haar DWT + LSE Pooling + Mouth Prior) | 9,103,363 (2.92%) | $T=8$ | `outputs/checkpoints_v3_stage_c/seed1/` | Full proposed forensic foundation model |
@@ -49,9 +54,9 @@ The core research questions are:
 
 ---
 
-### 3.2 GenD Reference Baseline Evaluation Results (Seed 1, Matched GEND Architecture)
+### 3.2 GenD-Style In-House Baseline Evaluation Results (Seed 1, Not a Reproduction)
 
-Evaluated with the official matched `GenDModel` (CLIP ViT-L/14 + LN PEFT + Linear Probe + Slerp) with 393/393 parameters matched and $T=1$ frame.
+Evaluated with the matched `GenDModel` architecture (CLIP ViT-L/14 + LN PEFT + Linear Probe + Slerp, 393/393 parameters matched, $T=1$ frame) trained under our in-house FF++ c23 recipe (Celeb-DF `0.83` vs `0.9327` for official weights `gend_official`; see §9).
 - **Trainable Parameters:** 103,425 / 304,064,769 total (0.034%).
 - **Checkpoint:** [`outputs/checkpoints_gend_ours/seed1/best_ema.pt`](file:///e:/DEEPFAKE/outputs/checkpoints_gend_ours/seed1/best_ema.pt)
 
@@ -338,7 +343,7 @@ The spatio-temporal baseline **S-MSDT-ST** (`smsdt_st`) completed 30 epochs of t
 All four architectures completed 30 epochs of training on the RTX 5090 for **Seed 2** and were evaluated under the standardized cross-dataset protocol:
 
 #### Summary of Seed 2 Evaluations:
-1. **`gend_ours_seed2` (GenD Anchor, $T=1$):**
+1. **`gend_ours_seed2` (GenD-style in-house baseline, $T=1$):**
    - **FF++ Test Video AUC:** `0.9040` (Macro: 0.9040, Acc@0.5: 78.45%, ECE: 0.2693)
    - **Celeb-DF v2 Video AUC:** `0.8273` (Acc@0.5: 70.08%, TPR@5%FPR: 51.18%, ECE: 0.1858)
    - **DFD Video AUC:** `0.8820` (Acc@0.5: 73.95%, TPR@5%FPR: 69.01%, ECE: 0.3104)
@@ -369,7 +374,7 @@ All four architectures completed 30 epochs of training on the RTX 5090 for **See
 All four architectures completed 30 epochs of training on the RTX 5090 for **Seed 3** and were evaluated under the standardized cross-dataset protocol:
 
 #### Summary of Seed 3 Evaluations:
-1. **`gend_ours_seed3` (GenD Anchor, $T=1$):**
+1. **`gend_ours_seed3` (GenD-style in-house baseline, $T=1$):**
    - **FF++ Test Video AUC:** `0.9045` (95% CI: [0.8821 - 0.9237], Acc@0.5: 77.86%, TPR@5%FPR: 73.29%, ECE: 0.2687)
      - *Per-Method AUC on FF++:* Deepfakes: 0.994, FaceSwap: 0.986, FaceShifter: 0.949, Face2Face: 0.918, NeuralTextures: 0.675
    - **Celeb-DF v2 Video AUC:** `0.8288` (95% CI: [0.7927 - 0.8591], Acc@0.5: 69.88%, TPR@5%FPR: 51.47%, ECE: 0.1990)
@@ -407,154 +412,204 @@ Compiled via `tools/make_tables.py` into [`results/tables/experiment_matrix.csv`
 
 | Model | Seed | FF++ Test AUC | Celeb-DF AUC | Celeb-DF TPR@5% | DFD AUC | DFD TPR@5% | Primary Role / Finding |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| `gend_ours` | 1 | **0.9047** | **0.8321** | 52.59% | **0.8776** | 69.13% | Reference anchor (reproduced GenD baseline, $T=1$) |
-| `gend_ours` | 2 | **0.9040** | **0.8273** | 51.76% | **0.8820** | 69.05% | Reference anchor (Seed 2 confirmation) |
-| `gend_ours` | 3 | **0.9045** | **0.8288** | 54.71% | **0.8758** | 69.51% | Reference anchor (Seed 3 confirmation) |
+| `gend_ours` | 1 | **0.9047** | **0.8321** | 52.59% | **0.8776** | 69.13% | GenD-style in-house baseline (not a reproduction; $T=1$) |
+| `gend_ours` | 2 | **0.9040** | **0.8273** | 51.76% | **0.8820** | 69.05% | GenD-style in-house baseline (Seed 2) |
+| `gend_ours` | 3 | **0.9045** | **0.8288** | 54.71% | **0.8758** | 69.51% | GenD-style in-house baseline (Seed 3) |
 | `smsdt_s` | 1 | **0.9587** | **0.8837** | 50.29% | **0.8742** | 67.47% | Controlled single-frame baseline ($T=1$, LN tuned) |
-| `smsdt_s` | 2 | **0.9613** | **0.8825** | 54.12% | **0.8807** | 70.74% | Controlled single-frame baseline (Seed 2 confirmation) |
-| `smsdt_s` | 3 | **0.9681** | **0.8815** | 52.35% | **0.8974** | 68.86% | Controlled single-frame baseline (Seed 3 peak) |
+| `smsdt_s` | 2 | **0.9613** | **0.8825** | 54.12% | **0.8807** | 70.74% | Controlled single-frame baseline (Seed 2) |
+| `smsdt_s` | 3 | **0.9681** | **0.8815** | 52.35% | **0.8974** | 68.86% | Controlled single-frame baseline (Seed 3) |
 | `smsdt_st` | 1 | **0.9604** | **0.8706** | 45.29% | **0.8682** | 61.91% | Spatio-temporal transformer ($T=8$) |
-| `smsdt_st` | 2 | **0.9664** | **0.8779** | 44.12% | **0.8748** | 60.06% | Spatio-temporal transformer (Seed 2 confirmation) |
-| `smsdt_st` | 3 | **0.9618** | **0.8628** | 55.00% | **0.8908** | 68.13% | Spatio-temporal transformer (Seed 3 confirmation) |
+| `smsdt_st` | 2 | **0.9664** | **0.8779** | 44.12% | **0.8748** | 60.06% | Spatio-temporal transformer (Seed 2) |
+| `smsdt_st` | 3 | **0.9618** | **0.8628** | 55.00% | **0.8908** | 68.13% | Spatio-temporal transformer (Seed 3) |
 | `smsdt_full` | 1 | **0.9631** | **0.8914** | 52.94% | **0.8604** | 51.04% | Full model (+ SRM + Haar DWT + LSE readout, $T=8$) |
-| `smsdt_full` | 2 | **0.9621** | **0.8960** | 55.59% | **0.8689** | 58.79% | Full model (Peak cross-dataset AUC: **0.8960**) |
-| `smsdt_full` | 3 | **0.9625** | **0.8772** | 50.88% | **0.8655** | 55.65% | Full model (Seed 3 confirmation) |
+| `smsdt_full` | 2 | **0.9621** | **0.8960** | 55.59% | **0.8689** | 58.79% | Full model (Seed 2) |
+| `smsdt_full` | 3 | **0.9625** | **0.8772** | 50.88% | **0.8655** | 55.65% | Full model (Seed 3) |
 
 ---
 
 ### 4.2 Canonical 3-Seed Aggregated Performance (Mean $\pm$ Std Dev)
 
-| Model Architecture | Seeds | In-Domain FF++ Test AUC | Cross-Dataset Celeb-DF v2 AUC | Cross-Dataset DFD AUC | Key Scientific Finding |
+| Model Architecture | Seeds / Runs | In-Domain FF++ Test AUC | Cross-Dataset Celeb-DF v2 AUC | Cross-Dataset DFD AUC | Role / Summary |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **`gend_ours`** | 3 | $0.9044 \pm 0.0004$ | $0.8294 \pm 0.0025$ | $0.8785 \pm 0.0032$ | Literature reference anchor |
-| **`smsdt_s`** | 3 | $0.9627 \pm 0.0049$ | $0.8826 \pm 0.0011$ | $0.8841 \pm 0.0120$ | Single-frame balanced recipe |
-| **`smsdt_st`** | 3 | $0.9629 \pm 0.0031$ | $0.8704 \pm 0.0076$ | $0.8779 \pm 0.0116$ | Spatio-temporal attention |
-| **`smsdt_full`** | 3 | $\mathbf{0.9626 \pm 0.0005}$ | $\mathbf{0.8882 \pm 0.0098}$ | $0.8649 \pm 0.0043$ | **Full S-MSDTv3 (Peaks at 0.8960)** |
+| **`gend_official`** | 1 (`seed0`) | `0.9452` | **`0.9327`** | **`0.9076`** | Official author weights (`hf:yermandy/GenD_CLIP_L_14`) |
+| **`gend_ours`** | 3 | $0.9044 \pm 0.0004$ | $0.8294 \pm 0.0025$ | $0.8785 \pm 0.0032$ | GenD-style in-house baseline (not a reproduction; Celeb-DF 0.83 vs 0.933 for official weights) |
+| **`smsdt_s`** | 3 | $0.9627 \pm 0.0049$ | $0.8826 \pm 0.0011$ | $0.8841 \pm 0.0120$ | Controlled single-frame baseline ($T=1$) |
+| **`smsdt_st`** | 3 | $0.9629 \pm 0.0031$ | $0.8704 \pm 0.0076$ | $0.8779 \pm 0.0116$ | Spatio-temporal attention ($T=8$) |
+| **`smsdt_full`** | 3 | $0.9626 \pm 0.0005$ | $0.8882 \pm 0.0098$ | $0.8649 \pm 0.0043$ | Full S-MSDTv3 ($T=8$) |
 
-#### Statistical Takeaways (Canonical 3-Seed Replication Insight):
-1. **Cross-Dataset Empirical Behavior:**
-   - On **Celeb-DF v2**, `smsdt_full` achieves a canonical 3-seed mean of **$0.8882 \pm 0.0098$**, peaking at **0.8960** on Seed 2.
-   - Compared to our in-house reproduced GenD anchor ($0.8294 \pm 0.0025$), `smsdt_full` provides a **+5.88% AUC improvement** under our matched pipeline (Gate G1 Branch B).
-2. **Minimal Seed Variance ($\sigma \le 0.0098$):**
-   - The standard deviation across independent training seeds is remarkably low ($\sigma \le 0.0098$ on Celeb-DF, $\sigma \le 0.0005$ on FF++), proving that the performance gains are intrinsic to the architecture and not artifacts of lucky weight initialization.
-3. **Controlled Ablation Consistency:**
-   - Single-frame `smsdt_s` consistently maintains $\approx 0.8826 \pm 0.0011$ AUC on Celeb-DF, showing that balanced loss and curriculum sampling provide a reliable $+5.32\%$ foundation gain over standard GenD.
-   - In-domain on FF++ c23, both `smsdt_st` and `smsdt_full` maintain near-identical saturated performance ($0.9626 - 0.9629$), demonstrating stability.
+#### Statistical Takeaways (3-Seed Summary):
+1. **Recipe vs. Published SOTA Comparison (Celeb-DF v2):**
+   - `smsdt_full` achieves a 3-seed mean of **$0.8882 \pm 0.0098$** (`+0.059` AUC over our in-house GenD-style baseline at $0.8294 \pm 0.0025$). **This is a recipe comparison, not a comparison with GenD:** official GenD (`gend_official`) scores **`0.9327`** on Celeb-DF, above every S-MSDT variant (`smsdt_s`: `0.8826`, `smsdt_st`: `0.8704`, `smsdt_full`: `0.8882`).
+2. **Run-to-Run Seed Spread:**
+   - Across the 3 training seeds, seed $\text{sd} \le 0.0098$ on Celeb-DF (and $\le 0.0049$ on FF++). Three seeds characterize empirical variance under our pipeline rather than proving architectural causality, and no ablation isolates loss weighting or curriculum sampling.
+   - In-domain on FF++ c23, `smsdt_s`, `smsdt_st`, and `smsdt_full` all cluster around `0.9626 – 0.9629`.
 
 ---
 
 ### 4.3 Hypothesis H1: Canonical 3-Seed Paired Cluster Bootstrap ΔAUC & Equivalence Tests
 
-Compiled via `tools/stats.py` into [`results/tables/hypothesis_h1_stats.csv`](file:///e:/DEEPFAKE/results/tables/hypothesis_h1_stats.csv) and [`results/tables/hypothesis_h1_stats.md`](file:///e:/DEEPFAKE/results/tables/hypothesis_h1_stats.md) ($N_{\text{boot}}=2000$, Equivalence margin $\delta = 0.01$, resampled across genuine video and identity clusters over all 3 seeds):
+Compiled via [`tools/stats.py`](file:///e:/DEEPFAKE/tools/stats.py) into [`results/tables/hypothesis_h1_stats.csv`](file:///e:/DEEPFAKE/results/tables/hypothesis_h1_stats.csv), [`results/tables/hypothesis_h1_stats.md`](file:///e:/DEEPFAKE/results/tables/hypothesis_h1_stats.md), and [`results/tables/hypothesis_h1_meta.json`](file:///e:/DEEPFAKE/results/tables/hypothesis_h1_meta.json) ($N_{\text{boot}}=10{,}000$, equivalence margin $\delta = 0.01$, Bonferroni family $m=2 \rightarrow 97.5\%$ CI on confirmatory pairs, pure-source negatives):
 
-| Dataset | Model A | Model B | Comparison Description | AUC (A) | AUC (B) | ΔAUC (A-B) | 95% Bootstrap CI | Classification ($\delta=0.01$) | Seeds | Clusters | Samples |
-| :--- | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **FFPP** | `smsdt_full` | `gend_ours` | S-MSDTv3 Full vs In-House GenD Reproduction | 0.9625 | 0.9044 | **+0.0582** | [**+0.0422, +0.0733**] | **`better`** | 3 | 140 | 840 |
-| **CELEBDF** | `smsdt_full` | `gend_ours` | S-MSDTv3 Full vs In-House GenD Reproduction | 0.8882 | 0.8294 | **+0.0588** | [**+0.0233, +0.0952**] | **`better`** | 3 | 124 | 518 |
-| **DFD** | `smsdt_full` | `gend_ours` | S-MSDTv3 Full vs In-House GenD Reproduction | 0.8649 | 0.8785 | -0.0136 | [-0.0350, +0.0081] | `inconclusive` | 3 | 413 | 2987 |
-| **FFPP** | `smsdt_full` | `smsdt_st` | Residual Stream & LSE Pooling Ablation (Full vs ST) | 0.9625 | 0.9629 | -0.0004 | [-0.0059, +0.0053] | **`equivalent`** | 3 | 140 | 840 |
-| **CELEBDF** | `smsdt_full` | `smsdt_st` | Residual Stream & LSE Pooling Ablation (Full vs ST) | 0.8882 | 0.8704 | **+0.0178** | [**+0.0055, +0.0325**] | `inconclusive` | 3 | 124 | 518 |
-| **DFD** | `smsdt_full` | `smsdt_st` | Residual Stream & LSE Pooling Ablation (Full vs ST) | 0.8649 | 0.8779 | -0.0130 | [-0.0210, -0.0054] | `inconclusive` | 3 | 413 | 2987 |
-| **FFPP** | `smsdt_st` | `smsdt_s` | Spatio-Temporal Attention Ablation (ST vs Spatial-only) | 0.9629 | 0.9627 | 0.0002 | [-0.0066, +0.0073] | **`equivalent`** | 3 | 140 | 840 |
-| **CELEBDF** | `smsdt_st` | `smsdt_s` | Spatio-Temporal Attention Ablation (ST vs Spatial-only) | 0.8704 | 0.8826 | -0.0122 | [-0.0299, +0.0041] | `inconclusive` | 3 | 124 | 518 |
-| **DFD** | `smsdt_st` | `smsdt_s` | Spatio-Temporal Attention Ablation (ST vs Spatial-only) | 0.8779 | 0.8841 | -0.0061 | [-0.0146, +0.0028] | `inconclusive` | 3 | 413 | 2987 |
-| **FFPP** | `smsdt_s` | `gend_ours` | Single-Frame Recipe Ablation (SMSDT-S vs GenD) | 0.9627 | 0.9044 | **+0.0583** | [**+0.0447, +0.0715**] | **`better`** | 3 | 140 | 840 |
-| **CELEBDF** | `smsdt_s` | `gend_ours` | Single-Frame Recipe Ablation (SMSDT-S vs GenD) | 0.8826 | 0.8294 | **+0.0532** | [**+0.0209, +0.0866**] | **`better`** | 3 | 124 | 518 |
-| **DFD** | `smsdt_s` | `gend_ours` | Single-Frame Recipe Ablation (SMSDT-S vs GenD) | 0.8841 | 0.8785 | 0.0056 | [-0.0121, +0.0236] | `inconclusive` | 3 | 413 | 2987 |
+- **Pre-Registered H1 Verdict:** **`undetermined (underpowered)`**
 
-#### Core Empirical Validations & Methodological Notes:
-1. **In-House GenD Reproduction Baseline (Gate G1 Branch B):**
-   - On **FF++ c23 In-Domain**, `smsdt_full` outperforms `gend_ours` by **+5.82% ΔAUC** ($p < 0.0001$), with 95% CI $[+0.0422, +0.0733]$.
-   - On **Celeb-DF v2 Cross-Dataset**, `smsdt_full` outperforms `gend_ours` by **+5.88% ΔAUC** ($p < 0.001$), with 95% CI $[+0.0233, +0.0952]$. Under pre-registered Gate G1, this contrast serves as an internal recipe ablation; external comparison with published GenD awaits `gend_official`.
-2. **Forensic Residual Stream Trend (Celeb-DF):**
-   - On Celeb-DF v2, `smsdt_full` achieves a positive **+1.78% ΔAUC** point estimate over `smsdt_st` ($95\%\text{ CI: }[+0.0055, +0.0325]$). Because the lower CI bound is $0.0055 < \delta = 0.01$, the pre-registered equivalence criterion classifies this effect as `inconclusive` rather than confirmed.
-3. **In-Domain Statistical Equivalence:**
-   - On FF++ c23, both comparisons (`smsdt_full` vs `smsdt_st` and `smsdt_st` vs `smsdt_s`) are classified as **`equivalent`** under the $\delta = 0.01$ margin, showing that all S-MSDT variants saturate in-domain discriminative capability equally well while diverging out-of-domain.
-4. **Pre-Registration & Equivalence Framing (per `docs/novelty_audit.md`):**
-   - Note that under strict pre-registered rules (comparing against `smsdt_s` on external datasets), the CI for ST vs S on Celeb-DF ($[-0.0299, +0.0041]$) crosses 0 and exceeds $\pm \delta$, rendering it formally `inconclusive` (neither superiority nor strict equivalence can be claimed without more external data). This critical insight is formally addressed in the paper discussion.
+| Dataset | Role | Kind | Model A | Model B | Comparison | AUC (A) | AUC (B) | $\Delta\text{AUC}$ (A-B) | CI Level | CI Lower | CI Upper | Classification ($\delta=0.01$) | $N$ Mult | Clusters / Samples |
+| :--- | :--- | :--- | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **CELEBDF** | `confirmatory` | **`confirmatory`** | `smsdt_st` | `smsdt_s` | **H1: ST vs S** | 0.8704 | 0.8826 | **-0.0122** | `0.9750` | -0.0312 | 0.0068 | `inconclusive` | `inf` | 124 / 518 |
+| **DFD** | `dev_overlap` | `exploratory` | `smsdt_st` | `smsdt_s` | H1: ST vs S | 0.8779 | 0.8841 | -0.0061 | `0.9500` | -0.0147 | 0.0028 | `inconclusive` | `5.1211` | 413 / 2987 |
+| **FFPP** | `in_domain` | `exploratory` | `smsdt_st` | `smsdt_s` | H1: ST vs S | 0.9629 | 0.9627 | 0.0002 | `0.9500` | -0.0066 | 0.0072 | `equivalent` | `0.4957` | 140 / 840 |
+| **FFPPVAL** | `unknown` | `exploratory` | `smsdt_st` | `smsdt_s` | H1: ST vs S | 0.9482 | 0.9377 | 0.0105 | `0.9500` | 0.0035 | 0.0175 | `inconclusive` | `inf` | 178 / 1304 |
+| **CELEBDF** | `confirmatory` | **`confirmatory`** | `smsdt_full` | `smsdt_s` | **H1: Full vs S** | 0.8882 | 0.8826 | **+0.0056** | `0.9750` | -0.0142 | 0.0262 | `inconclusive` | `21.0170` | 124 / 518 |
+| **DFD** | `dev_overlap` | `exploratory` | `smsdt_full` | `smsdt_s` | H1: Full vs S | 0.8649 | 0.8841 | -0.0192 | `0.9500` | -0.0295 | -0.0084 | `inconclusive` | `inf` | 413 / 2987 |
+| **FFPP** | `in_domain` | `exploratory` | `smsdt_full` | `smsdt_s` | H1: Full vs S | 0.9625 | 0.9627 | -0.0001 | `0.9500` | -0.0078 | 0.0073 | `equivalent` | `0.5892` | 140 / 840 |
+| **FFPPVAL** | `unknown` | `exploratory` | `smsdt_full` | `smsdt_s` | H1: Full vs S | 0.9410 | 0.9377 | 0.0034 | `0.9500` | -0.0041 | 0.0107 | `inconclusive` | `1.2449` | 178 / 1304 |
+| **CELEBDF** | `confirmatory` | `exploratory` | `smsdt_full` | `smsdt_st` | Exploratory: Full vs ST | 0.8882 | 0.8704 | +0.0178 | `0.9500` | 0.0050 | 0.0318 | `inconclusive` | `inf` | 124 / 518 |
+| **DFD** | `dev_overlap` | `exploratory` | `smsdt_full` | `smsdt_st` | Exploratory: Full vs ST | 0.8649 | 0.8779 | -0.0130 | `0.9500` | -0.0208 | -0.0051 | `inconclusive` | `inf` | 413 / 2987 |
+| **FFPP** | `in_domain` | `exploratory` | `smsdt_full` | `smsdt_st` | Exploratory: Full vs ST | 0.9625 | 0.9629 | -0.0004 | `0.9500` | -0.0059 | 0.0054 | `equivalent` | `0.3455` | 140 / 840 |
+| **FFPPVAL** | `unknown` | `exploratory` | `smsdt_full` | `smsdt_st` | Exploratory: Full vs ST | 0.9410 | 0.9482 | -0.0071 | `0.9500` | -0.0140 | -0.0002 | `inconclusive` | `5.6907` | 178 / 1304 |
+| **CELEBDF** | `confirmatory` | `exploratory` | `smsdt_s` | `gend_ours` | Exploratory: S vs `gend_ours` | 0.8826 | 0.8294 | +0.0532 | `0.9500` | 0.0210 | 0.0879 | `better` | `inf` | 124 / 518 |
+| **DFD** | `dev_overlap` | `exploratory` | `smsdt_s` | `gend_ours` | Exploratory: S vs `gend_ours` | 0.8841 | 0.8785 | +0.0056 | `0.9500` | -0.0121 | 0.0236 | `inconclusive` | `16.7197` | 413 / 2987 |
+| **FFPP** | `in_domain` | `exploratory` | `smsdt_s` | `gend_ours` | Exploratory: S vs `gend_ours` | 0.9627 | 0.9044 | +0.0583 | `0.9500` | 0.0453 | 0.0714 | `better` | `inf` | 140 / 840 |
+| **FFPPVAL** | `unknown` | `exploratory` | `smsdt_s` | `gend_ours` | Exploratory: S vs `gend_ours` | 0.9377 | 0.9007 | +0.0370 | `0.9500` | 0.0198 | 0.0536 | `better` | `inf` | 178 / 1304 |
+| **CELEBDF** | `confirmatory` | `exploratory` | `smsdt_full` | `gend_ours` | Exploratory: Full vs `gend_ours` | 0.8882 | 0.8294 | +0.0588 | `0.9500` | 0.0239 | 0.0957 | `better` | `inf` | 124 / 518 |
+| **DFD** | `dev_overlap` | `exploratory` | `smsdt_full` | `gend_ours` | Exploratory: Full vs `gend_ours` | 0.8649 | 0.8785 | -0.0136 | `0.9500` | -0.0343 | 0.0085 | `inconclusive` | `inf` | 413 / 2987 |
+| **FFPP** | `in_domain` | `exploratory` | `smsdt_full` | `gend_ours` | Exploratory: Full vs `gend_ours` | 0.9625 | 0.9044 | +0.0582 | `0.9500` | 0.0431 | 0.0733 | `better` | `inf` | 140 / 840 |
+| **FFPPVAL** | `unknown` | `exploratory` | `smsdt_full` | `gend_ours` | Exploratory: Full vs `gend_ours` | 0.9410 | 0.9007 | +0.0404 | `0.9500` | 0.0220 | 0.0585 | `better` | `inf` | 178 / 1304 |
+| **CELEBDF** | `confirmatory` | `exploratory` | `smsdt_s` | `gend_official` | **G1: S vs `gend_official`** | 0.8826 | 0.9327 | **-0.0501** | `0.9500` | -0.0852 | -0.0210 | **`worse`** | `inf` | 124 / 518 |
+| **DFD** | `dev_overlap` | `exploratory` | `smsdt_s` | `gend_official` | G1: S vs `gend_official` | 0.8841 | 0.9076 | -0.0236 | `0.9500` | -0.0390 | -0.0090 | `inconclusive` | `inf` | 413 / 2987 |
+| **FFPP** | `in_domain` | `exploratory` | `smsdt_s` | `gend_official` | G1: S vs `gend_official` | 0.9627 | 0.9452 | +0.0175 | `0.9500` | 0.0060 | 0.0293 | `inconclusive` | `inf` | 140 / 840 |
+| **FFPPVAL** | `unknown` | `exploratory` | `smsdt_s` | `gend_official` | G1: S vs `gend_official` | 0.9545 | 0.9371 | +0.0174 | `0.9500` | 0.0073 | 0.0276 | `inconclusive` | `inf` | 140 / 840 (`464` dropped) |
+| **CELEBDF** | `confirmatory` | `exploratory` | `gend_ours` | `gend_official` | **G1: `gend_ours` vs `gend_official`** | 0.8294 | 0.9327 | **-0.1033** | `0.9500` | -0.1393 | -0.0723 | **`worse`** | `inf` | 124 / 518 |
+| **DFD** | `dev_overlap` | `exploratory` | `gend_ours` | `gend_official` | G1: `gend_ours` vs `gend_official` | 0.8785 | 0.9076 | -0.0292 | `0.9500` | -0.0433 | -0.0173 | `worse` | `inf` | 413 / 2987 |
+| **FFPP** | `in_domain` | `exploratory` | `gend_ours` | `gend_official` | G1: `gend_ours` vs `gend_official` | 0.9044 | 0.9452 | -0.0408 | `0.9500` | -0.0568 | -0.0247 | `worse` | `inf` | 140 / 840 |
+| **FFPPVAL** | `unknown` | `exploratory` | `gend_ours` | `gend_official` | G1: `gend_ours` vs `gend_official` | 0.8988 | 0.9371 | -0.0383 | `0.9500` | -0.0527 | -0.0232 | `worse` | `inf` | 140 / 840 (`464` dropped) |
+
+#### Scientific Reading of H1:
+1. **No Established AUC Gain From Extra ST/Full Modules:** On confirmatory Celeb-DF v2, `smsdt_full vs smsdt_s` gives $\Delta\text{AUC} = +0.0056$ ($97.5\%\text{ CI }[-0.0142, +0.0262]$) and `smsdt_st vs smsdt_s` gives $\Delta\text{AUC} = -0.0122$ ($97.5\%\text{ CI }[-0.0312, +0.0068]$). Both cross zero and span outside $[-0.01, +0.01]$, so under the pre-registered rule H1 is **`undetermined (underpowered)`** (and resolving equivalence for Full vs S would require $\approx 21\times$ the cluster count). Put simply, the added ST and Full modules deliver **no demonstrable cross-dataset AUC gain** over single-frame `smsdt_s`.
+2. **Gate G1 External Standing (`gend_official`):** Against official author weights (`0.9327` on Celeb-DF), both `smsdt_s` ($\Delta\text{AUC} = -0.0501$, $95\%\text{ CI }[-0.0852, -0.0210]$) and `gend_ours` ($\Delta\text{AUC} = -0.1033$, $95\%\text{ CI }[-0.1393, -0.0723]$) classify as **`worse`**. Our in-house recipe improves over `gend_ours`, not over published GenD.
+3. **In-Domain Saturation:** On FF++ test, `ST vs S` ($+0.0002$), `Full vs S` ($-0.0001$), and `Full vs ST` ($-0.0004$) all fall inside $[-\delta, +\delta]$ and classify as `equivalent`.
 
 ---
 
 ## 5. Hypothesis H2: Operating Point Transfer & Threshold Degradation Audit
 
-Compiled via `tools/threshold_transfer.py` into [`results/tables/threshold_transfer_audit.csv`](file:///e:/DEEPFAKE/results/tables/threshold_transfer_audit.csv) and [`results/tables/threshold_transfer_audit.md`](file:///e:/DEEPFAKE/results/tables/threshold_transfer_audit.md).
+Compiled via [`tools/threshold_transfer.py`](file:///e:/DEEPFAKE/tools/threshold_transfer.py) into [`results/tables/threshold_transfer_audit.csv`](file:///e:/DEEPFAKE/results/tables/threshold_transfer_audit.csv), [`results/tables/threshold_transfer_audit.md`](file:///e:/DEEPFAKE/results/tables/threshold_transfer_audit.md), and [`results/tables/threshold_transfer_details.json`](file:///e:/DEEPFAKE/results/tables/threshold_transfer_details.json) using dev-split Platt calibration parameters (`results/calib/*.json`).
 
-This audit evaluates the degradation gap $g = \text{HTER}(\tau_{\text{val}}) - \text{HTER}(\tau^*) \ge 0$, assessing whether frozen validation thresholds ($\tau_{\text{val}}$) suffer catastrophic operating point collapse ($g \ge 0.05$) when deployed across unseen domain shifts:
+Evaluates the degradation gap $g = \text{HTER}(\tau_{\text{cal}}) - \text{HTER}(\tau^*) \ge 0$ (`tau_cal` mapped through each run's FF++ val Platt scale & Youden cutoff), where **H2** tests whether a validation-frozen threshold loses $\ge 0.05$ HTER under unseen distribution shift ($g_{\text{CI,low}} \ge 0.05$ in confirmatory seeds):
 
-| Model | Dataset | $\tau_{\text{val}}$ | $\tau^*$ (Oracle) | HTER@0.50 | $\text{HTER}(\tau_{\text{val}})$ | $\text{HTER}(\tau^*)$ | Degradation Gap $g$ | $\text{FPR}(\tau_{\text{val}})$ | $\text{FNR}(\tau_{\text{val}})$ |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| `gend_ours_seed1` | CELEBDF | 0.4866 | 0.4637 | 0.2535 | 0.2512 | 0.2434 | **0.0079 (0.79%)** | 13.48% | 36.76% |
-| `gend_ours_seed1` | DFD | 0.4866 | 0.5047 | 0.1844 | 0.1833 | 0.1783 | **0.0050 (0.50%)** | 9.66% | 27.00% |
-| `gend_ours_seed1` | FFPP | 0.4866 | 0.5306 | 0.1650 | 0.1621 | 0.1557 | **0.0064 (0.64%)** | 10.71% | 21.71% |
-| `smsdt_full_seed1`| CELEBDF | 0.5000 | 0.6319 | 0.1962 | 0.1962 | 0.1849 | **0.0113 (1.13%)** | 22.47% | 16.76% |
-| `smsdt_full_seed1`| DFD | 0.5000 | 0.4473 | 0.2176 | 0.2176 | 0.2119 | **0.0058 (0.58%)** | 21.41% | 22.12% |
-| `smsdt_full_seed1`| FFPP | 0.5000 | 0.4472 | 0.0871 | 0.0871 | 0.0793 | **0.0079 (0.79%)** | 6.43% | 11.00% |
-| `smsdt_s_seed1` | CELEBDF | 0.5000 | 0.4419 | 0.1820 | 0.1820 | 0.1769 | **0.0051 (0.51%)** | 7.87% | 28.53% |
-| `smsdt_s_seed1` | DFD | 0.5000 | 0.5964 | 0.1880 | 0.1880 | 0.1850 | **0.0030 (0.30%)** | 11.49% | 26.11% |
-| `smsdt_s_seed1` | FFPP | 0.5000 | 0.4888 | 0.1050 | 0.1050 | 0.1021 | **0.0029 (0.29%)** | 5.71% | 15.29% |
-| `smsdt_st_seed1` | CELEBDF | 0.5000 | 0.2694 | 0.2121 | 0.2121 | 0.1955 | **0.0166 (1.66%)** | 17.42% | 25.00% |
-| `smsdt_st_seed1` | DFD | 0.5000 | 0.4914 | 0.1951 | 0.1951 | 0.1932 | **0.0019 (0.19%)** | 13.05% | 25.96% |
-| `smsdt_st_seed1` | FFPP | 0.5000 | 0.3858 | 0.0979 | 0.0979 | 0.0857 | **0.0121 (1.21%)** | 8.57% | 11.00% |
+- **Pre-Registered H2 Verdict:** **`undetermined`** (`{'smsdt_s': 'undetermined', 'gend_ours': 'undetermined'}`)
+
+| Model | Seed | Dataset | Role | $\tau_{\text{cal}}$ | HTER@0.50 (raw) | $\text{HTER}(\tau_{\text{cal}})$ | $\text{HTER}(\tau^*)$ | Gap $g$ | $g$ CI Low | $g$ CI High | $\text{FPR}(\tau_{\text{cal}})$ | $\text{FNR}(\tau_{\text{cal}})$ | FPR Infl vs FF++val |
+| :--- | :---: | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| `gend_official` | `seed0` | `FFPP` | `in_domain` | 0.6660 | 0.1364 | 0.1114 | 0.0943 | 0.0171 | 0.0071 | 0.0307 | 0.0357 | 0.1871 | 1.0000x |
+| `gend_official` | `seed0` | `FFPPVAL` | `unknown` | 0.6660 | 0.1586 | 0.1221 | 0.1214 | 0.0007 | 0.0000 | 0.0150 | 0.0643 | 0.1800 | 1.0000x |
+| `gend_ours` | `seed1` | `FFPP` | `in_domain` | 0.2613 | 0.1650 | 0.2007 | 0.1557 | 0.0450 | 0.0193 | 0.0864 | 0.2643 | 0.1371 | 1.0000x |
+| `gend_ours` | `seed1` | `FFPPVAL` | `unknown` | 0.2613 | 0.1923 | 0.1798 | 0.1798 | 0.0000 | 0.0000 | 0.0251 | 0.2429 | 0.1168 | 1.0000x |
+| `gend_ours` | `seed2` | `FFPP` | `in_domain` | 0.2771 | 0.1693 | 0.1900 | 0.1586 | 0.0314 | 0.0107 | 0.0700 | 0.2357 | 0.1443 | 1.0000x |
+| `gend_ours` | `seed2` | `FFPPVAL` | `unknown` | 0.2771 | 0.1931 | 0.1881 | 0.1877 | 0.0004 | 0.0000 | 0.0332 | 0.2500 | 0.1263 | 1.0000x |
+| `gend_ours` | `seed3` | `FFPP` | `in_domain` | 0.3993 | 0.1614 | 0.1743 | 0.1564 | 0.0179 | 0.0064 | 0.0471 | 0.1500 | 0.1986 | 1.0000x |
+| `gend_ours` | `seed3` | `FFPPVAL` | `unknown` | 0.3993 | 0.1921 | 0.1842 | 0.1842 | 0.0000 | 0.0000 | 0.0242 | 0.1786 | 0.1899 | 1.0000x |
+| `smsdt_full` | `seed1` | `FFPP` | `in_domain` | 0.6282 | 0.0871 | 0.1164 | 0.0793 | 0.0371 | 0.0243 | 0.0579 | 0.0286 | 0.2043 | 1.0000x |
+| `smsdt_full` | `seed1` | `FFPPVAL` | `unknown` | 0.6282 | 0.1496 | 0.1181 | 0.1181 | 0.0000 | 0.0000 | 0.0119 | 0.0429 | 0.1933 | 1.0000x |
+| `smsdt_full` | `seed2` | `FFPP` | `in_domain` | 0.4452 | 0.1050 | 0.1000 | 0.0943 | 0.0057 | 0.0000 | 0.0300 | 0.0857 | 0.1143 | 1.0000x |
+| `smsdt_full` | `seed2` | `FFPPVAL` | `unknown` | 0.4452 | 0.1249 | 0.1207 | 0.1203 | 0.0004 | 0.0000 | 0.0189 | 0.1143 | 0.1271 | 1.0000x |
+| `smsdt_full` | `seed3` | `FFPP` | `in_domain` | 0.6637 | 0.0864 | 0.1143 | 0.0814 | 0.0329 | 0.0179 | 0.0507 | 0.0214 | 0.2071 | 1.0000x |
+| `smsdt_full` | `seed3` | `FFPPVAL` | `unknown` | 0.6637 | 0.1420 | 0.1185 | 0.1185 | 0.0000 | 0.0000 | 0.0162 | 0.0214 | 0.2156 | 1.0000x |
+| `smsdt_s` | `seed1` | `FFPP` | `in_domain` | 0.6937 | 0.1050 | 0.1214 | 0.1029 | 0.0186 | 0.0086 | 0.0457 | 0.0071 | 0.2357 | 1.0000x |
+| `smsdt_s` | `seed1` | `FFPPVAL` | `unknown` | 0.6937 | 0.1501 | 0.1252 | 0.1244 | 0.0009 | 0.0000 | 0.0155 | 0.0357 | 0.2148 | 1.0000x |
+| `smsdt_s` | `seed2` | `FFPP` | `in_domain` | 0.5636 | 0.0979 | 0.1043 | 0.0907 | 0.0136 | 0.0036 | 0.0364 | 0.0214 | 0.1871 | 1.0000x |
+| `smsdt_s` | `seed2` | `FFPPVAL` | `unknown` | 0.5636 | 0.1223 | 0.1115 | 0.1110 | 0.0004 | 0.0000 | 0.0133 | 0.0571 | 0.1658 | 1.0000x |
+| `smsdt_s` | `seed3` | `FFPP` | `in_domain` | 0.5632 | 0.0900 | 0.1014 | 0.0786 | 0.0229 | 0.0121 | 0.0414 | 0.0357 | 0.1671 | 1.0000x |
+| `smsdt_s` | `seed3` | `FFPPVAL` | `unknown` | 0.5632 | 0.1150 | 0.1020 | 0.1020 | 0.0000 | 0.0000 | 0.0143 | 0.0571 | 0.1469 | 1.0000x |
+| `smsdt_st` | `seed1` | `FFPP` | `in_domain` | 0.5799 | 0.0979 | 0.1021 | 0.0857 | 0.0164 | 0.0043 | 0.0343 | 0.0571 | 0.1471 | 1.0000x |
+| `smsdt_st` | `seed1` | `FFPPVAL` | `unknown` | 0.5799 | 0.1313 | 0.1142 | 0.1142 | 0.0000 | 0.0000 | 0.0181 | 0.0857 | 0.1426 | 1.0000x |
+| `smsdt_st` | `seed2` | `FFPP` | `in_domain` | 0.7924 | 0.0914 | 0.1200 | 0.0821 | 0.0379 | 0.0236 | 0.0586 | 0.0143 | 0.2257 | 1.0000x |
+| `smsdt_st` | `seed2` | `FFPPVAL` | `unknown` | 0.7924 | 0.1258 | 0.1148 | 0.1144 | 0.0004 | 0.0000 | 0.0216 | 0.0286 | 0.2010 | 1.0000x |
+| `smsdt_st` | `seed3` | `FFPP` | `in_domain` | 0.5004 | 0.0914 | 0.0993 | 0.0914 | 0.0079 | 0.0000 | 0.0236 | 0.0429 | 0.1557 | 1.0000x |
+| `smsdt_st` | `seed3` | `FFPPVAL` | `unknown` | 0.5004 | 0.1228 | 0.1100 | 0.1096 | 0.0004 | 0.0000 | 0.0170 | 0.0929 | 0.1271 | 1.0000x |
+| **`gend_official`** | `seed0` | `CELEBDF` | `confirmatory` | 0.6660 | 0.2826 | 0.1641 | 0.1434 | **0.0207** | 0.0179 | 0.0456 | 0.2135 | 0.1147 | 3.3208x |
+| **`gend_official`** | `seed0` | `DFD` | `dev_overlap` | 0.6660 | 0.2244 | 0.1680 | 0.1602 | **0.0078** | 0.0026 | 0.0212 | 0.1436 | 0.1924 | 2.2338x |
+| `gend_ours` | `seed1` | `CELEBDF` | `confirmatory` | 0.2613 | 0.2535 | 0.2628 | 0.2453 | 0.0174 | 0.0174 | 0.0523 | 0.3315 | 0.1941 | 1.3648x |
+| `gend_ours` | `seed1` | `DFD` | `dev_overlap` | 0.2613 | 0.1844 | 0.2554 | 0.1773 | **0.0781** | **0.0516** | 0.1064 | 0.3603 | 0.1505 | 1.4836x |
+| `gend_ours` | `seed2` | `CELEBDF` | `confirmatory` | 0.2771 | 0.2534 | 0.2663 | 0.2404 | 0.0258 | 0.0258 | 0.0527 | 0.3090 | 0.2235 | 1.2360x |
+| `gend_ours` | `seed2` | `DFD` | `dev_overlap` | 0.2771 | 0.1806 | 0.2458 | 0.1736 | **0.0722** | 0.0481 | 0.0991 | 0.3342 | 0.1575 | 1.3368x |
+| `gend_ours` | `seed3` | `CELEBDF` | `confirmatory` | 0.3993 | 0.2508 | 0.2478 | 0.2404 | 0.0074 | 0.0074 | 0.0401 | 0.1573 | 0.3382 | 0.8809x |
+| `gend_ours` | `seed3` | `DFD` | `dev_overlap` | 0.3993 | 0.1781 | 0.1971 | 0.1763 | 0.0208 | 0.0073 | 0.0400 | 0.1593 | 0.2350 | 0.8919x |
+| `smsdt_full` | `seed1` | `CELEBDF` | `confirmatory` | 0.6282 | 0.1962 | 0.2134 | 0.1831 | 0.0303 | 0.0303 | 0.0359 | 0.1180 | 0.3088 | 2.7528x |
+| `smsdt_full` | `seed1` | `DFD` | `dev_overlap` | 0.6282 | 0.2176 | 0.2243 | 0.2141 | 0.0102 | 0.0018 | 0.0310 | 0.1149 | 0.3337 | 2.6806x |
+| `smsdt_full` | `seed2` | `CELEBDF` | `confirmatory` | 0.4452 | 0.1878 | 0.1895 | 0.1881 | 0.0014 | 0.0014 | 0.0105 | 0.1966 | 0.1824 | 1.7205x |
+| `smsdt_full` | `seed2` | `DFD` | `dev_overlap` | 0.4452 | 0.2076 | 0.2072 | 0.1997 | 0.0074 | 0.0031 | 0.0223 | 0.1567 | 0.2577 | 1.3708x |
+| `smsdt_full` | `seed3` | `CELEBDF` | `confirmatory` | 0.6637 | 0.2077 | 0.2323 | 0.2065 | 0.0258 | 0.0225 | 0.0319 | 0.1292 | 0.3353 | **6.0300x** |
+| `smsdt_full` | `seed3` | `DFD` | `dev_overlap` | 0.6637 | 0.2019 | 0.2135 | 0.1966 | 0.0169 | 0.0091 | 0.0317 | 0.0940 | 0.3329 | 4.3864x |
+| **`smsdt_s`** | **`seed1`** | **`CELEBDF`** | `confirmatory` | 0.6937 | 0.1820 | 0.2753 | 0.1769 | **0.0984** | **0.0984** | 0.1023 | 0.0506 | 0.5000 | 1.4157x |
+| `smsdt_s` | `seed1` | `DFD` | `dev_overlap` | 0.6937 | 0.1880 | 0.1967 | 0.1814 | 0.0153 | 0.0093 | 0.0278 | 0.0313 | 0.3621 | 0.8773x |
+| `smsdt_s` | `seed2` | `CELEBDF` | `confirmatory` | 0.5636 | 0.2153 | 0.2219 | 0.1960 | 0.0259 | 0.0259 | 0.0373 | 0.0674 | 0.3765 | 1.1798x |
+| `smsdt_s` | `seed2` | `DFD` | `dev_overlap` | 0.5636 | 0.1593 | 0.1692 | 0.1559 | 0.0133 | 0.0033 | 0.0274 | 0.0522 | 0.2861 | 0.9138x |
+| `smsdt_s` | `seed3` | `CELEBDF` | `confirmatory` | 0.5632 | 0.1864 | 0.2116 | 0.1728 | 0.0389 | 0.0384 | 0.0437 | 0.0674 | 0.3559 | 1.1798x |
+| `smsdt_s` | `seed3` | `DFD` | `dev_overlap` | 0.5632 | 0.1674 | 0.1721 | 0.1675 | 0.0046 | 0.0011 | 0.0210 | 0.0601 | 0.2842 | 1.0509x |
+| `smsdt_st` | `seed1` | `CELEBDF` | `confirmatory` | 0.5799 | 0.2121 | 0.2276 | 0.1887 | 0.0389 | 0.0380 | 0.0442 | 0.1404 | 0.3147 | 1.6386x |
+| `smsdt_st` | `seed1` | `DFD` | `dev_overlap` | 0.5799 | 0.1951 | 0.2053 | 0.1934 | 0.0118 | 0.0079 | 0.0243 | 0.1044 | 0.3061 | 1.2185x |
+| **`smsdt_st`** | **`seed2`** | **`CELEBDF`** | `confirmatory` | 0.7924 | 0.2363 | 0.2927 | 0.2001 | **0.0926** | **0.0910** | 0.0996 | 0.0618 | 0.5235 | 2.1629x |
+| `smsdt_st` | `seed2` | `DFD` | `dev_overlap` | 0.7924 | 0.2164 | 0.2135 | 0.1997 | 0.0138 | 0.0079 | 0.0313 | 0.0522 | 0.3748 | 1.8277x |
+| `smsdt_st` | `seed3` | `CELEBDF` | `confirmatory` | 0.5004 | 0.2081 | 0.2290 | 0.2004 | 0.0286 | 0.0286 | 0.0334 | 0.1404 | 0.3176 | 1.5125x |
+| `smsdt_st` | `seed3` | `DFD` | `dev_overlap` | 0.5004 | 0.1989 | 0.1874 | 0.1740 | 0.0134 | 0.0015 | 0.0307 | 0.1593 | 0.2154 | 1.7152x |
 
 #### Scientific Findings & Pre-Registration Audit (H2):
-1. **Zero Threshold Catastrophe Across All 36 Conditions:** Across all 36 experimental evaluations (4 architectures × 3 seeds × 3 datasets documented in [`results/tables/threshold_transfer_audit.md`](file:///e:/DEEPFAKE/results/tables/threshold_transfer_audit.md)), the degradation gap $g$ strictly satisfies $g \le 0.0374$, well below the $\delta = 0.05$ (5.0%) threshold. Under the strict pre-registered statement of H2 (*"a validation-frozen threshold loses at least 0.05 HTER versus the per-dataset optimum"*), H2 is formally **falsified**: operating point transfer does not suffer catastrophic collapse.
-2. **Degradation Gap Below Threshold (H2 Falsified):** Validation-frozen operating cutoffs exhibit degradation gap $g \le 0.0374 \ll 0.05$, formally falsifying the pre-registered degradation hypothesis H2 and showing that errors stem from rank-order degradation rather than threshold catastrophe.
-3. **Small HTER Gaps Hide Large FPR Shifts (Audit Finding):** As identified in `docs/novelty_audit.md`, while HTER stays low, raw false-positive rate on unseen Celeb-DF reals ranges from 7.9% (S) to 22.5% (Full), while FNR falls. HTER averages the two and masks the shift. This provides the primary empirical motivation for the FPR-control extensions (H4 and H5 in `docs/decisions.md`).
+1. **Why Earlier Runs Showed $g \le 0.0374$:** The prior run fell back to raw `0.5000` (`tau_val = 0.5000` on every S-MSDT model) because dev-split Platt calibration JSONs had not yet been generated. Re-running with actual dev calibration (`results/calib/*.json`) changes the picture substantially.
+2. **H2 Is Formally `undetermined` (Not Falsified):** Across the two registered baselines on Celeb-DF, `smsdt_s` seed 1 clears the H2 degradation threshold ($g = 0.0984$, $95\%\text{ CI }[0.0984, 0.1023]$, lower CI $\ge 0.05$, with `FNR = 0.5000` at $\tau_{\text{cal}}=0.6937$), while seeds 2–3 stay below `0.05` (`0.0259` and `0.0389`); `gend_ours` stays below `0.05` on Celeb-DF (`0.0074–0.0258`, though `0.0781` on DFD seed 1 with CI lower `0.0516`). Exploratory `smsdt_st` seed 2 also exceeds `0.05` on Celeb-DF ($g = 0.0926$, CI $[0.0910, 0.0996]$). Additional confirmatory unseen data/seeds are required before issuing a confirm/falsify verdict for H2.
+3. **HTER Still Masks Large Asymmetric FPR Shifts:** Even where $g < 0.05$, `FPR` under the frozen calibrated cutoff inflates sharply relative to `FF++val` (`smsdt_full` seed 3: `12.92%` vs `2.14%` = `6.03x`; `gend_official` seed 0: `21.35%` vs `6.43%` = `3.32x`), motivating the explicit FPR-control audit in §10.
 
 ---
 
 ## 6. Hypothesis H3: Operational Prior Shift & Saerens EM Correction Audit
 
-Compiled via `tools/prior_sweep.py` into [`results/tables/prior_shift_sweep.csv`](file:///e:/DEEPFAKE/results/tables/prior_shift_sweep.csv) and [`results/tables/prior_shift_sweep.md`](file:///e:/DEEPFAKE/results/tables/prior_shift_sweep.md).
+Compiled via [`tools/prior_sweep.py`](file:///e:/DEEPFAKE/tools/prior_sweep.py) into [`results/tables/prior_shift_sweep.csv`](file:///e:/DEEPFAKE/results/tables/prior_shift_sweep.csv) and [`results/tables/prior_shift_sweep.md`](file:///e:/DEEPFAKE/results/tables/prior_shift_sweep.md) across all **13** Celeb-DF v2 evaluation runs using **Platt-calibrated posteriors** (`results/calib/*.json`) under simulated base-rate shifts $\pi \in \{0.1, 0.3, 0.5, 0.7, 0.9\}$ (50 Monte Carlo subsamplings per condition).
 
-Evaluates detector stability on Celeb-DF v2 under simulated real-world base-rate shifts $\pi \in \{0.1, 0.3, 0.5, 0.7, 0.9\}$ across 50 Monte Carlo subsamplings per condition:
+### Calibrated 3-Seed Mean by Architecture (`prior_shift_sweep.csv`, Celeb-DF v2)
 
-### S-MSDTv3 Full (`smsdt_full_seed1_celebdf`):
-| Target Prior $\pi$ | Mean Prior Estimation Error $|\hat{\pi} - \pi|$ | Frozen HTER ($\tau=0.50$) | Post-EM HTER | HTER Change |
-| :---: | :---: | :---: | :---: | :---: |
-| **0.10** | 0.0802 | 0.1914 $\pm$ 0.0440 | 0.2260 $\pm$ 0.0535 | -0.0346 |
-| **0.30** | 0.0630 | 0.1917 $\pm$ 0.0211 | **0.1819 $\pm$ 0.0208** | **+0.0098 (Improved)** |
-| **0.50** | 0.0308 | 0.1983 $\pm$ 0.0087 | **0.1947 $\pm$ 0.0094** | **+0.0036 (Improved)** |
-| **0.70** | **0.0068** | 0.1962 $\pm$ 0.0081 | 0.1974 $\pm$ 0.0085 | -0.0012 |
-| **0.90** | 0.0202 | 0.1941 $\pm$ 0.0337 | 0.2752 $\pm$ 0.0452 | -0.0811 |
+| Architecture (`N` runs) | Target Prior $\pi$ | Mean Prior Err $|\hat{\pi}-\pi|$ | Frozen HTER ($\tau=0.50$) | Post-EM HTER | HTER Reduction | Frozen Acc | Bayes-EM Acc | Bayes Acc Gain |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| `gend_official` (`1`) | `0.1 / 0.5 / 0.9` | `0.1923 / 0.2670 / 0.1000` | `0.1632 / 0.1647 / 0.1608` | `0.1748 / 0.2299 / 0.5000` | `-0.0115 / -0.0653 / -0.3392` | `0.7967 / 0.8353 / 0.8760` | `0.8534 / 0.6624 / 0.8995` | `+0.0568 / -0.1730 / +0.0234` |
+| `gend_ours` (`3`) | `0.1 / 0.5 / 0.9` | `0.0868 / 0.1783 / 0.2071` | `0.2630 / 0.2598 / 0.2655` | `0.4603 / 0.2527 / 0.3778` | `-0.1974 / +0.0071 / -0.1122` | `0.7347 / 0.7402 / 0.7453` | `0.9013 / 0.7137 / 0.7319` | `+0.1667 / -0.0265 / -0.0134` |
+| `smsdt_s` (`3`) | `0.1 / 0.5 / 0.9` | `0.0708 / 0.1871 / 0.2221` | `0.2361 / 0.2371 / 0.2346` | `0.4489 / 0.2869 / 0.1993` | `-0.2128 / -0.0498 / +0.0353` | `0.9030 / 0.7629 / 0.6246` | `0.9102 / 0.7404 / 0.7742` | `+0.0072 / -0.0225 / +0.1495` |
+| `smsdt_st` (`3`) | `0.1 / 0.5 / 0.9` | `0.0493 / 0.1440 / 0.1940` | `0.2534 / 0.2524 / 0.2490` | `0.4368 / 0.2807 / 0.2241` | `-0.1833 / -0.0283 / +0.0248` | `0.8576 / 0.7476 / 0.6421` | `0.9124 / 0.7498 / 0.7899` | `+0.0547 / +0.0022 / +0.1478` |
+| `smsdt_full` (`3`) | `0.1 / 0.5 / 0.9` | **`0.0144 / 0.0382 / 0.0521`** | `0.2100 / 0.2124 / 0.2105` | `0.3159 / 0.2135 / 0.2298` | `-0.1059 / -0.0011 / -0.0193` | `0.8395 / 0.7876 / 0.7376` | **`0.9201 / 0.7974 / 0.9114`** | **`+0.0806 / +0.0097 / +0.1738`** |
 
-#### Reading of This Table *[corrected 2026-11-10]*:
-1. **H3a is falsified as registered:** the largest HTER reduction is 0.0098 (threshold 0.03), and EM increases HTER at pi = 0.1 (+0.035) and pi = 0.9 (+0.081).
-2. **This was expected.** HTER is prior-invariant and EM re-weights posteriors monotonically, so EM cannot lower HTER at a fixed threshold. The appropriate EM metric is accuracy or expected cost under the new prior; the fixed `tools/prior_sweep.py` reports it (exploratory).
-3. **Input was not calibrated (D6):** raw `score_mean` was used as posteriors; EM assumes balanced-prior calibrated posteriors. One model and one dataset only.
-4. The prior-estimation error (0.007 at pi = 0.7 up to 0.080 at pi = 0.1) is a descriptive result.
+*(Full 65-row breakdown across all $\pi \in \{0.1, 0.3, 0.5, 0.7, 0.9\}$ is in [`results/tables/prior_shift_sweep.md`](file:///e:/DEEPFAKE/results/tables/prior_shift_sweep.md).)*
+
+#### Reading of H3a Results:
+1. **H3a Is Formally `falsified` on HTER Reduction:** Even with calibrated posteriors, Saerens EM does not reduce HTER consistently by $\ge 0.03$; it worsens fixed-threshold HTER under low priors across all architectures (e.g., `-0.1059` to `-0.2128` at $\pi=0.10$).
+2. **Bayes-Decision Accuracy (Not HTER) Is the Appropriate EM Metric:** As established in [`prior_sweep.py`](file:///e:/DEEPFAKE/tools/prior_sweep.py), HTER is prior-invariant and EM re-weights posteriors monotonically, so EM is designed to maximize **Bayes-decision accuracy** (or minimize expected cost) under shifted base rates rather than lowering HTER at $\tau=0.50$. On this metric (`acc_gain`), `smsdt_full` achieves accurate prior tracking (`0.0144–0.0521` mean error) and large accuracy gains under strong skew (`+8.06 pts` at $\pi=0.10$, `+17.38 pts` at $\pi=0.90$), and `smsdt_s` / `smsdt_st` gain `+14.95` / `+14.78 pts` at $\pi=0.90$, whereas `gend_official` (`0.23–0.27` prior error) loses accuracy at intermediate priors (`-9.28` to `-17.30 pts`).
 
 ---
 
 ## 7. Test-Time Adaptation (TTA) & Clip-Consistency Benchmark (RQ3 / H3b / H6)
 
-Compiled via `tools/eval_tta.py` into [`results/tables/tta_summary.csv`](file:///e:/DEEPFAKE/results/tables/tta_summary.csv) and [`results/tables/tta_summary.md`](file:///e:/DEEPFAKE/results/tables/tta_summary.md).
+Compiled via [`tools/eval_tta.py`](file:///e:/DEEPFAKE/tools/eval_tta.py) into [`results/tables/tta_summary.csv`](file:///e:/DEEPFAKE/results/tables/tta_summary.csv) and [`results/tables/tta_summary.md`](file:///e:/DEEPFAKE/results/tables/tta_summary.md).
 
-Evaluates label-free LayerNorm adaptation ($lr = 1\times 10^{-4}$, batch size 2 videos, $K=4$) under two objectives (`entropy` and `consistency`) and two operational paradigms (`online` streaming vs `batch_episodic` reset):
+Evaluates label-free LayerNorm adaptation ($lr = 1\times 10^{-4}$, batch size 2 videos, $K=4$) on a **single model (`smsdt_full`), single seed (`seed1`), and single target dataset (`Celeb-DF-v2` for consistency; `Celeb-DF-v2` and `DFD` for legacy entropy)** under two objectives (`entropy` and `consistency`) and two modes (`online` streaming vs `batch_episodic` reset):
 
 | Model | Target Dataset | Adaptation Mode | Objective | Pre-TTA AUC | Post-TTA AUC | ΔAUC | Mean Metric/Ent | Pred Positive % | Ground Truth % | Collapse Audit |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | `smsdt_full_seed1` | Celeb-DF-v2 | **Online** | `entropy` | 0.8880 | 0.3386 | **-0.5494** | 0.1187 | 6.6% | 65.6% | **COLLAPSED (FAILED)** |
-| `smsdt_full_seed1` | Celeb-DF-v2 | **Batch-Episodic** | `entropy` | 0.8880 | 0.8880 | +0.0000* | 0.2679 | 61.0% | 65.6% | **STABLE (NO COLLAPSE)** |
+| `smsdt_full_seed1` | Celeb-DF-v2 | **Batch-Episodic** | `entropy` | 0.8880 | 0.8880 | +0.0000* | 0.2679 | 61.0% | 65.6% | *Invalid (pre-reset logits)* |
 | `smsdt_full_seed1` | DFD | **Online** | `entropy` | 0.8583 | 0.2390 | **-0.6193** | 0.0252 | 0.6% | 87.2% | **COLLAPSED (FAILED)** |
-| `smsdt_full_seed1` | DFD | **Batch-Episodic** | `entropy` | 0.8583 | 0.8583 | +0.0000* | 0.2091 | 70.7% | 87.2% | **STABLE (NO COLLAPSE)** |
+| `smsdt_full_seed1` | DFD | **Batch-Episodic** | `entropy` | 0.8583 | 0.8583 | +0.0000* | 0.2091 | 70.7% | 87.2% | *Invalid (pre-reset logits)* |
 | `smsdt_full_seed1` | Celeb-DF-v2 | **Online** | `consistency` | 0.8880 | 0.5409 | **-0.3472** | 1.0326 | 10.8% | 65.6% | **COLLAPSED (FAILED)** |
-| `smsdt_full_seed1` | Celeb-DF-v2 | **Batch-Episodic** | `consistency` | 0.8880 | 0.8877 | **-0.0003** | 1.3669 | 60.4% | 65.6% | **STABLE (NO COLLAPSE)** |
+| `smsdt_full_seed1` | Celeb-DF-v2 | **Batch-Episodic** | `consistency` | 0.8880 | 0.8877 | **-0.0003** | 1.3669 | 60.4% | 65.6% | **NO COLLAPSE / NO GAIN** |
 
-*\*Note: Legacy entropy batch-episodic runs recorded logits prior to reset (`+0.0000`); the updated runner (`eval_tta.py`, consistency run) re-evaluates post-adaptation weights before reset (`0.8877`, ΔAUC `-0.0003`).*
+*\*Methodological Note: The legacy batch-episodic `entropy` rows (`+0.0000`) measured logits **before** the parameter reset and are **not** a valid test of adaptation; only the updated `consistency` runner measures post-adaptation weights prior to reset (`0.8877`, $\Delta\text{AUC} = -0.0003$).*
 
 #### Key Scientific Findings (RQ3 / TTA / H6):
-1. **Catastrophic Online Pseudo-Label Drift (Entropy):** Unconstrained online entropy minimization rapidly drives the detector into degenerate trivial equilibria under domain shift. Within 250 steps, positive predictions collapse to $< 7\%$ on Celeb-DF and $< 1\%$ on DFD ($\Delta\text{AUC} \le -0.55$).
-2. **Clip-Consistency (H6) Partial Mitigation vs. Small-Batch Streaming Collapse:** Adding multi-clip variance consistency reduces the severity of online collapse relative to raw entropy (AUC drops to $0.5409$ vs $0.3386$, Pred Positive $10.8\%$ vs $6.6\%$), but continuous small-batch streaming ($B=2$ videos over 259 steps without reset) still drifts and fails the collapse criterion.
-3. **Episodic Reset Prevents Equilibrium Collapse:** Resetting LayerNorm parameters between batches avoids catastrophic drift in both objectives, preserving source discrimination ($0.8877$ post-update consistency vs $0.8880$ static) while closely tracking the positive class share ($60.4\%$ vs $65.6\%$).
+1. **H6 Is Formally `falsified`:** Online consistency TTA **collapses** (`0.5409` AUC vs `0.8880` pre-TTA, predicted-positive rate `10.8%` vs `65.6%` true positives), failing the pre-registered no-collapse condition; batch-episodic consistency changes AUC by `-0.0003` (`0.8877` vs `0.8880`), yielding neither collapse nor adaptation gain. Scope: **single model, single seed, and single dataset** (`smsdt_full_seed1` on `Celeb-DF-v2`).
+2. **Online Entropy Collapse (H3b):** Unconstrained online entropy minimization rapidly collapses predictions to near-zero positives (`6.6%` on Celeb-DF, `0.6%` on DFD; $\Delta\text{AUC} \le -0.55$). Because batch-episodic entropy measured pre-reset logits (`+0.0000`), only batch-episodic consistency provides a clean reset check (`-0.0003` $\Delta\text{AUC}$).
 
 ---
 
 ## 8. Perturbation Robustness Benchmark (Corrected Pipeline)
 
-Compiled via `tools/eval_robustness.py` into [`results/tables/robustness_summary.csv`](file:///e:/DEEPFAKE/results/tables/robustness_summary.csv) and [`results/tables/robustness_summary.md`](file:///e:/DEEPFAKE/results/tables/robustness_summary.md).
+Compiled via [`tools/eval_robustness.py`](file:///e:/DEEPFAKE/tools/eval_robustness.py) into [`results/tables/robustness_summary.csv`](file:///e:/DEEPFAKE/results/tables/robustness_summary.csv) and [`results/tables/robustness_summary.md`](file:///e:/DEEPFAKE/results/tables/robustness_summary.md).
 
-Evaluated on `smsdt_full_seed1` across Celeb-DF-v2 test split ($N=518$ videos, $K=4, T=8$) **after fixing the uint8 normalization order bug** (perturbations applied on $[0, 255]$ uint8 RGB frames prior to CLIP mean/std normalization):
+Evaluated on a **single model (`smsdt_full`), single seed (`seed1`), and Celeb-DF-v2 only** ($N=518$ videos, $K=4, T=8$) **after fixing the uint8 normalization order bug** (perturbations applied on $[0, 255]$ uint8 RGB frames prior to CLIP mean/std normalization):
 
 | Perturbation Type | Severity / Level | Test AUC | AUC Degradation (Clean $-$ Perturbed) |
 | :--- | :---: | :---: | :---: |
@@ -570,166 +625,227 @@ Evaluated on `smsdt_full_seed1` across Celeb-DF-v2 test split ($N=518$ videos, $
 | **Downscaling** | Factor 0.50 | **0.8734** | +0.0151 |
 | **Downscaling** | Factor 0.25 | **0.8217** | +0.0667 |
 
-#### Scientific Findings:
-1. **Graceful Degradation Curve:** Once the earlier CLIP normalization bug (which had caused an artificial drop to $0.6373$ at JPEG 90) was resolved, S-MSDTv3 exhibits smooth, physically plausible robustness under web compression. Moderate perturbations (JPEG Q=70: $0.8829$; Blur $\sigma=1.0$: $0.8732$; Downscale 0.50x: $0.8734$) preserve $\ge 98\%$ of clean discriminative performance.
-2. **Severe High-Frequency Loss:** Significant degradation occurs only under aggressive artifacts (JPEG Q=30 drops by $0.0836$; Blur $\sigma=2.0$ drops by $0.0898$; Downscale 0.25x drops by $0.0667$), matching theoretical expectations where extreme low-pass filtering removes fine spatial artifacts.
+#### Scientific Findings (Single Model / Single Seed / Celeb-DF-v2 Only):
+1. **Graceful Degradation Curve:** Once the earlier CLIP normalization bug (which had caused an artificial drop to $0.6373$ at JPEG 90) was resolved, `smsdt_full_seed1` exhibits smooth degradation under web compression. Moderate perturbations (JPEG Q=70: $0.8829$; Blur $\sigma=1.0$: $0.8732$; Downscale 0.50x: $0.8734$) preserve $\ge 98\%$ of clean discriminative performance.
+2. **Severe High-Frequency Loss:** Larger drops occur under aggressive artifacts (JPEG Q=30 drops by $0.0836$; Blur $\sigma=2.0$ drops by $0.0898$; Downscale 0.25x drops by $0.0667$). Note: scope is limited to `smsdt_full_seed1` on Celeb-DF-v2.
 
 ---
 
 ## 9. Gate G1 Resolution: Official GenD Benchmark (`gend_official`)
 
-Evaluated directly via `smsdt.eval_cross` using the official author Hugging Face weights (`hf:yermandy/GenD_CLIP_L_14`, $T=1$) on the identical Celeb-DF-v2 test split ($N=518$ videos: 340 `Celeb-synthesis` fakes, 178 pristine reals), saved to [`results/scores/gend_official_seed0_celebdf.csv`](file:///e:/DEEPFAKE/results/scores/gend_official_seed0_celebdf.csv).
+Evaluated directly via [`smsdt/eval_cross.py`](file:///e:/DEEPFAKE/smsdt/eval_cross.py) using the official author Hugging Face weights (`hf:yermandy/GenD_CLIP_L_14`, $T=1$) across all four evaluation splits:
+- **FF++ c23 Val (`N=840` pure FF++):** [`results/scores/gend_official_seed0_ffppval.csv`](file:///e:/DEEPFAKE/results/scores/gend_official_seed0_ffppval.csv) — **0.9371 Video AUC** (dev Platt calibration saved in [`results/calib/gend_official_seed0.json`](file:///e:/DEEPFAKE/results/calib/gend_official_seed0.json), $\tau_{\text{cal}}=0.6660$)
+- **FF++ c23 Test (`N=840`):** [`results/scores/gend_official_seed0_ffpp.csv`](file:///e:/DEEPFAKE/results/scores/gend_official_seed0_ffpp.csv) — **0.9452 Video AUC**
+- **DFD Test (`N=2,987`):** [`results/scores/gend_official_seed0_dfd.csv`](file:///e:/DEEPFAKE/results/scores/gend_official_seed0_dfd.csv) — **0.9076 Video AUC**
+- **Celeb-DF-v2 Test (`N=518`):** [`results/scores/gend_official_seed0_celebdf.csv`](file:///e:/DEEPFAKE/results/scores/gend_official_seed0_celebdf.csv) — **0.9327 Video AUC**
 
-| Metric | Official GenD (`hf:yermandy/GenD_CLIP_L_14`) | Notes & Comparison |
+### 9.1 Celeb-DF-v2 Performance & Score Distribution (`gend_official_seed0_celebdf.csv`)
+
+| Metric | Official GenD (`hf:yermandy/GenD_CLIP_L_14`) | Notes |
 | :--- | :---: | :--- |
-| **Video AUC** | **0.9327** | Within 1.3 pts of published 5-seed mean (0.946) |
-| **Top-50% Clip AUC** | **0.9277** | Frame/Clip AUC: 0.8841 |
-| **Biometric Utility** | TPR@1%FPR = 51.76% \| TPR@5%FPR = 73.82% | Raw ECE = 0.1362 |
-| **Oracle Acc@EER (0.82)** | 84.2% (84.1% Fake / 84.3% Real) | — |
-| **Calibrated Report ($\tau=0.500$)** | Overall Acc: 80.12% \| Balanced Acc: 71.74% | F1-Score: 0.8668 |
-| **True Positives (Recall on Fakes)** | **335 / 340 (98.53%)** | Only 5 fakes missed |
-| **False Positives (False Alarms on Reals)** | **98 / 178 (55.06%)** | **Over half of authentic faces falsely flagged** |
+| **Video AUC** | **0.9327** | Above every S-MSDT variant (`smsdt_full`: `0.8882`, `smsdt_s`: `0.8826`, `gend_ours`: `0.8294`) |
+| **Top-50% Clip AUC** | **0.9277** | Frame/Clip AUC: `0.8841` |
+| **Biometric Utility** | TPR@1%FPR = `51.76%` \| TPR@5%FPR = `73.82%` | Raw ECE = `0.1362` |
+| **Oracle Acc@EER (0.82)** | `84.2%` (`84.1%` Fake / `84.3%` Real) | High rank-order separability |
+| **Uncalibrated $\tau=0.500$** | Overall Acc: `80.12%` \| Bal Acc: `71.74%` \| F1: `0.8668` | Recall `98.53%` (`335/340`); Raw FPR `55.06%` (`98/178`) — softmax is not calibrated at `0.5` |
 
-### 9.1 Score & Logit Distribution Analysis (`gend_official_seed0_celebdf.csv`)
-
-| Class Subset ($N$) | `score_mean` [min / median / tail / max] | `logit_mean` [min / median / tail / max] | Operating Rate @ $\tau=0.50$ |
+| Class Subset ($N$) | `score_mean` [min / median / tail / max] | `logit_mean` [min / median / tail / max] | Raw $\tau=0.50$ Rate |
 | :--- | :---: | :---: | :---: |
-| **Pristine Reals ($N=178$)** | `0.0555` / **`0.5339`** / p95=`0.8956` / `0.9749` | `-2.9609` / **`+0.2136`** / p95=`+2.4001` / `+3.7031` | **FPR = `0.5506` (`98 / 178`)** |
-| **Manipulated Fakes ($N=340$)** | `0.1669` / **`0.9474`** / p05=`0.6906` / `0.9961` | `-1.6501` / **`+3.0998`** / p05=`+1.0679` / `+5.6094` | **TPR = `0.9853` (`335 / 340`)** |
+| **Pristine Reals ($N=178$)** | `0.0555` / `0.5339` / p95=`0.8956` / `0.9749` | `-2.9609` / `+0.2136` / p95=`+2.4001` / `+3.7031` | FPR = `0.5506` (`98 / 178`) |
+| **Manipulated Fakes ($N=340$)** | `0.1669` / `0.9474` / p05=`0.6906` / `0.9961` | `-1.6501` / `+3.0998` / p05=`+1.0679` / `+5.6094` | TPR = `0.9853` (`335 / 340`) |
+
+### 9.2 Like-for-Like Source-Quantile Transfer on `gend_official` (`--source ffppval`)
+
+Evaluating `gend_official` under the exact same dev-split `source_quantile` protocol (`results/scores/gend_official_seed0_ffppval.csv`) provides a direct like-for-like comparison with S-MSDT:
+
+| Target Dataset | Budget ($\alpha$) | Source Logit Cutoff | Achieved FPR | Conservative 95% CI | FPR / $\alpha$ | TPR | H4 Failure (`ci_low_cons > 2α`) |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Celeb-DF-v2** | `0.05` | `1.8057` | **`0.1573`** | `[0.1050, 0.2180]` | **`3.15x`** | `0.8647` | **`True`** |
+| **Celeb-DF-v2** | `0.10` | `1.2140` | **`0.3146`** | `[0.2499, 0.3861]` | **`3.15x`** | `0.9382` | **`True`** |
+| **DFD** | `0.05` | `1.8057` | **`0.1358`** | `[0.1051, 0.1737]` | **`2.72x`** | `0.7976` | **`True`** |
+| **DFD** | `0.10` | `1.2140` | **`0.2037`** | `[0.1624, 0.2468]` | **`2.04x`** | `0.8468` | `False` |
 
 #### Gate G1 Scientific Conclusion:
-1. **Honest Resolution of Reproduction Gap:** Official author weights score **0.9327 AUC** on Celeb-DF-v2 (vs our in-house `gend_ours` at 0.8294 and `smsdt_full` at 0.8882). Under Gate G1 Branch B, this confirms that the earlier `+5.88%` claim over GenD reflected author-specific training recipe choices (multi-source mixture, cycling LR, 32 frames, cross-dataset checkpoint selection) rather than superiority over published SOTA.
-2. **Severe False-Alarm Catastrophe on Pristine Faces:** Because the official real logit distribution is shifted positively (`median logit = +0.2136`, `median score = 0.5339`), `gend_official` flags **55.1% (98/178)** of authentic Celeb-DF faces at the default $0.500$ threshold despite `0.9327` ranking AUC. By contrast, our lightweight single-frame model (`smsdt_s`) achieves `6.7%–10.7%` FPR under $\alpha=0.05$ source-quantile transfer on the exact same pristine faces.
+1. **No Superiority Over Official GenD (Gate G1 Branch B):** Official author weights (`0.9327` Celeb-DF AUC) outperform our in-house FF++-only `gend_ours` (`0.8294`) and every S-MSDT variant (`smsdt_full`: `0.8882`, `smsdt_s`: `0.8826`, `smsdt_st`: `0.8704`). Accordingly, S-MSDT cannot be framed as a new best detector; our `+0.059` AUC delta over `gend_ours` compares our training recipe against our own baseline rather than published GenD.
+2. **Like-for-Like Threshold Transfer Fails on Official GenD Too:** At a raw `0.50` cutoff, official GenD's `55.06%` FPR only shows that its softmax logits are not calibrated around `0.5` (`reals` median logit `+0.2136`). However, even after computing proper dev-split `FF++val` quantiles (`source_quantile`), `gend_official` inflates Celeb-DF FPR **`3.15x`** to **`15.73%`** at $\alpha=0.05$ (`31.46%` at $\alpha=0.10$, both `h4_failure = True`) and DFD FPR **`2.72x`** to **`13.58%`** — **higher FPR inflation than every S-MSDT variant under `ffppval`**. Platt calibration (`tau_cal = 0.6660`) similarly increases FPR from `6.43%` on `FFPPVAL` to `21.35%` on `Celeb-DF` (`3.32x`) and `14.36%` on `DFD` (`2.23x`). Thus cross-domain FPR inflation under frozen source thresholds is a shared failure mode affecting even the strongest pretrained checkpoint.
 
 ---
 
 ## 10. False Positive Rate Control Under Domain Shift (Hypotheses H4 & H5)
 
-Compiled via [`tools/fpr_control.py`](file:///e:/DEEPFAKE/tools/fpr_control.py) (`--scores-dir results/scores --source ffpp`) across all 12 multi-seed training runs (`36` evaluation score files + `12` source calibration files) at target false-alarm budgets $\alpha \in \{0.05, 0.10\}$. Note: `gend_official_seed0` is excluded from cross-domain transfer policies because no source FF++ score file exists for that external checkpoint (`"gend_official_seed0/celebdf: no source file"` in [`fpr_control_verdicts.json`](file:///e:/DEEPFAKE/results/tables/fpr_control_verdicts.json)).
+Compiled via [`tools/fpr_control.py`](file:///e:/DEEPFAKE/tools/fpr_control.py) (`--scores-dir results/scores --source ffppval --confirmatory-seeds 3 4 5`) across all `13` runs (`12` multi-seed trained runs + external `gend_official_seed0`) at target false-alarm budgets $\alpha \in \{0.05, 0.10\}$.
+
+To eliminate sub-binomial CIs caused by coarse real-video clustering (`121` Celeb-DF clusters for `178` reals; `41` DFD actor-pair clusters for `383` reals), [`tools/fpr_control.py`](file:///e:/DEEPFAKE/tools/fpr_control.py) reports **cluster-conservative bounds** (`fpr_ci_low_cons = min(boot_low, wilson_low)`, `fpr_ci_high_cons = max(boot_high, wilson_high)`) and evaluates H4 failures using `fpr_ci_low_cons > 2 * alpha`.
 
 Outputs stored in:
-- [`results/tables/fpr_control.csv`](file:///e:/DEEPFAKE/results/tables/fpr_control.csv) & [`results/tables/fpr_control.md`](file:///e:/DEEPFAKE/results/tables/fpr_control.md) (`192` policy evaluation rows across `4 models × 3 seeds × 2 datasets × 4 policies × 2 alphas`)
-- [`results/tables/fpr_control_h4.csv`](file:///e:/DEEPFAKE/results/tables/fpr_control_h4.csv) (`48` `source_quantile` rows testing H4: `fpr_ci_low > 2 * alpha`)
-- [`results/tables/fpr_control_prior_stress.csv`](file:///e:/DEEPFAKE/results/tables/fpr_control_prior_stress.csv) (`576` subsampled prior-stress rows across $\pi_{\text{fake}} \in \{0.50, 0.66, 0.91\}$)
-- [`results/tables/fpr_control_verdicts.json`](file:///e:/DEEPFAKE/results/tables/fpr_control_verdicts.json) (formal H4 count `14 / 48` and H5 policy verdicts)
+- [`results/tables/fpr_control.csv`](file:///e:/DEEPFAKE/results/tables/fpr_control.csv) & [`results/tables/fpr_control.md`](file:///e:/DEEPFAKE/results/tables/fpr_control.md) (`208` policy rows across `13 runs × 2 datasets × 4 policies × 2 alphas`)
+- [`results/tables/fpr_control_h4.csv`](file:///e:/DEEPFAKE/results/tables/fpr_control_h4.csv) (`52` `source_quantile` rows testing `fpr_ci_low_cons > 2 * alpha`)
+- [`results/tables/fpr_control_h4b.csv`](file:///e:/DEEPFAKE/results/tables/fpr_control_h4b.csv) (`12` paired delta-FPR rows for `ST - S` and `Full - S` on Celeb-DF-v2)
+- [`results/tables/fpr_control_prior_stress.csv`](file:///e:/DEEPFAKE/results/tables/fpr_control_prior_stress.csv) (`624` subsampled prior-stress rows across $\pi_{\text{fake}} \in \{0.50, 0.66, 0.91\}$)
+- [`results/tables/fpr_control_verdicts.json`](file:///e:/DEEPFAKE/results/tables/fpr_control_verdicts.json) (formal H4a `undetermined` and H5 `falsified` verdicts)
 
-### 10.1 Seed-by-Seed Source Quantile Transfer at $\alpha = 0.05$ (Celeb-DF-v2 Confirmatory)
+### 10.1 Seed-by-Seed Dev-Quantile Transfer at $\alpha = 0.05$ (`--source ffppval`, Celeb-DF-v2 Confirmatory)
 
-| Model | Seed | Logit Cutoff ($\tau_{\text{FF++},0.95}$) | Target ($\alpha$) | Achieved FPR | 95% Bootstrap CI | FPR / $\alpha$ Multiplier | TPR (Recall) | H4 Verdict (`ci_low > 2α`) |
+| Model | Seed (Role) | Logit Cutoff ($\tau_{\text{FF++val},0.95}$) | Target ($\alpha$) | Achieved FPR | Conservative 95% CI | FPR / $\alpha$ | TPR (Recall) | H4 Check (`ci_low_cons > 2α`) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| `gend_ours` | 1 | `0.0942` | 0.0500 | 0.0618 | [0.0463, 0.0857] | 1.24x | 0.5471 | Bounded |
-| `gend_ours` | 2 | `0.0934` | 0.0500 | 0.0618 | [0.0556, 0.0714] | 1.24x | 0.5382 | Bounded |
-| `gend_ours` | 3 | `0.0568` | 0.0500 | 0.0562 | [0.0370, 0.0857] | 1.12x | 0.5676 | Bounded |
-| **`smsdt_s`** | 1 | `0.2161` | 0.0500 | **0.0674** | [0.0648, 0.0714] | 1.35x | 0.6706 | Bounded |
-| **`smsdt_s`** | 2 | `-0.0754` | 0.0500 | **0.1067** | [0.0833, 0.1429] | 2.13x | 0.6794 | Bounded (`ci_low <= 2α`) |
-| **`smsdt_s`** | 3 | `-0.1196` | 0.0500 | **0.0899** | [0.0857, 0.0926] | 1.80x | 0.7353 | Bounded |
-| **`smsdt_st`** | 1 | `0.7681` | 0.0500 | **0.1404** | [0.1286, 0.1481] | 2.81x | 0.6853 | **H4 FAILURE** |
-| **`smsdt_st`** | 2 | `0.2450` | 0.0500 | **0.1180** | [0.1019, 0.1429] | 2.36x | 0.6441 | **H4 FAILURE** |
-| **`smsdt_st`** | 3 | `0.1087` | 0.0500 | **0.1517** | [0.1111, 0.2143] | 3.03x | 0.7235 | **H4 FAILURE** |
-| **`smsdt_full`** | 1 | `0.1412` | 0.0500 | **0.2079** | [**0.1852, 0.2429**] | **4.16x** | 0.8206 | **H4 FAILURE** |
-| **`smsdt_full`** | 2 | `0.5538` | 0.0500 | **0.1685** | [**0.1389, 0.2143**] | **3.37x** | 0.7735 | **H4 FAILURE** |
-| **`smsdt_full`** | 3 | `0.1325` | 0.0500 | **0.2247** | [**0.2222, 0.2286**] | **4.49x** | 0.8059 | **H4 FAILURE** |
+| **`gend_official`** | `0` *(ext)* | `1.8057` | 0.0500 | **0.1573** | **[0.1050, 0.2180]** | **3.15x** | 0.8647 | **H4 FAILURE** |
+| `gend_ours` | `1` *(exp)* | `0.3439` | 0.0500 | 0.0169 | [0.0000, 0.0484] | 0.34x | 0.4029 | Bounded |
+| `gend_ours` | `2` *(exp)* | `0.3113` | 0.0500 | 0.0169 | [0.0000, 0.0484] | 0.34x | 0.4088 | Bounded |
+| `gend_ours` | `3` *(conf)* | `0.3052` | 0.0500 | 0.0169 | [0.0000, 0.0484] | 0.34x | 0.4000 | Bounded |
+| `smsdt_s` | `1` *(exp)* | `1.0547` | 0.0500 | 0.0506 | [0.0226, 0.0933] | 1.01x | 0.5088 | Bounded |
+| `smsdt_s` | `2` *(exp)* | `0.4858` | 0.0500 | 0.0562 | [0.0270, 0.1003] | 1.12x | 0.5941 | Bounded |
+| `smsdt_s` | `3` *(conf)* | `0.4436` | 0.0500 | 0.0674 | [0.0311, 0.1141] | 1.35x | 0.6118 | Bounded |
+| `smsdt_st` | `1` *(exp)* | `1.4438` | 0.0500 | 0.0955 | [0.0517, 0.1476] | 1.91x | 0.5853 | Bounded |
+| `smsdt_st` | `2` *(exp)* | `1.4692` | 0.0500 | 0.0787 | [0.0410, 0.1277] | 1.57x | 0.5235 | Bounded |
+| `smsdt_st` | `3` *(conf)* | `1.2402` | 0.0500 | 0.0787 | [0.0422, 0.1277] | 1.57x | 0.5588 | Bounded |
+| `smsdt_full` | `1` *(exp)* | `1.3628` | 0.0500 | 0.1180 | [0.0699, 0.1736] | 2.36x | 0.7000 | Bounded (`ci_low_cons <= 0.10`) |
+| `smsdt_full` | `2` *(exp)* | `1.8874` | 0.0500 | 0.0899 | [0.0494, 0.1410] | 1.80x | 0.6500 | Bounded |
+| **`smsdt_full`** | **`3` *(conf)*** | `1.1027` | 0.0500 | **0.1573** | **[0.1046, 0.2180]** | **3.15x** | 0.6912 | **H4 FAILURE** |
 
-### 10.2 Full 3-Seed H4 Summary Across Both Target Datasets & Budgets (`fpr_control_h4.csv`, $48$ Rows)
+### 10.2 Full H4a Summary & Paired H4b Comparisons (`fpr_control_h4.csv` & `fpr_control_h4b.csv`)
 
-| Target Dataset (Role) | Model | Budget ($\alpha$) | Mean FPR | Min–Max FPR Across Seeds | Mean FPR / $\alpha$ | Mean TPR | H4 Failures (of 3 Seeds) |
+#### H4a (`source_quantile` across `52` rows, `--source ffppval`)
+
+| Target Dataset (`role`) | Model | Budget ($\alpha$) | Mean FPR | Min–Max FPR Across Seeds | Mean FPR / $\alpha$ | Mean TPR | H4 Failures |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Celeb-DF-v2** (`confirmatory`) | `gend_ours` | 0.05 | `0.0599` | `0.0562 – 0.0618` | `1.20x` | `0.5510` | `0 / 3` |
-| **Celeb-DF-v2** (`confirmatory`) | `smsdt_s` | 0.05 | `0.0880` | `0.0674 – 0.1067` | `1.76x` | `0.6951` | `0 / 3` |
-| **Celeb-DF-v2** (`confirmatory`) | `smsdt_st` | 0.05 | `0.1367` | `0.1180 – 0.1517` | `2.73x` | `0.6843` | **`3 / 3`** |
-| **Celeb-DF-v2** (`confirmatory`) | `smsdt_full` | 0.05 | **`0.2004`** | `0.1685 – 0.2247` | **`4.01x`** | `0.8000` | **`3 / 3`** |
-| **Celeb-DF-v2** (`confirmatory`) | `gend_ours` | 0.10 | `0.1292` | `0.1180 – 0.1461` | `1.29x` | `0.6157` | `0 / 3` |
-| **Celeb-DF-v2** (`confirmatory`) | `smsdt_s` | 0.10 | `0.1629` | `0.1180 – 0.1966` | `1.63x` | `0.7814` | `0 / 3` |
-| **Celeb-DF-v2** (`confirmatory`) | `smsdt_st` | 0.10 | `0.1966` | `0.1798 – 0.2135` | `1.97x` | `0.7824` | `0 / 3` |
-| **Celeb-DF-v2** (`confirmatory`) | `smsdt_full` | 0.10 | **`0.2416`** | `0.2191 – 0.2528` | **`2.42x`** | `0.8441` | **`3 / 3`** |
-| **DFD** (`dev_overlap`) | `gend_ours` | 0.05 | `0.0383` | `0.0366 – 0.0418` | `0.77x` | `0.6732` | `0 / 3` |
-| **DFD** (`dev_overlap`) | `smsdt_s` | 0.05 | `0.0949` | `0.0809 – 0.1097` | `1.90x` | `0.7478` | `0 / 3` |
-| **DFD** (`dev_overlap`) | `smsdt_st` | 0.05 | `0.1488` | `0.1018 – 0.1906` | `2.98x` | `0.7432` | **`2 / 3`** |
-| **DFD** (`dev_overlap`) | `smsdt_full` | 0.05 | **`0.1601`** | `0.1149 – 0.2037` | **`3.20x`** | `0.7449` | **`2 / 3`** |
-| **DFD** (`dev_overlap`) | `gend_ours` | 0.10 | `0.0923` | `0.0836 – 0.1070` | `0.92x` | `0.7276` | `0 / 3` |
-| **DFD** (`dev_overlap`) | `smsdt_s` | 0.10 | `0.1706` | `0.1619 – 0.1854` | `1.71x` | `0.7986` | `0 / 3` |
-| **DFD** (`dev_overlap`) | `smsdt_st` | 0.10 | `0.2141` | `0.1697 – 0.2480` | `2.14x` | `0.7998` | `0 / 3` |
-| **DFD** (`dev_overlap`) | `smsdt_full` | 0.10 | **`0.2193`** | `0.1697 – 0.2663` | **`2.19x`** | `0.7880` | **`1 / 3`** |
+| **Celeb-DF-v2** (`confirmatory`) | `gend_official` | 0.05 | **`0.1573`** | `0.1573` | **`3.15x`** | `0.8647` | **`1 / 1`** |
+| **Celeb-DF-v2** (`confirmatory`) | `gend_ours` | 0.05 | `0.0169` | `0.0169 – 0.0169` | `0.34x` | `0.4039` | `0 / 3` |
+| **Celeb-DF-v2** (`confirmatory`) | `smsdt_s` | 0.05 | `0.0581` | `0.0506 – 0.0674` | `1.16x` | `0.5716` | `0 / 3` |
+| **Celeb-DF-v2** (`confirmatory`) | `smsdt_st` | 0.05 | `0.0843` | `0.0787 – 0.0955` | `1.69x` | `0.5559` | `0 / 3` |
+| **Celeb-DF-v2** (`confirmatory`) | `smsdt_full` | 0.05 | **`0.1217`** | `0.0899 – 0.1573` | **`2.43x`** | `0.6804` | **`1 / 3`** *(conf seed3)* |
+| **Celeb-DF-v2** (`confirmatory`) | `gend_official` | 0.10 | **`0.3146`** | `0.3146` | **`3.15x`** | `0.9382` | **`1 / 1`** |
+| **Celeb-DF-v2** (`confirmatory`) | `gend_ours` | 0.10 | `0.0393` | `0.0393 – 0.0393` | `0.39x` | `0.4667` | `0 / 3` |
+| **Celeb-DF-v2** (`confirmatory`) | `smsdt_s` | 0.10 | `0.0805` | `0.0618 – 0.1067` | `0.81x` | `0.6549` | `0 / 3` |
+| **Celeb-DF-v2** (`confirmatory`) | `smsdt_st` | 0.10 | `0.1311` | `0.1067 – 0.1461` | `1.31x` | `0.6627` | `0 / 3` |
+| **Celeb-DF-v2** (`confirmatory`) | `smsdt_full` | 0.10 | `0.1479` | `0.1348 – 0.1685` | `1.48x` | `0.7480` | `0 / 3` |
+| **DFD** (`dev_overlap`) | `gend_official` | 0.05 | **`0.1358`** | `0.1358` | **`2.72x`** | `0.7976` | **`1 / 1`** |
+| **DFD** (`dev_overlap`) | `gend_ours` | 0.05 | `0.0122` | `0.0104 – 0.0131` | `0.24x` | `0.5698` | `0 / 3` |
+| **DFD** (`dev_overlap`) | `smsdt_s` | 0.05 | `0.0409` | `0.0313 – 0.0496` | `0.82x` | `0.6807` | `0 / 3` |
+| **DFD** (`dev_overlap`) | `smsdt_st` | 0.05 | `0.0696` | `0.0627 – 0.0731` | `1.39x` | `0.6723` | `0 / 3` |
+| **DFD** (`dev_overlap`) | `smsdt_full` | 0.05 | `0.0940` | `0.0470 – 0.1253` | `1.88x` | `0.6601` | `0 / 3` |
+| **DFD** (`dev_overlap`) | `gend_official` | 0.10 | `0.2037` | `0.2037` | `2.04x` | `0.8468` | `0 / 1` |
+| **DFD** (`dev_overlap`) | `gend_ours` | 0.10 | `0.0313` | `0.0313 – 0.0313` | `0.31x` | `0.6240` | `0 / 3` |
+| **DFD** (`dev_overlap`) | `smsdt_s` | 0.10 | `0.0714` | `0.0548 – 0.0836` | `0.71x` | `0.7244` | `0 / 3` |
+| **DFD** (`dev_overlap`) | `smsdt_st` | 0.10 | `0.1288` | `0.1044 – 0.1593` | `1.29x` | `0.7341` | `0 / 3` |
+| **DFD** (`dev_overlap`) | `smsdt_full` | 0.10 | `0.1262` | `0.0966 – 0.1514` | `1.26x` | `0.7071` | `0 / 3` |
 
-**Total H4 Failures:** **`14 / 48`** `source_quantile` evaluations (`9 / 24` on Celeb-DF confirmatory, `5 / 24` on DFD; `14 / 14` failures come exclusively from `smsdt_full` [`9`] and `smsdt_st` [`5`], `0 / 24` from single-frame `gend_ours` and `smsdt_s`).
+**Total H4 Failures:** **`4 / 52`** rows (`smsdt_full` `seed3` on Celeb-DF at $\alpha=0.05$, plus `gend_official` on Celeb-DF $\alpha=0.05$, Celeb-DF $\alpha=0.10$, and DFD $\alpha=0.05$). Switching from the legacy FF++ test anchor (`ffpp`) to the registered dev split (`ffppval`) plus conservative cluster bounds lowers `smsdt_full` mean Celeb-DF FPR (`20.0% -> 12.2%`) and `smsdt_st` (`13.7% -> 8.4%`), leaving **`0 / 12` failures on `smsdt_st`**.
 
-### 10.3 Complete H5 Policy Comparison (`fpr_control.csv` & `fpr_control_verdicts.json`)
+#### Paired H4b Differences (`fpr_control_h4b.csv`, Celeb-DF-v2, $N=178$ reals)
 
-Aggregate verdicts stored in [`results/tables/fpr_control_verdicts.json`](file:///e:/DEEPFAKE/results/tables/fpr_control_verdicts.json) (evaluated on confirmatory Celeb-DF-v2 across all 12 runs):
-- `target_gmm@alpha=0.05`: **`falsified`** (`err_policy = 0.0701`, vs `err_source = 0.0739`, `degenerate_rate = 0.0`)
-- `target_gmm@alpha=0.10`: **`falsified`** (`err_policy = 0.0835`, vs `err_source = 0.0852`, `degenerate_rate = 0.0`)
-- `target_gmm_anchored@alpha=0.05`: **`falsified`** (`err_policy = 0.0702`, vs `err_source = 0.0739`, `degenerate_rate = 0.0`)
-- `target_gmm_anchored@alpha=0.10`: **`falsified`** (`err_policy = 0.0834`, vs `err_source = 0.0852`, `degenerate_rate = 0.0`)
+| Contrast | Seed | Budget ($\alpha$) | $\text{FPR}_A$ | $\text{FPR}_B$ | Paired $\Delta\text{FPR}$ ($A-B$) | 95% Cluster CI | Excludes 0? |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| `smsdt_st` $-$ `smsdt_s` | `1` *(exp)* | 0.05 | 0.0955 | 0.0506 | **+0.0449** | [+0.0055, +0.0905] | Yes |
+| `smsdt_st` $-$ `smsdt_s` | `2` *(exp)* | 0.05 | 0.0787 | 0.0562 | +0.0225 | [-0.0126, +0.0612] | No |
+| `smsdt_st` $-$ `smsdt_s` | `3` *(conf)* | 0.05 | 0.0787 | 0.0674 | +0.0112 | [-0.0225, +0.0462] | No |
+| `smsdt_st` $-$ `smsdt_s` | `1` *(exp)* | 0.10 | 0.1461 | 0.0618 | **+0.0843** | [+0.0402, +0.1340] | Yes |
+| `smsdt_st` $-$ `smsdt_s` | `2` *(exp)* | 0.10 | 0.1067 | 0.1067 | 0.0000 | [-0.0444, +0.0424] | No |
+| `smsdt_st` $-$ `smsdt_s` | `3` *(conf)* | 0.10 | 0.1404 | 0.0730 | **+0.0674** | [+0.0275, +0.1098] | Yes |
+| `smsdt_full` $-$ `smsdt_s` | `1` *(exp)* | 0.05 | 0.1180 | 0.0506 | **+0.0674** | [+0.0262, +0.1149] | Yes |
+| `smsdt_full` $-$ `smsdt_s` | `2` *(exp)* | 0.05 | 0.0899 | 0.0562 | +0.0337 | [-0.0061, +0.0765] | No |
+| `smsdt_full` $-$ `smsdt_s` | `3` *(conf)* | 0.05 | 0.1573 | 0.0674 | **+0.0899** | [+0.0447, +0.1377] | Yes |
+| `smsdt_full` $-$ `smsdt_s` | `1` *(exp)* | 0.10 | 0.1348 | 0.0618 | **+0.0730** | [+0.0316, +0.1212] | Yes |
+| `smsdt_full` $-$ `smsdt_s` | `2` *(exp)* | 0.10 | 0.1404 | 0.1067 | +0.0337 | [-0.0160, +0.0808] | No |
+| `smsdt_full` $-$ `smsdt_s` | `3` *(conf)* | 0.10 | 0.1685 | 0.0730 | **+0.0955** | [+0.0484, +0.1453] | Yes |
 
-3-Seed Policy Means at $\alpha = 0.05$ across `source_quantile`, `target_gmm` (`target_gmm_anchored` matches `target_gmm` within `0.0001`), and label-aware `oracle`:
+### 10.3 Complete H5 Policy Comparison & Degenerate GMM Audit (`fpr_control.csv`, `fpr_control_prior_stress.csv`, `fpr_control_verdicts.json`)
 
-| Dataset | Model | `source_quantile` FPR / Error / TPR | `target_gmm` FPR / Error / TPR (95% CI High) | `oracle` FPR / Error / TPR |
+Aggregate H5 verdicts stored in [`results/tables/fpr_control_verdicts.json`](file:///e:/DEEPFAKE/results/tables/fpr_control_verdicts.json) (evaluated on Celeb-DF-v2 confirmatory across all 13 runs):
+- `target_gmm@alpha=0.05`: **`falsified (degenerate fits)`** (`err_policy = 0.0680` vs `err_source = 0.0449`, `degenerate_rate = 1.0` in worst prior-stress cell)
+- `target_gmm@alpha=0.10`: **`falsified`** (`err_policy = 0.0826` vs `err_source = 0.0576`, `degenerate_rate = 0.0`)
+- `target_gmm_anchored@alpha=0.05`: **`falsified (degenerate fits)`** (`err_policy = 0.0672` vs `err_source = 0.0449`, `degenerate_rate = 1.0`)
+- `target_gmm_anchored@alpha=0.10`: **`falsified`** (`err_policy = 0.0816` vs `err_source = 0.0576`, `degenerate_rate = 0.0`)
+
+Policy means at $\alpha = 0.05$ (`3` seeds per trained model, `1` run for `gend_official`):
+
+| Dataset | Model | `source_quantile` FPR / Error / TPR | `target_gmm` FPR / Error / TPR *(degenerate frac)* | `oracle` FPR / Error / TPR |
 | :--- | :--- | :---: | :---: | :---: |
-| **Celeb-DF-v2** | `gend_ours` | `0.0599` / `0.0099` / `0.5510` | `0.1573` / `0.1073` / `0.6627` (`0.1762`) | `0.0449` / `0.0051` / `0.5225` |
-| **Celeb-DF-v2** | `smsdt_s` | `0.0880` / `0.0380` / `0.6951` | `0.0412` / `0.0096` / `0.5029` (`0.0499`) | `0.0449` / `0.0051` / `0.5059` |
-| **Celeb-DF-v2** | `smsdt_st` | `0.1367` / `0.0867` / `0.6843` | `0.1086` / `0.0732` / `0.5980` (`0.2257`) | `0.0449` / `0.0051` / `0.4814` |
-| **Celeb-DF-v2** | `smsdt_full` | `0.2004` / `0.1504` / `0.8000` | **`0.0000`** / `0.0500` / **`0.1539`** (`0.0000`) | `0.0449` / `0.0051` / `0.5373` |
-| **DFD** | `gend_ours` | `0.0383` / `0.0117` / `0.6732` | `0.0313` / `0.0187` / `0.6269` (`0.0492`) | `0.0496` / `0.0004` / `0.6930` |
-| **DFD** | `smsdt_s` | `0.0949` / `0.0449` / `0.7478` | **`0.0017`** / `0.0483` / **`0.4046`** (`0.0057`) | `0.0496` / `0.0004` / `0.6964` |
-| **DFD** | `smsdt_st` | `0.1488` / `0.0988` / `0.7432` | **`0.0000`** / `0.0500` / **`0.0013`** (`0.0000`) | `0.0496` / `0.0004` / `0.6495` |
-| **DFD** | `smsdt_full` | `0.1601` / `0.1101` / `0.7449` | **`0.0000`** / `0.0500` / **`0.0000`** (`0.0000`) | `0.0496` / `0.0004` / `0.5764` |
+| **Celeb-DF-v2** | `gend_official` *(1)* | `0.1573` / `0.1073` / `0.8647` | `0.0225` / `0.0275` / `0.6294` *(0.0)* | `0.0449` / `0.0051` / `0.7265` |
+| **Celeb-DF-v2** | `gend_ours` | `0.0169` / `0.0331` / `0.4039` | `0.1573` / `0.1073` / `0.6627` *(0.0)* | `0.0449` / `0.0051` / `0.5225` |
+| **Celeb-DF-v2** | `smsdt_s` | `0.0581` / `0.0081` / `0.5716` | `0.0412` / `0.0096` / `0.5029` *(0.0)* | `0.0449` / `0.0051` / `0.5059` |
+| **Celeb-DF-v2** | `smsdt_st` | `0.0843` / `0.0343` / `0.5559` | `0.1086` / `0.0732` / `0.5980` *(0.0)* | `0.0449` / `0.0051` / `0.4814` |
+| **Celeb-DF-v2** | `smsdt_full` | `0.1217` / `0.0717` / `0.6804` | **`0.0000`** / `0.0500` / **`0.1539`** *(0.0)* | `0.0449` / `0.0051` / `0.5373` |
+| **DFD** | `gend_official` *(1)* | `0.1358` / `0.0858` / `0.7976` | `0.0078` / `0.0422` / `0.5522` *(0.0)* | `0.0496` / `0.0004` / `0.6943` |
+| **DFD** | `gend_ours` | `0.0122` / `0.0378` / `0.5698` | `0.0313` / `0.0187` / `0.6269` *(0.0)* | `0.0496` / `0.0004` / `0.6930` |
+| **DFD** | `smsdt_s` | `0.0409` / `0.0091` / `0.6807` | `0.0017` / `0.0483` / `0.4046` *(0.0)* | `0.0496` / `0.0004` / `0.6964` |
+| **DFD** | `smsdt_st` | `0.0696` / `0.0196` / `0.6723` | **`0.0000`** / `0.0500` / **`0.0013`** **`(0.67, deg=True)`** | `0.0496` / `0.0004` / `0.6495` |
+| **DFD** | `smsdt_full` | `0.0940` / `0.0460` / `0.6601` | **`0.0000`** / `0.0500` / **`0.0000`** **`(1.00, deg=True)`** | `0.0496` / `0.0004` / `0.5764` |
 
-*(At $\alpha = 0.10$, the same pattern holds: on Celeb-DF, `target_gmm` yields `0.2041` FPR [`0.2341` CI high] on `gend_ours` while collapsing `smsdt_full` recall to `0.3353`; on DFD it collapses recall to `0.3812–0.5189` on S/ST/Full.)*
+**Why GMM Collapses (`outside_support` Degeneracy):** Under PR #11's fixed degeneracy check, [`tools/fpr_control.py`](file:///e:/DEEPFAKE/tools/fpr_control.py) explicitly flags `degenerate = True` whenever the fitted GMM quantile threshold lies outside the target logit support (`threshold > max(logit)` or `< min(logit)`). All **`10`** `TPR = 0.0000 / FPR = 0.0000` rows in `fpr_control.csv` (`smsdt_full` seeds 1–3 and `smsdt_st` seeds 2–3 under both `target_gmm` and `target_gmm_anchored` on DFD at $\alpha=0.05$) are now flagged **`degenerate = True`**: on fake-heavy targets ($\approx 87\%$ fake on DFD), the estimated "real" Gaussian component absorbs wide scores and pushes its upper quantile beyond every logit in the dataset (`0` samples classified positive). On `target_gmm_anchored`, Celeb-DF `gend_official` shifts slightly (`0.0337` FPR / `0.6529` TPR at $\alpha=0.05$), while S-MSDT / `gend_ours` match `target_gmm` within `0.001` on the full datasets.
 
-### 10.4 Prior-Stress Sensitivity (`fpr_control_prior_stress.csv`, $576$ Rows across $\pi_{\text{fake}} \in \{0.50, 0.66, 0.91\}$)
+#### Prior-Stress Sensitivity (`fpr_control_prior_stress.csv`, `624` Rows across $\pi_{\text{fake}} \in \{0.50, 0.66, 0.91\}$ at $\alpha = 0.05$)
 
-Mean $|\text{FPR} - \alpha|$ and Mean TPR across 3 seeds under target fake-fraction stress at $\alpha = 0.05$:
-
-| Dataset | Model | Policy | $\pi_{\text{fake}} = 0.50$ (`err / tpr`) | $\pi_{\text{fake}} = 0.66$ (`err / tpr`) | $\pi_{\text{fake}} = 0.91$ (`err / tpr`) |
+| Dataset | Model | Policy | $\pi_{\text{fake}} = 0.50$ (`err / tpr / deg`) | $\pi_{\text{fake}} = 0.66$ (`err / tpr / deg`) | $\pi_{\text{fake}} = 0.91$ (`err / tpr / deg`) |
 | :--- | :--- | :--- | :---: | :---: | :---: |
-| **Celeb-DF-v2** | `gend_ours` | `source_quantile` | `0.0099 / 0.5528` | `0.0098 / 0.5510` | `0.0318 / 0.5510` |
-| **Celeb-DF-v2** | `gend_ours` | `target_gmm` | `0.1179 / 0.6718` | `0.1069 / 0.6627` | `0.0939 / 0.6379` |
-| **Celeb-DF-v2** | `smsdt_s` | `source_quantile` | `0.0380 / 0.6941` | `0.0377 / 0.6951` | `0.0455 / 0.6951` |
-| **Celeb-DF-v2** | `smsdt_s` | `target_gmm` | `0.0208 / 0.6018` | `0.0117 / 0.5002` | `0.0448 / 0.2439` |
-| **Celeb-DF-v2** | `smsdt_st` | `source_quantile` | `0.0867 / 0.6801` | `0.0864 / 0.6843` | `0.0895 / 0.6843` |
-| **Celeb-DF-v2** | `smsdt_st` | `target_gmm` | `0.1758 / 0.7684` | `0.0738 / 0.5959` | `0.0415 / 0.3007` |
-| **Celeb-DF-v2** | `smsdt_full` | `source_quantile` | `0.1504 / 0.7965` | `0.1498 / 0.8000` | `0.1516 / 0.8000` |
-| **Celeb-DF-v2** | `smsdt_full` | `target_gmm` | `0.0543 / 0.3033` | `0.0500 / 0.1497` | **`0.0500 / 0.0008`** |
-| **DFD** | `smsdt_s` | `source_quantile` | `0.0449 / 0.7508` | `0.0449 / 0.7477` | `0.0471 / 0.7478` |
-| **DFD** | `smsdt_s` | `target_gmm` | `0.0258 / 0.6373` | `0.0377 / 0.5651` | `0.0492 / 0.3682` |
-| **DFD** | `smsdt_st` | `source_quantile` | `0.0988 / 0.7461` | `0.0988 / 0.7433` | `0.1019 / 0.7432` |
-| **DFD** | `smsdt_st` | `target_gmm` | `0.1547 / 0.6858` | `0.0444 / 0.3807` | **`0.0500 / 0.0000`** |
-| **DFD** | `smsdt_full` | `source_quantile` | `0.1101 / 0.7482` | `0.1101 / 0.7441` | `0.1126 / 0.7449` |
-| **DFD** | `smsdt_full` | `target_gmm` | `0.1061 / 0.4952` | `0.0458 / 0.3009` | **`0.0500 / 0.0000`** |
+| **Celeb-DF-v2** | `gend_official` | `source_quantile` | `0.1073 / 0.8613 / 0.00` | `0.1071 / 0.8647 / 0.00` | `0.1101 / 0.8647 / 0.00` |
+| **Celeb-DF-v2** | `gend_official` | `target_gmm` | `0.0518 / 0.7843 / 0.00` | `0.0255 / 0.6214 / 0.00` | `0.0497 / 0.1678 / 0.00` |
+| **Celeb-DF-v2** | `gend_ours` | `source_quantile` | `0.0331 / 0.4024 / 0.00` | `0.0332 / 0.4039 / 0.00` | `0.0355 / 0.4039 / 0.00` |
+| **Celeb-DF-v2** | `gend_ours` | `target_gmm` | `0.1179 / 0.6718 / 0.00` | `0.1069 / 0.6627 / 0.00` | `0.0939 / 0.6379 / 0.00` |
+| **Celeb-DF-v2** | `smsdt_s` | `source_quantile` | `0.0081 / 0.5696 / 0.00` | `0.0083 / 0.5716 / 0.00` | `0.0260 / 0.5716 / 0.00` |
+| **Celeb-DF-v2** | `smsdt_s` | `target_gmm` | `0.0208 / 0.6018 / 0.00` | `0.0117 / 0.5002 / 0.00` | `0.0448 / 0.2439 / 0.00` |
+| **Celeb-DF-v2** | `smsdt_st` | `source_quantile` | `0.0343 / 0.5525 / 0.00` | `0.0341 / 0.5559 / 0.00` | `0.0419 / 0.5559 / 0.00` |
+| **Celeb-DF-v2** | `smsdt_st` | `target_gmm` | `0.1758 / 0.7684 / 0.00` | `0.0738 / 0.5959 / 0.00` | `0.0415 / 0.3007 / 0.00` |
+| **Celeb-DF-v2** | `smsdt_full` | `source_quantile` | `0.0717 / 0.6783 / 0.00` | `0.0715 / 0.6804 / 0.00` | `0.0775 / 0.6804 / 0.00` |
+| **Celeb-DF-v2** | `smsdt_full` | `target_gmm` | `0.0543 / 0.3033 / 0.00` | `0.0500 / 0.1497 / 0.00` | **`0.0500 / 0.0008 / 0.94`** |
+| **DFD** | `smsdt_s` | `source_quantile` | `0.0091 / 0.6831 / 0.00` | `0.0091 / 0.6810 / 0.00` | `0.0108 / 0.6807 / 0.00` |
+| **DFD** | `smsdt_s` | `target_gmm` | `0.0258 / 0.6373 / 0.00` | `0.0377 / 0.5651 / 0.00` | `0.0492 / 0.3682 / 0.00` |
+| **DFD** | `smsdt_st` | `source_quantile` | `0.0196 / 0.6759 / 0.00` | `0.0196 / 0.6726 / 0.00` | `0.0214 / 0.6723 / 0.00` |
+| **DFD** | `smsdt_st` | `target_gmm` | `0.1547 / 0.6858 / 0.00` | `0.0444 / 0.3807 / 0.003` | **`0.0500 / 0.0000 / 1.00`** |
+| **DFD** | `smsdt_full` | `source_quantile` | `0.0460 / 0.6635 / 0.00` | `0.0460 / 0.6604 / 0.00` | `0.0483 / 0.6601 / 0.00` |
+| **DFD** | `smsdt_full` | `target_gmm` | `0.1061 / 0.4952 / 0.00` | `0.0458 / 0.3009 / 0.00` | **`0.0500 / 0.0000 / 1.00`** |
 
-*(Anchored `target_gmm_anchored` tracks `target_gmm` within `<= 0.004` on Celeb-DF and exhibits the exact same `0.0000` recall collapse at $\pi_{\text{fake}}=0.91$ on DFD. At $\alpha=0.10$, `smsdt_full` `target_gmm` recall similarly drops from `0.4360` at $\pi=0.50$ to `0.2656` at $\pi=0.91$ on Celeb-DF, and from `0.5898` to `0.3686` on DFD.)*
+*(At $\alpha=0.05$ under extreme skew $\pi_{\text{fake}}=0.91$, `smsdt_full` degenerates in `93.7%` of Celeb-DF draws and `100%` of DFD draws, while `smsdt_st` degenerates in `100%` of DFD draws; `target_gmm_anchored` exhibits identical degenerate rates at $\pi_{\text{fake}}=0.91$.)*
 
 #### Pre-Registered Verdicts for H4 & H5:
-1. **Hypothesis H4 (FPR Inflation Under Shift) — CONFIRMED:**
-   When a deployer freezes a 5% false-alarm budget on source FF++ data, adding capacity (`smsdt_s` $103\text{K}$ $\rightarrow$ `smsdt_st` $8.5\text{M}$ $\rightarrow$ `smsdt_full` $9.1\text{M}$) systematically **blows through the FPR budget by `3.4x` to `4.5x`** on unseen Celeb-DF authentic faces (`16.9%–22.5%`). Across all 48 `source_quantile` evaluations, `14 / 48` breach the strict `ci_low > 2α` threshold—all `14` concentrated in `smsdt_full` (`9`) and `smsdt_st` (`5`), with `0` failures for single-frame `gend_ours` and `smsdt_s`.
-2. **Hypothesis H5 (Label-Free GMM Thresholding) — FALSIFIED:**
-   Both `target_gmm` and `target_gmm_anchored` are formally **falsified** at both $\alpha = 0.05$ and $\alpha = 0.10$ (`err_policy = 0.0701–0.0835`, virtually indistinguishable from `err_source = 0.0739–0.0852`). Under fake-heavy prior skew ($\pi_{\text{fake}} \in \{0.66, 0.91\}$), 2-component GMM EM absorbs the wide synthetic score distribution into a conservative cutoff that drives `smsdt_full` TPR to `0.1539` (Celeb-DF) and `0.0000` (DFD) at $\alpha=0.05$, while simultaneously over-predicting FPR on `gend_ours` (`0.1573`, `3.15x`) and `smsdt_st` (`0.1086`, upper CI `0.2257`).
+1. **Hypothesis H4 (FPR Inflation Under Shift):**
+   - **H4a:** **`undetermined (fewer than 3 confirmatory seeds)`** (`fpr_control_verdicts.json`). Under dev-split `ffppval` source thresholds and cluster-conservative bounds, `smsdt_full` passes `h4_failure` (`fpr_ci_low_cons > 0.10`) on the lone confirmatory seed (`seed3`: `0.1573`, cons CI `[0.1046, 0.2180]`), whereas exploratory `seed1` (`0.1180 [0.0699, 0.1736]`) and `seed2` (`0.0899 [0.0494, 0.1410]`) have lower bounds below `0.10`, and `smsdt_st` passes on `0/3` seeds (`0.0787–0.0955`, cons lower bounds `0.0410–0.0517`). *(Per `docs/research_v2_corrections.md`, even on raw point estimates using `ffpp` test thresholds, Wilson lower bounds cleared `0.10` across seeds 1–3 for `smsdt_full` and only seed 3 for `smsdt_st`. With dev calibration, **H4a is supported for `smsdt_full` on confirmatory seed 3 — awaiting confirmatory seeds 4–5 — and not established for `smsdt_st`**.)*
+   - **H4b & General Finding:** Paired **`Full - S`** increases Celeb-DF FPR on all 3 seeds (`+0.0674`, `+0.0337`, `+0.0899` at $\alpha=0.05$), with CIs excluding `0` on seeds 1 and 3, while `ST - S` crosses `0` on seeds 2 and 3. Critically, `gend_official` **also** inflates Celeb-DF FPR **`3.15x`** (`0.1573`, cons CI `[0.1050, 0.2180]`) under the exact same dev `ffppval` protocol — showing that **cross-domain FPR inflation under frozen source thresholds is a general failure mode across detectors (amplified in `smsdt_full` over `smsdt_s`)**, rather than a flaw confined to S-MSDT alone.
+2. **Hypothesis H5 (Label-Free GMM Thresholding) — `falsified (degenerate fits)`:**
+   Both `target_gmm` and `target_gmm_anchored` are formally **falsified** at $\alpha = 0.05$ (`err_policy = 0.0680 / 0.0672` vs `err_source = 0.0449`, with `93.7%–100%` degenerate threshold-outside-support collapse at high fake prevalence $\pi_{\text{fake}} = 0.91$ and `10/10` degenerate DFD main-table fits) and at $\alpha = 0.10$ (`err_policy = 0.0826 / 0.0816` vs `err_source = 0.0576`).
+
+### 10.4 Eval-Time Readout Ablation on `smsdt_full` (`results/scores_ablation/`, `results/tables_ablation/`)
+
+To test whether log-sum-exp (LSE) patch pooling causes `smsdt_full`'s tail false-positive rate inflation over `smsdt_s`, all three seeds of `smsdt_full` were re-evaluated with `--readout-ablation {mean_patch,lse_only,att_only}` across `FF++val` (`840` pure FF++ videos) and `Celeb-DF-v2` (`518` videos) and audited via [`tools/fpr_control.py`](file:///e:/DEEPFAKE/tools/fpr_control.py) (`--source ffppval`, $\alpha = 0.05$):
+
+| Readout Mode | FF++ Val Pure (`840`) Mean AUC | Celeb-DF (`518`) Mean `score_mean` AUC [Seeds 1 / 2 / 3] | Celeb-DF $\alpha=0.05$ Mean FPR | Per-Seed Celeb-DF FPR [Cons 95% CI] | Mean Celeb-DF TPR |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **`learned` (baseline `smsdt_full`)** | `0.9561` | `0.8882` `[0.8914 / 0.8960 / 0.8772]` | **`12.17%`** | `11.80% [0.0699, 0.1736]` / `8.99% [0.0494, 0.1410]` / `15.73% [0.1046, 0.2180]` | `68.04%` |
+| **`mean_patch` (LSE disabled)** | `0.9559` | `0.8886` `[0.8918 / 0.8966 / 0.8775]` | **`11.99%`** | `11.80% [0.0699, 0.1736]` / `9.55% [0.0543, 0.1476]` / `14.61% [0.0944, 0.2054]` | `68.82%` |
+| **`lse_only` ($\beta=1.0$)** | `0.9563` | `0.8885` `[0.8929 / 0.8942 / 0.8785]` | **`12.17%`** | `9.55% [0.0555, 0.1476]` / `12.36% [0.0778, 0.1800]` / `14.61% [0.0966, 0.2054]` | `67.75%` |
+| **`att_only` ($\beta=0.0$)** | `0.9551` | `0.8845` `[0.8874 / 0.8921 / 0.8740]` | **`11.99%`** | `12.36% [0.0745, 0.1800]` / `8.99% [0.0494, 0.1410]` / `14.61% [0.0944, 0.2054]` | `68.04%` |
+
+*(Conclusion: Replacing learned LSE pooling with `mean_patch`, `lse_only`, or `att_only` at evaluation time leaves both Celeb-DF AUC [`0.8845–0.8886`] and mean Celeb-DF FPR at $\alpha=0.05$ [`11.99%–12.17%`] virtually unchanged. Thus **eval-time LSE pooling is not the mechanism behind `smsdt_full`'s cross-domain FPR inflation**, pointing instead to representation/capacity learned during training.)*
 
 ---
 
 ## 11. Complete Artifact Inventory & Study Status Checklist
 
 ### 11.1 Saved Result Artifacts (`feat/eval-and-benchmarks`)
-- **Per-Video Score CSVs ([`results/scores/`](file:///e:/DEEPFAKE/results/scores), `37` files):**
-  - `gend_ours_seed{1,2,3}_{ffpp,celebdf,dfd}.csv` (`9` files; `840 / 518 / 2,987` video rows + header)
-  - `smsdt_s_seed{1,2,3}_{ffpp,celebdf,dfd}.csv` (`9` files)
-  - `smsdt_st_seed{1,2,3}_{ffpp,celebdf,dfd}.csv` (`9` files)
-  - `smsdt_full_seed{1,2,3}_{ffpp,celebdf,dfd}.csv` (`9` files)
-  - [`results/scores/gend_official_seed0_celebdf.csv`](file:///e:/DEEPFAKE/results/scores/gend_official_seed0_celebdf.csv) (`1` external anchor file, `518` video rows)
-- **Aggregated Summary Tables & JSON ([`results/tables/`](file:///e:/DEEPFAKE/results/tables), `17` files):**
-  - [`experiment_matrix.{csv,md}`](file:///e:/DEEPFAKE/results/tables/experiment_matrix.csv), [`hypothesis_h1_stats.{csv,md}`](file:///e:/DEEPFAKE/results/tables/hypothesis_h1_stats.csv), [`threshold_transfer_audit.{csv,md}`](file:///e:/DEEPFAKE/results/tables/threshold_transfer_audit.csv), [`prior_shift_sweep.{csv,md}`](file:///e:/DEEPFAKE/results/tables/prior_shift_sweep.csv)
-  - [`tta_summary.{csv,md}`](file:///e:/DEEPFAKE/results/tables/tta_summary.csv), [`robustness_summary.{csv,md}`](file:///e:/DEEPFAKE/results/tables/robustness_summary.csv)
-  - [`fpr_control.{csv,md}`](file:///e:/DEEPFAKE/results/tables/fpr_control.csv), [`fpr_control_h4.csv`](file:///e:/DEEPFAKE/results/tables/fpr_control_h4.csv), [`fpr_control_prior_stress.csv`](file:///e:/DEEPFAKE/results/tables/fpr_control_prior_stress.csv), [`fpr_control_verdicts.json`](file:///e:/DEEPFAKE/results/tables/fpr_control_verdicts.json)
+- **Per-Video Score CSVs ([`results/scores/`](file:///e:/DEEPFAKE/results/scores), `52` files):**
+  - `gend_ours_seed{1,2,3}_{ffpp,ffppval,celebdf,dfd}.csv` (`12` files)
+  - `smsdt_s_seed{1,2,3}_{ffpp,ffppval,celebdf,dfd}.csv` (`12` files)
+  - `smsdt_st_seed{1,2,3}_{ffpp,ffppval,celebdf,dfd}.csv` (`12` files)
+  - `smsdt_full_seed{1,2,3}_{ffpp,ffppval,celebdf,dfd}.csv` (`12` files)
+  - `gend_official_seed0_{ffpp,ffppval,celebdf,dfd}.csv` (`4` external baseline files)
+- **Platt Calibration JSONs ([`results/calib/`](file:///e:/DEEPFAKE/results/calib), `13` files):**
+  - `gend_official_seed0.json` + `{gend_ours,smsdt_s,smsdt_st,smsdt_full}_seed{1,2,3}.json` (all fit on `ffppval`)
+- **Readout-Ablation Scores & Tables ([`results/scores_ablation/`](file:///e:/DEEPFAKE/results/scores_ablation), `18` CSVs; [`results/tables_ablation/`](file:///e:/DEEPFAKE/results/tables_ablation), `18` files):**
+  - `{mean_patch,lse_only,att_only}/smsdt_full_seed{1,2,3}_{ffppval,celebdf}.csv` and corresponding `fpr_control*` tables
+- **Aggregated Summary Tables & JSON ([`results/tables/`](file:///e:/DEEPFAKE/results/tables), `20` files):**
+  - [`hypothesis_h1_stats.{csv,md}`](file:///e:/DEEPFAKE/results/tables/hypothesis_h1_stats.csv), [`hypothesis_h1_meta.json`](file:///e:/DEEPFAKE/results/tables/hypothesis_h1_meta.json), [`threshold_transfer_audit.{csv,md}`](file:///e:/DEEPFAKE/results/tables/threshold_transfer_audit.csv), [`threshold_transfer_details.json`](file:///e:/DEEPFAKE/results/tables/threshold_transfer_details.json), [`prior_shift_sweep.{csv,md}`](file:///e:/DEEPFAKE/results/tables/prior_shift_sweep.csv)
+  - [`tta_summary.{csv,md}`](file:///e:/DEEPFAKE/results/tables/tta_summary.csv), [`robustness_summary.{csv,md}`](file:///e:/DEEPFAKE/results/tables/robustness_summary.csv), [`experiment_matrix.{csv,md}`](file:///e:/DEEPFAKE/results/tables/experiment_matrix.csv) *(legacy 12-run matrix)*
+  - [`fpr_control.{csv,md}`](file:///e:/DEEPFAKE/results/tables/fpr_control.csv), [`fpr_control_h4.csv`](file:///e:/DEEPFAKE/results/tables/fpr_control_h4.csv), [`fpr_control_h4b.csv`](file:///e:/DEEPFAKE/results/tables/fpr_control_h4b.csv), [`fpr_control_prior_stress.csv`](file:///e:/DEEPFAKE/results/tables/fpr_control_prior_stress.csv), [`fpr_control_verdicts.json`](file:///e:/DEEPFAKE/results/tables/fpr_control_verdicts.json)
 
 ### 11.2 Study Status Checklist
-- [x] Multi-seed model training (12 models across 3 seeds).
-- [x] 36 controlled benchmark score files + 1 official GenD anchor saved in `results/scores/` (`37` CSVs total).
-- [x] **Gate G1 Resolved:** Official GenD (`yermandy/GenD_CLIP_L_14`) evaluated on Celeb-DF v2 (`0.9327` AUC, `55.1%` FPR).
-- [x] **Hypothesis H1:** Paired cluster bootstrap analysis completed; framed honestly around recipe vs capacity.
-- [x] **Hypothesis H2:** Threshold transfer degradation audited ($g \le 0.0374 \ll 0.05$, formally falsified).
-- [x] **Hypothesis H3:** Prior shift sweep with Saerens EM correction audited.
-- [x] **Hypotheses H4 & H5:** Complete 12-run FPR control & 576-row prior-stress audit executed (**H4 confirmed** [`14 / 48` failures], **H5 falsified**).
-- [x] **Hypothesis H6:** Clip-consistency TTA evaluated (`Online` vs `Batch-Episodic`).
-- [x] **Robustness Benchmark:** Re-run with fixed uint8 RGB preprocessing pipeline.
-- [x] **Manuscript Alignment:** Overclaiming scrubbed from `paper/` and `research_v2.md`.
+- [x] Multi-seed model training (12 models across seeds 1–3; seeds 4–5 confirmatory training pending per [`docs/decisions.md`](file:///e:/DEEPFAKE/docs/decisions.md)).
+- [x] `52` benchmark score CSVs + `13` dev-split Platt calibration JSONs + `18` readout-ablation CSVs committed/generated.
+- [x] **Gate G1 Resolved:** Official GenD (`yermandy/GenD_CLIP_L_14`) evaluated across FF++ (`0.9452`), DFD (`0.9076`), and Celeb-DF v2 (`0.9327`, `15.73%` dev `source_quantile` FPR = `3.15x`).
+- [x] **Hypothesis H1:** Re-run with `10,000` resamples, Bonferroni ($m=2$), pure negatives -> **`undetermined (underpowered)`**; extra modules show no AUC gain.
+- [x] **Hypothesis H2:** Re-run with dev-split Platt calibration (`tau_cal`) -> **`undetermined`** (`smsdt_s` seed 1 $g=0.0984$).
+- [x] **Hypothesis H3a:** Re-run with calibrated posteriors -> **`falsified`** on HTER; exploratory Bayes-decision accuracy gains documented at extreme priors.
+- [x] **Hypotheses H4 & H5:** Re-run with `--source ffppval --confirmatory-seeds 3 4 5` & conservative cluster CIs -> **H4a `undetermined`** (`Full` supported on seed 3, `ST` not established; **H4b** positive on `Full - S`), **H5 `falsified (degenerate fits)`**.
+- [x] **Hypothesis H6:** **`falsified`** on `smsdt_full_seed1` Celeb-DF-v2 (`0.5409` online consistency collapse; `-0.0003` batch-episodic; legacy entropy pre-reset caveat documented).
+- [x] **Eval-Time Readout Ablation:** Tested `mean_patch`, `lse_only`, `att_only` across seeds 1–3; rules out eval-time LSE pooling as FPR inflation cause.
+- [x] **`research_v2.md` Overclaiming Scrubbed:** All items in [`docs/research_v2_corrections.md`](file:///e:/DEEPFAKE/docs/research_v2_corrections.md) applied.
+- [ ] **Final Confirmatory & Manuscript Alignment:** Author sign-off in [`docs/decisions.md`](file:///e:/DEEPFAKE/docs/decisions.md), confirmatory seeds `4–5` + second unseen dataset (DFDC / WildDeepfake / FakeAVCeleb), and corresponding alignment of `paper/`.
 
