@@ -21,35 +21,42 @@ from smsdt.data.video_dataset import VideoStore, contiguous_starts
 class PerturbedEvalDataset(Dataset):
     """Wrapper that applies a specific visual perturbation to evaluation frames."""
 
-    def __init__(self, base_ds, perturbation_fn=None):
+    def __init__(self, base_ds, perturbation_fn=None, norm_fn=None):
         self.base_ds = base_ds
         self.perturbation_fn = perturbation_fn
+        self.norm_fn = norm_fn
 
     def __len__(self):
         return len(self.base_ds)
 
     def __getitem__(self, idx):
-        item = self.base_ds[idx]
-        if self.perturbation_fn is None:
-            return item
+        item = copy.copy(self.base_ds[idx])
 
-        # frames is (K, T, 3, H, W)
+        # frames is (K, T, 3, H, W) in [0, 1]
         frames = item["frames"]
         K, T, C, H, W = frames.shape
 
-        # Apply perturbation in numpy space
-        perturbed_clips = []
-        for k in range(K):
-            clip = frames[k].permute(0, 2, 3, 1).cpu().numpy()  # (T, H, W, 3) in [0, 1]
-            perturbed_frames = []
-            for t in range(T):
-                img_u8 = np.clip(clip[t] * 255.0, 0, 255).astype(np.uint8)
-                p_img = self.perturbation_fn(img_u8)
-                perturbed_frames.append(p_img.astype(np.float32) / 255.0)
-            p_clip = torch.from_numpy(np.stack(perturbed_frames)).permute(0, 3, 1, 2)
-            perturbed_clips.append(p_clip)
+        if self.perturbation_fn is not None:
+            # Apply perturbation in uint8 RGB space, then normalize
+            perturbed_clips = []
+            for k in range(K):
+                clip = frames[k].permute(0, 2, 3, 1).cpu().numpy()  # (T, H, W, 3) in [0, 1]
+                perturbed_frames = []
+                for t in range(T):
+                    img_u8 = np.clip(clip[t] * 255.0, 0, 255).astype(np.uint8)
+                    p_img = self.perturbation_fn(img_u8)
+                    perturbed_frames.append(p_img.astype(np.float32) / 255.0)
+                p_clip = torch.from_numpy(np.stack(perturbed_frames)).permute(0, 3, 1, 2)
+                if self.norm_fn is not None:
+                    p_clip = self.norm_fn(p_clip)
+                perturbed_clips.append(p_clip)
+            item["frames"] = torch.stack(perturbed_clips)
+        else:
+            if self.norm_fn is not None:
+                item["frames"] = torch.stack([self.norm_fn(frames[k]) for k in range(K)])
+            else:
+                item["frames"] = frames
 
-        item["frames"] = torch.stack(perturbed_clips)
         return item
 
 
@@ -124,11 +131,12 @@ def main():
         actual_T = args.T
 
     from smsdt.data.video_dataset import EvalClipDataset
-    base_ds = EvalClipDataset(args.index, args.store, split=args.split, K=args.K, T=actual_T, normalize=norm_fn)
+    base_ds = EvalClipDataset(args.index, args.store, split=args.split, K=args.K, T=actual_T, normalize=None)
     print(f"Loaded {len(base_ds):,} evaluation videos (K={args.K}, T={actual_T}).")
 
     # Clean unperturbed baseline
-    loader = DataLoader(base_ds, batch_size=4, shuffle=False)
+    clean_ds = PerturbedEvalDataset(base_ds, perturbation_fn=None, norm_fn=norm_fn)
+    loader = DataLoader(clean_ds, batch_size=4, shuffle=False)
     clean_auc = evaluate_loader(model, loader, device)
     print(f"\nClean Baseline AUC: {clean_auc:.4f}")
 
@@ -146,7 +154,7 @@ def main():
         print(f"\n--- Testing {p_name} ---")
         for lvl in levels:
             p_fn = fn_builder(lvl)
-            p_ds = PerturbedEvalDataset(base_ds, p_fn)
+            p_ds = PerturbedEvalDataset(base_ds, perturbation_fn=p_fn, norm_fn=norm_fn)
             p_loader = DataLoader(p_ds, batch_size=4, shuffle=False)
             auc = evaluate_loader(model, p_loader, device)
             drop = clean_auc - auc
