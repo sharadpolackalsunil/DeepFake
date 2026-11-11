@@ -1,12 +1,12 @@
 {
   "h5": {
     "target_gmm@alpha=0.05": {
-      "verdict": "falsified",
+      "verdict": "falsified (degenerate fits)",
       "per_dataset": {
         "celebdf": {
-          "err_policy": 0.07011596061645632,
-          "err_source": 0.07392224215528909,
-          "degenerate_rate": 0.0
+          "err_policy": 0.06798002755121063,
+          "err_source": 0.044880433556309295,
+          "degenerate_rate": 1.0
         }
       }
     },
@@ -14,19 +14,19 @@
       "verdict": "falsified",
       "per_dataset": {
         "celebdf": {
-          "err_policy": 0.08350024286868304,
-          "err_source": 0.0851836921285368,
+          "err_policy": 0.082557044321618,
+          "err_source": 0.05757882769356662,
           "degenerate_rate": 0.0
         }
       }
     },
     "target_gmm_anchored@alpha=0.05": {
-      "verdict": "falsified",
+      "verdict": "falsified (degenerate fits)",
       "per_dataset": {
         "celebdf": {
-          "err_policy": 0.07018470504306591,
-          "err_source": 0.07392224215528909,
-          "degenerate_rate": 0.0
+          "err_policy": 0.06724586864996646,
+          "err_source": 0.044880433556309295,
+          "degenerate_rate": 1.0
         }
       }
     },
@@ -34,16 +34,49 @@
       "verdict": "falsified",
       "per_dataset": {
         "celebdf": {
-          "err_policy": 0.08337233762418823,
-          "err_source": 0.0851836921285368,
+          "err_policy": 0.08160333180809055,
+          "err_source": 0.05757882769356662,
           "degenerate_rate": 0.0
         }
       }
     }
   },
-  "notes": [
-    "gend_official_seed0/celebdf: no source file"
-  ],
-  "h4_failures": 14,
-  "h4_rows": 48
+  "notes": [],
+  "h4a": {
+    "models": {
+      "smsdt_st": {
+        "confirmatory": {
+          "3": false
+        },
+        "exploratory": {
+          "1": false,
+          "2": false
+        },
+        "n_confirmatory_seeds": 1,
+        "n_pass": 0,
+        "pass": null
+      },
+      "smsdt_full": {
+        "confirmatory": {
+          "3": true
+        },
+        "exploratory": {
+          "1": false,
+          "2": false
+        },
+        "n_confirmatory_seeds": 1,
+        "n_pass": 1,
+        "pass": null
+      }
+    },
+    "supported": "undetermined (fewer than 3 confirmatory seeds)",
+    "confirmatory_seeds": [
+      3,
+      4,
+      5
+    ]
+  },
+  "h4_failures": 4,
+  "h4_rows": 52,
+  "h4_failures_bootstrap_only": 4
 }
