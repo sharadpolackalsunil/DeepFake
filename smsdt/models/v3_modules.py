@@ -209,6 +209,13 @@ class EvidenceReadoutV3(nn.Module):
         # Learnable balance between LSE pooling logit and query attention logit
         self.mix = nn.Parameter(torch.zeros(()))
 
+        # Evaluation-time diagnostic switch (NOT a parameter, not saved):
+        #   learned    : trained behaviour (default)
+        #   mean_patch : replace LSE pooling by the mean over patches and frames (r -> 0 limit)
+        #   lse_only   : use only the LSE branch
+        #   att_only   : use only the cross-attention branch
+        self.readout_mode = "learned"
+
     @staticmethod
     def lse(x: torch.Tensor, r: torch.Tensor, dim: int) -> torch.Tensor:
         """Numerically stable Log-Sum-Exp pooling: (1/r) * (logsumexp(r * x) - log(n))."""
@@ -257,6 +264,14 @@ class EvidenceReadoutV3(nn.Module):
         logit_lse = self.lse(spatial_lse, r, dim=1)                # (B,)
 
         # 4. Learned dynamic blend between LSE pooling and attention readout
+        mode = getattr(self, "readout_mode", "learned")
+        if mode == "mean_patch":
+            logit_lse = patch_logits.mean(dim=(1, 2))
         w = torch.sigmoid(self.mix)
-        logit = w * logit_lse + (1.0 - w) * logit_att
+        if mode == "lse_only":
+            logit = logit_lse
+        elif mode == "att_only":
+            logit = logit_att
+        else:
+            logit = w * logit_lse + (1.0 - w) * logit_att
         return logit, patch_logits
