@@ -77,6 +77,9 @@ All three authors (**Sharad**, **Aditya Raj**, **Aditya Kumar**) confirm and fre
 | D7 | Gate G1 decided Branch B (M = 0.830, 2-seed mean of `gend_ours`, vs R = 0.946, GenD 5-seed mean, Table 4 of arXiv 2508.06248v3; M <= R - 0.05) but `gend_official` was not evaluated | Claims "vs GenD" have no valid anchor | `hf:` checkpoint path in `smsdt/eval_cross.py`; run it |
 | D8 | DFD reals and fakes are in the dev split used for calibration, so DFD is not an unseen dataset | DFD cannot be confirmatory for H1/H2 | Dataset roles: FF++ in-domain, DFD dev-overlap, Celeb-DF (+ new external sets) confirmatory |
 | D9 | `research_v2.md` states single-run results as "Key Scientific Finding" and "statistically proven" | Overclaims | Corrected in research_v2.md (audit note at top) |
+| D10 | `fpr_control` bootstrapped on the raw `cluster_id` column; a coarse column collapses the CI to a point (reported CIs such as [0.222, 0.229] at n=178 reals) | Over-confident H4 verdicts | Clusters now resolved as in `tools/stats.py`; Wilson bounds reported; H4 verdicts use the wider (`fpr_ci_low_cons`) |
+| D11 | H4 reported as "confirmed" counting seeds 1-2, which were seen before registration | Exploratory seeds counted as confirmatory | `h4a_verdict` counts only `--confirmatory-seeds` (default 3 4 5); fewer than 3 gives "undetermined" |
+| D12 | GMM thresholds outside the observed logit range (TPR = FPR = 0) were not flagged degenerate | H5 diagnostics hid collapse | `outside_support` now sets `degenerate` |
 
 ### 2026-11-10: Gate G1 decision
 Branch B. Until `gend_official` has been evaluated through this pipeline, no sentence may

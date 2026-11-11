@@ -33,11 +33,14 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import json
 import math
+import warnings
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
+
+from tools.calib_utils import wilson_interval
 
 POLICIES = ("source_quantile", "target_gmm", "target_gmm_anchored", "oracle")
 LABEL_FREE = ("target_gmm", "target_gmm_anchored")
@@ -136,8 +139,12 @@ def gmm_threshold(
     # Degenerate if a component collapsed, or the two components are not separated
     # (a unimodal fit gives no information about where the real class sits).
     sep = abs(float(means[1 - r]) - mu_r) / math.sqrt(0.5 * (float(variances[0]) + float(variances[1])))
-    degenerate = bool(min(weights) < min_weight or sep < min_separation)
+    # A threshold outside the observed logit range flags (or silences) every sample: the
+    # mixture has not located the real class (seen with fake-heavy targets).
+    outside = bool(thr > float(np.max(x)) or thr < float(np.min(x)))
+    degenerate = bool(min(weights) < min_weight or sep < min_separation or outside)
     info = {
+        "outside_support": outside,
         "real_mean": mu_r, "real_sd": sd_r, "real_weight": w_r,
         "fake_mean": float(means[1 - r]), "fake_sd": float(math.sqrt(variances[1 - r])),
         "estimated_fake_fraction": float(1.0 - w_r),
@@ -193,6 +200,24 @@ def rates_at(labels: np.ndarray, logits: np.ndarray, thr: float) -> Tuple[float,
 # Evaluation
 # ---------------------------------------------------------------------------
 
+MIN_REAL_CLUSTERS = 30
+
+
+def resolve_clusters(df: pd.DataFrame, cluster_col: Optional[str] = "cluster_id") -> np.ndarray:
+    """Fine-grained cluster ids for bootstrap (same rule as tools/stats.py).
+
+    A cluster_id column with <= 10 distinct values (for example a method or source label)
+    is NOT an identity grouping and would collapse the bootstrap, so identity is derived
+    from video_id instead. Falls back to one cluster per video.
+    """
+    from tools.stats import resolve_cluster_id
+    if "video_id" in df.columns and (cluster_col not in df.columns or df[cluster_col].nunique() <= 10):
+        return resolve_cluster_id(df).astype(str).values
+    if cluster_col and cluster_col in df.columns:
+        return df[cluster_col].astype(str).values
+    return np.arange(len(df)).astype(str)
+
+
 def evaluate_policies(
     target_df: pd.DataFrame,
     source_df: pd.DataFrame,
@@ -212,10 +237,13 @@ def evaluate_policies(
     u = target_df[logit_col].values.astype(np.float64)
     src_real = source_df.loc[source_df["label"] == 0, logit_col].values.astype(np.float64)
     anchor = source_anchor(source_df, logit_col)
-    if cluster_col and cluster_col in target_df.columns:
-        clusters = target_df[cluster_col].astype(str).values
-    else:
-        clusters = np.arange(len(target_df)).astype(str)
+    clusters = resolve_clusters(target_df, cluster_col)
+    n_real_clusters = int(len(np.unique(clusters[y == 0])))
+    if n_real_clusters < MIN_REAL_CLUSTERS:
+        warnings.warn(
+            f"Only {n_real_clusters} distinct clusters among target reals (< {MIN_REAL_CLUSTERS}); "
+            "cluster-bootstrap CIs will be too narrow. Check the cluster_id column. "
+            "Conservative (Wilson) bounds are reported alongside.")
     uniq = np.unique(clusters)
     idx_by = {c: np.where(clusters == c)[0] for c in uniq}
     rng = np.random.default_rng(random_seed)
@@ -264,6 +292,14 @@ def evaluate_policies(
                 "swapped": info.get("swapped", False),
                 "est_fake_fraction": info.get("estimated_fake_fraction", float("nan")),
             }
+            n_r = int((y == 0).sum())
+            w_lo, w_hi = wilson_interval(int(round(fpr * n_r)), n_r) if n_r else (float("nan"), float("nan"))
+            row["fpr_wilson_low"] = w_lo
+            row["fpr_wilson_high"] = w_hi
+            # Conservative bounds: the wider of cluster-bootstrap and unclustered Wilson.
+            row["fpr_ci_low_cons"] = min(row["fpr_ci_low"], w_lo)
+            row["fpr_ci_high_cons"] = max(row["fpr_ci_high"], w_hi)
+            row["n_real_clusters"] = n_real_clusters
             rows.append(row)
     return pd.DataFrame(rows)
 
@@ -354,6 +390,61 @@ def paired_fpr_delta(
 # Pre-registered verdicts
 # ---------------------------------------------------------------------------
 
+def h4a_verdict(h4_df: pd.DataFrame, confirmatory_seeds=(3, 4, 5), alpha: float = 0.05,
+                dataset: str = "celebdf", models=("smsdt_st", "smsdt_full"),
+                ci_col: str = "fpr_ci_low_cons") -> Dict:
+    """Pre-registered H4a: for BOTH models, lower CI of achieved FPR > 2*alpha in at least
+    2 of 3 CONFIRMATORY seeds. Seeds outside `confirmatory_seeds` are reported separately
+    as exploratory and never counted. Uses the conservative CI by default."""
+    out = {"models": {}, "supported": None, "confirmatory_seeds": list(confirmatory_seeds)}
+    d = h4_df[(h4_df["dataset"] == dataset) & (np.isclose(h4_df["alpha"], alpha))]
+    ok_all = []
+    for m in models:
+        g = d[d["model"] == m]
+        rec = {"confirmatory": {}, "exploratory": {}}
+        for _, r in g.iterrows():
+            sd = int(str(r["seed"]).replace("seed", ""))
+            key = "confirmatory" if sd in confirmatory_seeds else "exploratory"
+            rec[key][sd] = bool(r[ci_col] > 2 * alpha)
+        n_conf = len(rec["confirmatory"])
+        n_pass = sum(rec["confirmatory"].values())
+        rec["n_confirmatory_seeds"] = n_conf
+        rec["n_pass"] = n_pass
+        rec["pass"] = bool(n_conf >= 2 and n_pass >= 2) if n_conf >= 3 else None
+        out["models"][m] = rec
+        ok_all.append(rec["pass"])
+    if any(v is None for v in ok_all):
+        out["supported"] = "undetermined (fewer than 3 confirmatory seeds)"
+    else:
+        out["supported"] = "supported" if all(ok_all) else "not supported"
+    return out
+
+
+def h4b_table(runs: Dict, source_key: str = "ffpp", dataset: str = "celebdf",
+              alphas=(0.05, 0.10), pairs=(("smsdt_st", "smsdt_s"), ("smsdt_full", "smsdt_s")),
+              n_boot: int = 2000) -> pd.DataFrame:
+    """H4b: paired FPR difference (A - B) on the same target reals, each model at its own
+    source-quantile threshold. One row per (pair, seed, alpha)."""
+    rows = []
+    seeds = sorted({k[1] for k in runs})
+    for a_name, b_name in pairs:
+        for seed in seeds:
+            ta, tb = runs.get((a_name, seed, dataset)), runs.get((b_name, seed, dataset))
+            sa = runs.get((a_name, seed, source_key), runs.get((a_name, seed, "ffpp")))
+            sb = runs.get((b_name, seed, source_key), runs.get((b_name, seed, "ffpp")))
+            if any(x is None for x in (ta, tb, sa, sb)):
+                continue
+            for al in alphas:
+                thr_a = quantile_threshold(sa.loc[sa["label"] == 0, "logit_mean"].values, al)
+                thr_b = quantile_threshold(sb.loc[sb["label"] == 0, "logit_mean"].values, al)
+                ta2, tb2 = ta.copy(), tb.copy()
+                ta2["cluster_id"] = resolve_clusters(ta2)
+                res = paired_fpr_delta(ta2, thr_a, tb2, thr_b, n_boot=n_boot)
+                rows.append({"model_a": a_name, "model_b": b_name, "seed": seed, "dataset": dataset,
+                             "alpha": al, **res})
+    return pd.DataFrame(rows)
+
+
 def h4_failure(fpr_ci_low: float, alpha: float, factor: float = 2.0) -> bool:
     """H4 'FPR-transfer failure' on one dataset: the lower 95% CI bound of the achieved
     FPR under source_quantile exceeds factor * alpha."""
@@ -397,6 +488,9 @@ def main():
     ap.add_argument("--n-boot", type=int, default=1000)
     ap.add_argument("--n-repeats", type=int, default=100)
     ap.add_argument("--out-dir", default="results/tables")
+    ap.add_argument("--confirmatory-seeds", nargs="*", type=int, default=[3, 4, 5],
+                    help="Seeds that count toward the H4a verdict (seeds looked at before H4 was "
+                         "registered are exploratory).")
     args = ap.parse_args()
 
     runs = {}
@@ -450,7 +544,8 @@ def main():
 
     # H4: source_quantile failure per (model, seed, dataset) at each alpha
     h4 = main_df[main_df["policy"] == "source_quantile"].copy()
-    h4["h4_failure"] = [h4_failure(lo, a) for lo, a in zip(h4["fpr_ci_low"], h4["alpha"])]
+    h4["h4_failure_bootstrap_only"] = [h4_failure(lo, a) for lo, a in zip(h4["fpr_ci_low"], h4["alpha"])]
+    h4["h4_failure"] = [h4_failure(lo, a) for lo, a in zip(h4["fpr_ci_low_cons"], h4["alpha"])]
 
     # H5: per label-free policy and alpha, over confirmatory datasets, pooled over runs
     h5 = {}
@@ -473,9 +568,13 @@ def main():
     main_df.to_csv(os.path.join(args.out_dir, "fpr_control.csv"), index=False)
     stress_df.to_csv(os.path.join(args.out_dir, "fpr_control_prior_stress.csv"), index=False)
     h4.to_csv(os.path.join(args.out_dir, "fpr_control_h4.csv"), index=False)
+    h4a = h4a_verdict(h4, confirmatory_seeds=tuple(args.confirmatory_seeds))
+    h4b = h4b_table(runs, source_key=dataset_key(args.source))
+    h4b.to_csv(os.path.join(args.out_dir, "fpr_control_h4b.csv"), index=False)
     with open(os.path.join(args.out_dir, "fpr_control_verdicts.json"), "w", encoding="utf-8") as f:
-        json.dump({"h5": h5, "notes": notes,
-                   "h4_failures": int(h4["h4_failure"].sum()), "h4_rows": int(len(h4))}, f, indent=2)
+        json.dump({"h5": h5, "notes": notes, "h4a": h4a,
+                   "h4_failures": int(h4["h4_failure"].sum()), "h4_rows": int(len(h4)),
+                   "h4_failures_bootstrap_only": int(h4["h4_failure_bootstrap_only"].sum())}, f, indent=2)
     cols = ["model", "seed", "dataset", "role", "source", "policy", "alpha", "fpr", "fpr_ci_low",
             "fpr_ci_high", "fpr_over_alpha", "tpr", "degenerate", "swapped"]
     with open(os.path.join(args.out_dir, "fpr_control.md"), "w", encoding="utf-8") as f:
@@ -485,6 +584,7 @@ def main():
         f.write("- oracle: uses target labels; reference only.\n")
         f.write(f"- H4 failures (lower CI of FPR > 2 alpha under source_quantile): "
                 f"{int(h4['h4_failure'].sum())} of {len(h4)} rows\n")
+        f.write(f"- H4a verdict (confirmatory seeds {args.confirmatory_seeds} only, conservative CI): {h4a['supported']}\n")
         f.write(f"- H5 verdicts: { {k: v['verdict'] for k, v in h5.items()} }\n\n")
         f.write(df_to_markdown(main_df[cols]) + "\n")
     print(df_to_markdown(main_df[cols]))
