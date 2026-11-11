@@ -92,3 +92,75 @@ p^{(k+1)}(Y=1|x) \propto \frac{\pi^{(k)}}{0.50} \cdot p(Y=1|x)
 \paragraph{Audit Results.}
 As shown in Table~\ref{tab:h3_prior}, Saerens EM tracks shifting operational priors with remarkable precision under realistic deepfake prevalence ($\pi \in [0.50, 0.90]$), achieving an estimation error of only $|\hat{\pi} - \pi| = \mathbf{0.0068}$ at $\pi = 0.70$ (estimated $\hat{\pi} \approx 0.6932$). Furthermore, across the operational band $\pi \in [0.30, 0.70]$, frozen validation cutoffs maintain stable error boundaries ($19.1\% - 19.8\%$ HTER), demonstrating high practical resilience against shifting traffic distributions.
 
+\subsection{Test-Time Adaptation (TTA) and Equilibrium Collapse Audit}
+\label{sec:tta_audit}
+\paragraph{Formulation.}
+To investigate whether unsupervised test-time optimization can repair transferred representations without labels, we evaluate LayerNorm entropy minimization \citep{wang2021tent} at learning rate $\eta = 10^{-4}$. We compare:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Online Streaming TTA:} Continuous adaptation where parameters update sequentially across the unseen test video stream.
+    \item \textbf{Batch-Episodic TTA:} Parameters are updated strictly on the current test mini-batch, predictions are recorded, and LayerNorm weights are immediately reset to their source state.
+\end{enumerate}
+Following pre-registration, we flag an operating failure as \emph{Equilibrium Collapse} if post-adaptation AUC degrades by $> 0.03$ or if predicted positive share diverges to $>95\%$ or $<5\%$ under balanced ground truth.
+
+\begin{table}[t]
+\centering
+\small
+\caption{\textbf{Test-Time Adaptation (TTA) Benchmark on Unseen Domains.} LayerNorm entropy minimization ($122$ tensors, $\eta=10^{-4}$) evaluated on S-MSDTv3 Full under online streaming vs. batch-episodic reset protocols.}
+\label{tab:tta_benchmark}
+\begin{tabular}{l l c c c c c}
+\toprule
+\textbf{Dataset} & \textbf{TTA Protocol} & \textbf{Pre AUC} & \textbf{Post AUC} & \textbf{$\Delta\text{AUC}$} & \textbf{Pred Pos \%} & \textbf{Collapse Audit} \\
+\midrule
+Celeb-DF-v2 & \textbf{Online Streaming}  & 0.8880 & 0.3386 & -0.5494 & 6.6\%  & \textbf{COLLAPSED} \\
+Celeb-DF-v2 & \textbf{Batch-Episodic}   & 0.8880 & 0.8880 & +0.0000 & 61.0\% & \textbf{STABLE} \\
+\midrule
+DFD         & \textbf{Online Streaming}  & 0.8583 & 0.2390 & -0.6193 & 0.6\%   & \textbf{COLLAPSED} \\
+DFD         & \textbf{Batch-Episodic}   & 0.8583 & 0.8583 & +0.0000 & 70.7\% & \textbf{STABLE} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Empirical Findings.}
+As revealed in Table~\ref{tab:tta_benchmark}, unconstrained online entropy minimization suffers catastrophic failure on deepfake test streams. In online mode, prediction entropy rapidly declines from $0.276$ to $0.028$, driving logits into a degenerate trivial attractor where nearly all test samples are classified as authentic ($6.6\%$ positive on Celeb-DF, $0.6\%$ on DFD). Consequently, discriminative AUC collapses drastically ($\Delta\text{AUC} \le -0.549$). In contrast, \textbf{Batch-Episodic} adaptation completely prevents error accumulation and preserves uncorrupted discrimination ($0.8880$ AUC), faithfully mirroring the actual dataset positive prevalence ($61.0\%$ vs $65.6\%$).
+
+\subsection{Perturbation Robustness Under Spatial Corruptions}
+\label{sec:robustness_audit}
+\paragraph{Corruption Suite.}
+We evaluate model resilience under three real-world post-processing corruptions simulated on Celeb-DF-v2:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{JPEG Compression:} Quality factors $Q \in \{90, 70, 50, 30\}$.
+    \item \textbf{Gaussian Blur:} Standard deviation $\sigma \in \{0.5, 1.0, 2.0\}$.
+    \item \textbf{Spatial Downscaling:} Resolution scaling factors $s \in \{0.75, 0.50, 0.25\}$.
+\end{itemize}
+
+\begin{table}[t]
+\centering
+\small
+\caption{\textbf{Perturbation Robustness Evaluation on Celeb-DF-v2.} Evaluated on S-MSDTv3 Full across 10 corruption levels ($K=4, T=8$).}
+\label{tab:robustness}
+\begin{tabular}{l c c c}
+\toprule
+\textbf{Perturbation} & \textbf{Severity Level} & \textbf{Test AUC} & \textbf{AUC Degradation} \\
+\midrule
+\textbf{Clean Baseline} & None & \textbf{0.8884} & +0.0000 \\
+\midrule
+JPEG Compression & $Q = 90$ & 0.6373 & -0.2511 \\
+JPEG Compression & $Q = 70$ & 0.6341 & -0.2544 \\
+JPEG Compression & $Q = 50$ & 0.6240 & -0.2644 \\
+JPEG Compression & $Q = 30$ & 0.6260 & -0.2624 \\
+\midrule
+Gaussian Blur & $\sigma = 0.5$ & 0.6539 & -0.2346 \\
+Gaussian Blur & $\sigma = 1.0$ & 0.6278 & -0.2607 \\
+Gaussian Blur & $\sigma = 2.0$ & 0.5839 & -0.3046 \\
+\midrule
+Downscaling & Factor $0.75$ & 0.6446 & -0.2439 \\
+Downscaling & Factor $0.50$ & 0.6268 & -0.2617 \\
+Downscaling & Factor $0.25$ & 0.6035 & -0.2849 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Empirical Findings.}
+Table~\ref{tab:robustness} demonstrates that severe spatial filtering suppresses the high-frequency pixel residuals extracted by SRM and Haar DWT stream filters. While moderate perturbations preserve above-chance utility ($0.637$ at JPEG 90, $0.654$ at $\sigma=0.5$), severe blurring ($\sigma=2.0$) causes the largest degradation ($-0.3046$). This underscores the necessity of multi-scale semantic anchoring provided by the frozen CLIP vision backbone when operating in low-bitrate social video streaming environments.
+
+
