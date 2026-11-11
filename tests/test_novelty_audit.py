@@ -83,7 +83,8 @@ def test_degenerate_resamples_are_redrawn_not_zeroed():
 
 def test_pure_negatives_dfd_keeps_actor_reals_only():
     df = pd.DataFrame({
-        "video_id": [f"v{i}" for i in range(6)],
+        # ids follow the real score files (D14: the dfd_real prefix is also required)
+        "video_id": ["real_012", "dfd_real_01__kitchen_pan", "dfd_real_02__walk", "DFD_01_02__a", "DFD_01_03__b", "DFD_02_01__c"],
         "label": [0, 0, 0, 1, 1, 1],
         "real_source": ["ffpp_youtube", "dfd_actor", "dfd_actor", "", "", ""],
         "score_mean": [0.1, 0.2, 0.3, 0.7, 0.8, 0.9],

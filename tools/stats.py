@@ -221,6 +221,8 @@ def paired_cluster_boot_dauc(
 
 # Which real videos count as negatives for each dataset (docs/score_schema.md,
 # "Pure Negatives"). None means "all reals in the file".
+PURE_NEGATIVE_ID_PREFIX = {"dfd": "dfd_real"}
+
 PURE_NEGATIVE_SOURCES = {
     "ffpp": ["ffpp_youtube"],
     "ffpp_c23": ["ffpp_youtube"],
@@ -318,6 +320,12 @@ def apply_pure_negatives(df: pd.DataFrame, dataset_name: str) -> Tuple[pd.DataFr
     if sources is None or "real_source" not in df.columns:
         return df, {"pure": sources is None, "n_real_kept": n_real, "n_real_removed": 0}
     keep = (df["label"] == 1) | (df["real_source"].astype(str).isin(sources))
+    # real_source alone is not reliable: the DFD score files label the 140 FF++ test reals
+    # (video_id real_NNN, identical logits to the FF++ file) as dfd_actor. Also require
+    # the dataset's own video_id prefix where one is known.
+    prefix = PURE_NEGATIVE_ID_PREFIX.get(key)
+    if prefix is not None and "video_id" in df.columns:
+        keep &= (df["label"] == 1) | df["video_id"].astype(str).str.startswith(prefix)
     out = df[keep].reset_index(drop=True)
     kept = int((out["label"] == 0).sum())
     if kept == 0:
