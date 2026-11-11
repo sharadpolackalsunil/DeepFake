@@ -1,0 +1,283 @@
+{
+  "verdict": "undetermined (underpowered)",
+  "delta": 0.01,
+  "delta_rule": "pre-registered default",
+  "n_boot": 10000,
+  "bonferroni_m": 2,
+  "confirmatory_level": 0.975,
+  "negatives": "pure",
+  "dataset_roles": {
+    "celebdf": "confirmatory",
+    "dfd": "dev_overlap",
+    "ffpp": "in_domain",
+    "ffppval": "unknown"
+  },
+  "seeds_available": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "purity": {
+    "gend_official_seed0_celebdf": {
+      "pure": true,
+      "n_real_kept": 178,
+      "n_real_removed": 0
+    },
+    "gend_official_seed0_dfd": {
+      "pure": true,
+      "n_real_kept": 383,
+      "n_real_removed": 0
+    },
+    "gend_official_seed0_ffpp": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "gend_official_seed0_ffppval": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "gend_ours_seed1_celebdf": {
+      "pure": true,
+      "n_real_kept": 178,
+      "n_real_removed": 0
+    },
+    "gend_ours_seed1_dfd": {
+      "pure": true,
+      "n_real_kept": 383,
+      "n_real_removed": 0
+    },
+    "gend_ours_seed1_ffpp": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "gend_ours_seed1_ffppval": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "gend_ours_seed2_celebdf": {
+      "pure": true,
+      "n_real_kept": 178,
+      "n_real_removed": 0
+    },
+    "gend_ours_seed2_dfd": {
+      "pure": true,
+      "n_real_kept": 383,
+      "n_real_removed": 0
+    },
+    "gend_ours_seed2_ffpp": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "gend_ours_seed2_ffppval": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "gend_ours_seed3_celebdf": {
+      "pure": true,
+      "n_real_kept": 178,
+      "n_real_removed": 0
+    },
+    "gend_ours_seed3_dfd": {
+      "pure": true,
+      "n_real_kept": 383,
+      "n_real_removed": 0
+    },
+    "gend_ours_seed3_ffpp": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "gend_ours_seed3_ffppval": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "smsdt_full_seed1_celebdf": {
+      "pure": true,
+      "n_real_kept": 178,
+      "n_real_removed": 0
+    },
+    "smsdt_full_seed1_dfd": {
+      "pure": true,
+      "n_real_kept": 383,
+      "n_real_removed": 0
+    },
+    "smsdt_full_seed1_ffpp": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "smsdt_full_seed1_ffppval": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "smsdt_full_seed2_celebdf": {
+      "pure": true,
+      "n_real_kept": 178,
+      "n_real_removed": 0
+    },
+    "smsdt_full_seed2_dfd": {
+      "pure": true,
+      "n_real_kept": 383,
+      "n_real_removed": 0
+    },
+    "smsdt_full_seed2_ffpp": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "smsdt_full_seed2_ffppval": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "smsdt_full_seed3_celebdf": {
+      "pure": true,
+      "n_real_kept": 178,
+      "n_real_removed": 0
+    },
+    "smsdt_full_seed3_dfd": {
+      "pure": true,
+      "n_real_kept": 383,
+      "n_real_removed": 0
+    },
+    "smsdt_full_seed3_ffpp": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "smsdt_full_seed3_ffppval": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "smsdt_st_seed1_celebdf": {
+      "pure": true,
+      "n_real_kept": 178,
+      "n_real_removed": 0
+    },
+    "smsdt_st_seed1_dfd": {
+      "pure": true,
+      "n_real_kept": 383,
+      "n_real_removed": 0
+    },
+    "smsdt_st_seed1_ffpp": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "smsdt_st_seed1_ffppval": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "smsdt_st_seed2_celebdf": {
+      "pure": true,
+      "n_real_kept": 178,
+      "n_real_removed": 0
+    },
+    "smsdt_st_seed2_dfd": {
+      "pure": true,
+      "n_real_kept": 383,
+      "n_real_removed": 0
+    },
+    "smsdt_st_seed2_ffpp": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "smsdt_st_seed2_ffppval": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "smsdt_st_seed3_celebdf": {
+      "pure": true,
+      "n_real_kept": 178,
+      "n_real_removed": 0
+    },
+    "smsdt_st_seed3_dfd": {
+      "pure": true,
+      "n_real_kept": 383,
+      "n_real_removed": 0
+    },
+    "smsdt_st_seed3_ffpp": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "smsdt_st_seed3_ffppval": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "smsdt_s_seed1_celebdf": {
+      "pure": true,
+      "n_real_kept": 178,
+      "n_real_removed": 0
+    },
+    "smsdt_s_seed1_dfd": {
+      "pure": true,
+      "n_real_kept": 383,
+      "n_real_removed": 0
+    },
+    "smsdt_s_seed1_ffpp": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "smsdt_s_seed1_ffppval": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "smsdt_s_seed2_celebdf": {
+      "pure": true,
+      "n_real_kept": 178,
+      "n_real_removed": 0
+    },
+    "smsdt_s_seed2_dfd": {
+      "pure": true,
+      "n_real_kept": 383,
+      "n_real_removed": 0
+    },
+    "smsdt_s_seed2_ffpp": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "smsdt_s_seed2_ffppval": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "smsdt_s_seed3_celebdf": {
+      "pure": true,
+      "n_real_kept": 178,
+      "n_real_removed": 0
+    },
+    "smsdt_s_seed3_dfd": {
+      "pure": true,
+      "n_real_kept": 383,
+      "n_real_removed": 0
+    },
+    "smsdt_s_seed3_ffpp": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    },
+    "smsdt_s_seed3_ffppval": {
+      "pure": true,
+      "n_real_kept": 140,
+      "n_real_removed": 0
+    }
+  }
+}

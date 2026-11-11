@@ -1,19 +1,37 @@
-# Hypothesis H1: Paired Cluster Bootstrap ΔAUC Tests (Auto-Generated)
+# Hypothesis H1: Paired Cluster Bootstrap Delta-AUC
 
-*Parameters: N_boot=2000, Equivalence margin δ=0.01, Canonical 3-Seed Multi-Run Aggregation*
+- Verdict (pre-registered rule): **undetermined (underpowered)**
+- delta = 0.0100 (pre-registered default); n_boot = 10000; Bonferroni m = 2, per-comparison level = 0.9750
+- Negatives: pure-source; seeds: [0, 1, 2, 3]
+- Only rows with Kind = confirmatory decide H1. 'N multiplier to resolve' is the rough factor by which the evaluation set must grow before an equivalence verdict is possible.
 
-| Dataset | Model A | Model B | Comparison | AUC (A) | AUC (B) | ΔAUC (A-B) | 95% CI Lower | 95% CI Upper | Classification | Seeds | Clusters | Samples |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| FFPP | smsdt_full | gend_ours | Flagship S-MSDTv3 Full vs GenD Reference Anchor | 0.9625 | 0.9044 | 0.0582 | 0.0422 | 0.0733 | better | 3 | 140 | 840 |
-| CELEBDF | smsdt_full | gend_ours | Flagship S-MSDTv3 Full vs GenD Reference Anchor | 0.8882 | 0.8294 | 0.0588 | 0.0233 | 0.0952 | better | 3 | 124 | 518 |
-| DFD | smsdt_full | gend_ours | Flagship S-MSDTv3 Full vs GenD Reference Anchor | 0.8649 | 0.8785 | -0.0136 | -0.0350 | 0.0081 | inconclusive | 3 | 413 | 2987 |
-| FFPP | smsdt_full | smsdt_st | Residual Stream & LSE Pooling Ablation (Full vs ST) | 0.9625 | 0.9629 | -0.0004 | -0.0059 | 0.0053 | equivalent | 3 | 140 | 840 |
-| CELEBDF | smsdt_full | smsdt_st | Residual Stream & LSE Pooling Ablation (Full vs ST) | 0.8882 | 0.8704 | 0.0178 | 0.0055 | 0.0325 | inconclusive | 3 | 124 | 518 |
-| DFD | smsdt_full | smsdt_st | Residual Stream & LSE Pooling Ablation (Full vs ST) | 0.8649 | 0.8779 | -0.0130 | -0.0210 | -0.0054 | inconclusive | 3 | 413 | 2987 |
-| FFPP | smsdt_st | smsdt_s | Spatio-Temporal Attention Ablation (ST vs Spatial-only) | 0.9629 | 0.9627 | 0.0002 | -0.0066 | 0.0073 | equivalent | 3 | 140 | 840 |
-| CELEBDF | smsdt_st | smsdt_s | Spatio-Temporal Attention Ablation (ST vs Spatial-only) | 0.8704 | 0.8826 | -0.0122 | -0.0299 | 0.0041 | inconclusive | 3 | 124 | 518 |
-| DFD | smsdt_st | smsdt_s | Spatio-Temporal Attention Ablation (ST vs Spatial-only) | 0.8779 | 0.8841 | -0.0061 | -0.0146 | 0.0028 | inconclusive | 3 | 413 | 2987 |
-| FFPP | smsdt_s | gend_ours | Single-Frame Recipe Ablation (SMSDT-S vs GenD) | 0.9627 | 0.9044 | 0.0583 | 0.0447 | 0.0715 | better | 3 | 140 | 840 |
-| CELEBDF | smsdt_s | gend_ours | Single-Frame Recipe Ablation (SMSDT-S vs GenD) | 0.8826 | 0.8294 | 0.0532 | 0.0209 | 0.0866 | better | 3 | 124 | 518 |
-| DFD | smsdt_s | gend_ours | Single-Frame Recipe Ablation (SMSDT-S vs GenD) | 0.8841 | 0.8785 | 0.0056 | -0.0121 | 0.0236 | inconclusive | 3 | 413 | 2987 |
-
+| Dataset | Role | Kind | Model A | Model B | Comparison | AUC (A) | AUC (B) | dAUC (A-B) | CI level | CI Lower | CI Upper | Classification | N multiplier to resolve | Seeds | Clusters | Samples | Dropped (unaligned) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CELEBDF | confirmatory | confirmatory | smsdt_st | smsdt_s | H1: ST vs S | 0.8704 | 0.8826 | -0.0122 | 0.9750 | -0.0312 | 0.0068 | inconclusive | inf | 3 | 124 | 518 | 0 |
+| DFD | dev_overlap | exploratory | smsdt_st | smsdt_s | H1: ST vs S | 0.8779 | 0.8841 | -0.0061 | 0.9500 | -0.0147 | 0.0028 | inconclusive | 5.1211 | 3 | 413 | 2987 | 0 |
+| FFPP | in_domain | exploratory | smsdt_st | smsdt_s | H1: ST vs S | 0.9629 | 0.9627 | 0.0002 | 0.9500 | -0.0066 | 0.0072 | equivalent | 0.4957 | 3 | 140 | 840 | 0 |
+| FFPPVAL | unknown | exploratory | smsdt_st | smsdt_s | H1: ST vs S | 0.9482 | 0.9377 | 0.0105 | 0.9500 | 0.0035 | 0.0175 | inconclusive | inf | 3 | 178 | 1304 | 0 |
+| CELEBDF | confirmatory | confirmatory | smsdt_full | smsdt_s | H1: Full vs S | 0.8882 | 0.8826 | 0.0056 | 0.9750 | -0.0142 | 0.0262 | inconclusive | 21.0170 | 3 | 124 | 518 | 0 |
+| DFD | dev_overlap | exploratory | smsdt_full | smsdt_s | H1: Full vs S | 0.8649 | 0.8841 | -0.0192 | 0.9500 | -0.0295 | -0.0084 | inconclusive | inf | 3 | 413 | 2987 | 0 |
+| FFPP | in_domain | exploratory | smsdt_full | smsdt_s | H1: Full vs S | 0.9625 | 0.9627 | -0.0001 | 0.9500 | -0.0078 | 0.0073 | equivalent | 0.5892 | 3 | 140 | 840 | 0 |
+| FFPPVAL | unknown | exploratory | smsdt_full | smsdt_s | H1: Full vs S | 0.9410 | 0.9377 | 0.0034 | 0.9500 | -0.0041 | 0.0107 | inconclusive | 1.2449 | 3 | 178 | 1304 | 0 |
+| CELEBDF | confirmatory | exploratory | smsdt_full | smsdt_st | Exploratory: Full vs ST (forensic stream + LSE readout) | 0.8882 | 0.8704 | 0.0178 | 0.9500 | 0.0050 | 0.0318 | inconclusive | inf | 3 | 124 | 518 | 0 |
+| DFD | dev_overlap | exploratory | smsdt_full | smsdt_st | Exploratory: Full vs ST (forensic stream + LSE readout) | 0.8649 | 0.8779 | -0.0130 | 0.9500 | -0.0208 | -0.0051 | inconclusive | inf | 3 | 413 | 2987 | 0 |
+| FFPP | in_domain | exploratory | smsdt_full | smsdt_st | Exploratory: Full vs ST (forensic stream + LSE readout) | 0.9625 | 0.9629 | -0.0004 | 0.9500 | -0.0059 | 0.0054 | equivalent | 0.3455 | 3 | 140 | 840 | 0 |
+| FFPPVAL | unknown | exploratory | smsdt_full | smsdt_st | Exploratory: Full vs ST (forensic stream + LSE readout) | 0.9410 | 0.9482 | -0.0071 | 0.9500 | -0.0140 | -0.0002 | inconclusive | 5.6907 | 3 | 178 | 1304 | 0 |
+| CELEBDF | confirmatory | exploratory | smsdt_s | gend_ours | Exploratory: S vs gend_ours (training recipe, same pipeline) | 0.8826 | 0.8294 | 0.0532 | 0.9500 | 0.0210 | 0.0879 | better | inf | 3 | 124 | 518 | 0 |
+| DFD | dev_overlap | exploratory | smsdt_s | gend_ours | Exploratory: S vs gend_ours (training recipe, same pipeline) | 0.8841 | 0.8785 | 0.0056 | 0.9500 | -0.0121 | 0.0236 | inconclusive | 16.7197 | 3 | 413 | 2987 | 0 |
+| FFPP | in_domain | exploratory | smsdt_s | gend_ours | Exploratory: S vs gend_ours (training recipe, same pipeline) | 0.9627 | 0.9044 | 0.0583 | 0.9500 | 0.0453 | 0.0714 | better | inf | 3 | 140 | 840 | 0 |
+| FFPPVAL | unknown | exploratory | smsdt_s | gend_ours | Exploratory: S vs gend_ours (training recipe, same pipeline) | 0.9377 | 0.9007 | 0.0370 | 0.9500 | 0.0198 | 0.0536 | better | inf | 3 | 178 | 1304 | 0 |
+| CELEBDF | confirmatory | exploratory | smsdt_full | gend_ours | Exploratory: Full vs gend_ours | 0.8882 | 0.8294 | 0.0588 | 0.9500 | 0.0239 | 0.0957 | better | inf | 3 | 124 | 518 | 0 |
+| DFD | dev_overlap | exploratory | smsdt_full | gend_ours | Exploratory: Full vs gend_ours | 0.8649 | 0.8785 | -0.0136 | 0.9500 | -0.0343 | 0.0085 | inconclusive | inf | 3 | 413 | 2987 | 0 |
+| FFPP | in_domain | exploratory | smsdt_full | gend_ours | Exploratory: Full vs gend_ours | 0.9625 | 0.9044 | 0.0582 | 0.9500 | 0.0431 | 0.0733 | better | inf | 3 | 140 | 840 | 0 |
+| FFPPVAL | unknown | exploratory | smsdt_full | gend_ours | Exploratory: Full vs gend_ours | 0.9410 | 0.9007 | 0.0404 | 0.9500 | 0.0220 | 0.0585 | better | inf | 3 | 178 | 1304 | 0 |
+| CELEBDF | confirmatory | exploratory | smsdt_s | gend_official | G1: S vs official GenD weights (same pipeline) | 0.8826 | 0.9327 | -0.0501 | 0.9500 | -0.0852 | -0.0210 | worse | inf | 3 | 124 | 518 | 0 |
+| DFD | dev_overlap | exploratory | smsdt_s | gend_official | G1: S vs official GenD weights (same pipeline) | 0.8841 | 0.9076 | -0.0236 | 0.9500 | -0.0390 | -0.0090 | inconclusive | inf | 3 | 413 | 2987 | 0 |
+| FFPP | in_domain | exploratory | smsdt_s | gend_official | G1: S vs official GenD weights (same pipeline) | 0.9627 | 0.9452 | 0.0175 | 0.9500 | 0.0060 | 0.0293 | inconclusive | inf | 3 | 140 | 840 | 0 |
+| FFPPVAL | unknown | exploratory | smsdt_s | gend_official | G1: S vs official GenD weights (same pipeline) | 0.9545 | 0.9371 | 0.0174 | 0.9500 | 0.0073 | 0.0276 | inconclusive | inf | 3 | 140 | 840 | 464 |
+| CELEBDF | confirmatory | exploratory | gend_ours | gend_official | G1: gend_ours vs official GenD weights (same pipeline) | 0.8294 | 0.9327 | -0.1033 | 0.9500 | -0.1393 | -0.0723 | worse | inf | 3 | 124 | 518 | 0 |
+| DFD | dev_overlap | exploratory | gend_ours | gend_official | G1: gend_ours vs official GenD weights (same pipeline) | 0.8785 | 0.9076 | -0.0292 | 0.9500 | -0.0433 | -0.0173 | worse | inf | 3 | 413 | 2987 | 0 |
+| FFPP | in_domain | exploratory | gend_ours | gend_official | G1: gend_ours vs official GenD weights (same pipeline) | 0.9044 | 0.9452 | -0.0408 | 0.9500 | -0.0568 | -0.0247 | worse | inf | 3 | 140 | 840 | 0 |
+| FFPPVAL | unknown | exploratory | gend_ours | gend_official | G1: gend_ours vs official GenD weights (same pipeline) | 0.8988 | 0.9371 | -0.0383 | 0.9500 | -0.0527 | -0.0232 | worse | inf | 3 | 140 | 840 | 464 |

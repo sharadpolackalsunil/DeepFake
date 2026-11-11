@@ -1,0 +1,77 @@
+{
+  "h5": {
+    "target_gmm@alpha=0.05": {
+      "verdict": "falsified",
+      "per_dataset": {
+        "celebdf": {
+          "err_policy": 0.04097271268057785,
+          "err_source": 0.07230257346384246,
+          "degenerate_rate": 0.02
+        }
+      }
+    },
+    "target_gmm@alpha=0.1": {
+      "verdict": "falsified",
+      "per_dataset": {
+        "celebdf": {
+          "err_policy": 0.06939307378382063,
+          "err_source": 0.057706782488276195,
+          "degenerate_rate": 0.0
+        }
+      }
+    },
+    "target_gmm_anchored@alpha=0.05": {
+      "verdict": "falsified",
+      "per_dataset": {
+        "celebdf": {
+          "err_policy": 0.04096022828607098,
+          "err_source": 0.07230257346384246,
+          "degenerate_rate": 0.02
+        }
+      }
+    },
+    "target_gmm_anchored@alpha=0.1": {
+      "verdict": "falsified",
+      "per_dataset": {
+        "celebdf": {
+          "err_policy": 0.06934790965075167,
+          "err_source": 0.057706782488276195,
+          "degenerate_rate": 0.0
+        }
+      }
+    }
+  },
+  "notes": [],
+  "h4a": {
+    "models": {
+      "smsdt_st": {
+        "confirmatory": {},
+        "exploratory": {},
+        "n_confirmatory_seeds": 0,
+        "n_pass": 0,
+        "pass": null
+      },
+      "smsdt_full": {
+        "confirmatory": {
+          "3": false
+        },
+        "exploratory": {
+          "1": false,
+          "2": false
+        },
+        "n_confirmatory_seeds": 1,
+        "n_pass": 0,
+        "pass": null
+      }
+    },
+    "supported": "undetermined (fewer than 3 confirmatory seeds)",
+    "confirmatory_seeds": [
+      3,
+      4,
+      5
+    ]
+  },
+  "h4_failures": 0,
+  "h4_rows": 6,
+  "h4_failures_bootstrap_only": 0
+}
