@@ -13,3 +13,4 @@
 | Downscale Factor | 0.75 | 0.6446 | +0.2439 |
 | Downscale Factor | 0.5 | 0.6268 | +0.2617 |
 | Downscale Factor | 0.25 | 0.6035 | +0.2849 |
+
