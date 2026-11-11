@@ -652,12 +652,25 @@ def main():
     parser.add_argument("--calib", type=str, default=None, help="Path to frozen calibration JSON file (a, b, tau)")
     parser.add_argument("--save-scores", type=str, default=None, help="Path to export per-video score CSV")
     parser.add_argument("--ci", action="store_true", help="Compute 95%% bootstrap confidence intervals for primary metrics")
+    parser.add_argument("--readout-ablation", default="learned",
+                        choices=["learned", "mean_patch", "lse_only", "att_only"],
+                        help="Eval-time diagnostic for S-MSDTv3 readout (H4 mechanism check). "
+                             "Not a substitute for retraining with a different readout.")
     parser.add_argument("--skip-sweep", action="store_true", help="Skip printing threshold sensitivity sweep table")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Loading checkpoint: {args.ckpt} on {device}")
     model, model_type, norm_fn = load_model(args.ckpt, device)
+    if args.readout_ablation != "learned":
+        n_set = 0
+        for m in model.modules():
+            if hasattr(m, "readout_mode"):
+                m.readout_mode = args.readout_ablation
+                n_set += 1
+        if n_set == 0:
+            raise SystemExit("--readout-ablation requires an S-MSDTv3 checkpoint (no EvidenceReadoutV3 found).")
+        print(f"  * Readout ablation active: {args.readout_ablation} ({n_set} module(s))")
     print(f"Loaded model architecture: {model_type.upper()}")
 
     # Auto-detect T for Stage A (T=1) vs Stage B (T=8)
