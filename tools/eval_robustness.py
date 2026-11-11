@@ -82,13 +82,15 @@ def evaluate_loader(model, loader, device):
     model.eval()
     scores, labels = [], []
     with torch.no_grad():
-        for batch in loader:
-            frames = batch["frames"].to(device)
-            B, K, T, C, H, W = frames.shape
-            logits, _ = model(frames.view(B * K, T, C, H, W))
-            probs = torch.sigmoid(logits).view(B, K).mean(dim=1).cpu().numpy()
-            scores.extend(probs.tolist())
-            labels.extend(batch["label"].cpu().numpy().tolist())
+        with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device.type == "cuda")):
+            for batch in loader:
+                frames = batch["frames"].to(device)
+                B, K, T, C, H, W = frames.shape
+                out = model(frames.view(B * K, T, C, H, W))
+                logits = out[0] if isinstance(out, (tuple, list)) else out
+                probs = torch.sigmoid(logits).view(B, K).mean(dim=1).cpu().numpy()
+                scores.extend(probs.tolist())
+                labels.extend(batch["label"].cpu().numpy().tolist())
 
     if len(set(labels)) < 2:
         return 0.5
@@ -101,19 +103,34 @@ def main():
     parser.add_argument("--index", type=str, default="data/splits/index.csv")
     parser.add_argument("--store", type=str, default="data/store")
     parser.add_argument("--split", type=str, default="test")
-    parser.add_argument("--max-videos", type=int, default=100, help="Subset for fast curve profiling")
+    parser.add_argument("--dataset-name", type=str, default="Celeb-DF-v2", help="Dataset name")
+    parser.add_argument("--K", type=int, default=4, help="Clips per video (default 4 for fast curve profiling)")
+    parser.add_argument("--T", type=int, default=None, help="Frames per clip (auto-detected if None)")
+    parser.add_argument("--output-csv", type=str, default="results/tables/robustness_summary.csv")
+    parser.add_argument("--output-md", type=str, default="results/tables/robustness_summary.md")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, model_type, norm_fn = load_model(args.ckpt, device)
 
+    # Auto-detect T
+    cfg = getattr(model, "cfg", {})
+    if args.T is None:
+        if cfg.get("stage") == "stage_a" or cfg.get("data", {}).get("frames_per_clip") == 1 or model_type in ["gend", "v1"]:
+            actual_T = 1
+        else:
+            actual_T = int(cfg.get("data", {}).get("frames_per_clip", 8))
+    else:
+        actual_T = args.T
+
     from smsdt.data.video_dataset import EvalClipDataset
-    base_ds = EvalClipDataset(args.index, args.store, split=args.split, K=4, T=8, normalize=norm_fn)
+    base_ds = EvalClipDataset(args.index, args.store, split=args.split, K=args.K, T=actual_T, normalize=norm_fn)
+    print(f"Loaded {len(base_ds):,} evaluation videos (K={args.K}, T={actual_T}).")
 
     # Clean unperturbed baseline
     loader = DataLoader(base_ds, batch_size=4, shuffle=False)
     clean_auc = evaluate_loader(model, loader, device)
-    print(f"Clean Baseline AUC: {clean_auc:.4f}")
+    print(f"\nClean Baseline AUC: {clean_auc:.4f}")
 
     perturbations = [
         ("JPEG Quality", [90, 70, 50, 30], make_jpeg_filter),
@@ -121,7 +138,10 @@ def main():
         ("Downscale Factor", [0.75, 0.50, 0.25], make_rescale_filter),
     ]
 
-    results = {"clean": clean_auc}
+    summary_rows = [
+        {"Perturbation": "Clean Baseline", "Severity / Quality": "None", "AUC": round(clean_auc, 4), "AUC_Drop": 0.0000}
+    ]
+
     for p_name, levels, fn_builder in perturbations:
         print(f"\n--- Testing {p_name} ---")
         for lvl in levels:
@@ -129,11 +149,34 @@ def main():
             p_ds = PerturbedEvalDataset(base_ds, p_fn)
             p_loader = DataLoader(p_ds, batch_size=4, shuffle=False)
             auc = evaluate_loader(model, p_loader, device)
-            print(f"  Level {lvl}: AUC = {auc:.4f} (drop: {clean_auc - auc:+.4f})")
-            results[f"{p_name}_{lvl}"] = auc
+            drop = clean_auc - auc
+            print(f"  Level {lvl}: AUC = {auc:.4f} (drop: {drop:+.4f})")
+            summary_rows.append({
+                "Perturbation": p_name,
+                "Severity / Quality": str(lvl),
+                "AUC": round(auc, 4),
+                "AUC_Drop": round(drop, 4)
+            })
 
-    print("\nRobustness Summary:")
-    print(results)
+    import pandas as pd
+    df = pd.DataFrame(summary_rows)
+    os.makedirs(os.path.dirname(args.output_csv), exist_ok=True)
+    df.to_csv(args.output_csv, index=False)
+
+    lines = [f"# Robustness Perturbation Benchmark: {args.dataset_name}\n\n",
+             f"*Checkpoint: `{args.ckpt}` (Clean Baseline AUC: {clean_auc:.4f})*\n\n",
+             "| Perturbation | Severity / Quality | AUC | AUC Drop |\n",
+             "| :--- | :--- | :---: | :---: |\n"]
+    for _, r in df.iterrows():
+        lines.append(f"| {r['Perturbation']} | {r['Severity / Quality']} | {r['AUC']:.4f} | {r['AUC_Drop']:+.4f} |\n")
+
+    with open(args.output_md, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+    print(f"\n{'='*70}\nROBUSTNESS PERTURBATION SUMMARY\n{'='*70}")
+    for l in lines[2:]:
+        print(l.strip())
+    print(f"\nSaved robustness summary to {args.output_csv} and {args.output_md}\n")
 
 
 if __name__ == "__main__":
