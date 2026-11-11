@@ -1,0 +1,17 @@
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Facial Forgery Generation and Detection}
+Facial manipulation techniques broadly fall into four categories: face swapping, facial reenactment, entire face synthesis, and facial attribute editing \citep{rossler2019faceforensics, tolba2020deepfake}. Early detection methodologies focused on extracting handcrafted biometric cues, such as abnormal eye blinking rates \citep{li2018ictu}, head pose inconsistencies \citep{yang2019exposing}, and biological color pulse variations \citep{ciftci2020fakecatcher}. While intuitive, handcrafted descriptors break down under severe video compression and modern generator post-processing.
+
+With the advent of deep convolutional neural networks, data-driven detectors emerged as the predominant paradigm, led by architectures like Xception \citep{chollet2017xception}, EfficientNet \citep{tan2019efficientnet}, and ResNet variants. While these models achieve exceptional test accuracy ($\ge 98\%$) on the exact distribution they are trained on, extensive benchmarking studies \citep{zi2020wilddeepfake, li2020celeb} confirm that their performance collapses sharply (often below $60\%$ AUC) when evaluated out-of-domain.
+
+\subsection{Vision Transformers and Foundation Models in Forensics}
+Vision Transformers (ViTs) \citep{dosovitskiy2020image} have redefined visual representation learning by modeling non-local spatial interactions across image patches. In visual forensics, multi-modal foundation models such as CLIP \citep{radford2021learning} have exhibited unprecedented zero-shot and linear-probe transfer capabilities due to their web-scale pretraining on diverse imagery. 
+
+A prominent milestone in this direction is \textbf{GenD} \citep{gend2024}, which established that applying Parameter-Efficient Fine-Tuning (PEFT) to LayerNorm parameters of a frozen CLIP ViT-L/14 backbone prevents the destruction of general visual features while adapting the representation to forensic boundaries. However, GenD operates strictly as a frame-level detector ($T=1$) and relies entirely on standard RGB self-attention. Consequently, it discards high-frequency pixel residuals and temporal continuity—two of the most resilient signatures of synthetic manipulation.
+
+\subsection{High-Frequency and Spatio-Temporal Modeling}
+The generative process of convolutional autoencoders and latent diffusion models inherently introduces spectral discrepancies due to upsampling and transposed convolutions \citep{frank2020leveraging, durall2020watch}. Methods incorporating frequency-domain transformations, such as the Discrete Cosine Transform (DCT) or Discrete Wavelet Transform (DWT), have shown enhanced resilience against color perturbations. Concurrently, Spatial Rich Models (SRM) \citep{fridrich2012rich}, originally developed for digital image steganography, suppress low-frequency semantic content to isolate noise residuals.
+
+In video forensics, temporal inconsistency between consecutive frames represents an orthogonal detection signal. Spatio-temporal architectures \citep{guera2018deepfake, zheng2021exploring} capture inter-frame jitter, optical flow irregularities, and landmark velocity deviations. In this work, S-MSDTv3 bridges high-frequency spectral residual injection, spatio-temporal attention, and foundation representation learning into a single cohesive framework.

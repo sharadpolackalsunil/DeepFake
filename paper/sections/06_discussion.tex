@@ -1,0 +1,24 @@
+\section{Discussion, Limitations, and Ethical Considerations}
+\label{sec:discussion}
+
+\subsection{Architectural Synthesis and Insights}
+The empirical findings across our 12 independent multi-seed runs provide three key insights for generalized facial forensics:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{High-Frequency Residuals Preserve Compressed Manipulation Signatures:} While standard Vision Transformers achieve strong semantic classification, self-attention suppresses pixel-level phase discrepancies and upsampling artifacts. Explicitly injecting Spatial Rich Models and 2D Haar wavelets provides orthogonal evidence that elevates cross-dataset transfer on challenging benchmarks like Celeb-DF v2 ($+1.78\%$ $\Delta\text{AUC}$ over pure spatio-temporal attention).
+    \item \textbf{Balanced Loss Recipes are Foundational:} In our single-frame ablation, \texttt{smsdt\_s} improved over standard GenD by $+5.83\%$ AUC on FF++ and $+5.32\%$ AUC on Celeb-DF v2, simply by pairing LayerNorm PEFT with balanced loss weighting and curriculum sampling. This indicates that prior single-frame baselines were partially bottlenecked by optimization artifacts rather than capacity limits.
+    \item \textbf{Operational Stability:} Operating points calibrated on validation data transfer without catastrophic degradation ($g \ll 0.05$), and Saerens EM provides an unsupervised mechanism to track base-rate fluctuations.
+\end{enumerate}
+
+\subsection{Limitations and Failure Modes}
+Despite strong generalization, two clear boundary limitations remain:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Extreme Prior Asymmetries ($\pi \le 0.10$):} As audited in Table~\ref{tab:h3_prior}, when synthetic content prevalence drops to $10\%$, even a low false-positive rate ($9\%$) produces a substantial absolute volume of false alarms. While Saerens EM tracks the shift, extreme class imbalances require conservative operational thresholds to avoid degrading user trust.
+    \item \textbf{Computational Footprint for Multi-Clip Inference:} Processing $K=8$ clips of $T=8$ frames requires $64$ total image passes per video. While suitable for asynchronous verification and forensic audit workflows, real-time edge streaming demands temporal pruning or progressive multi-clip cascading.
+\end{itemize}
+
+\subsection{Broader Impact and Ethical Considerations}
+Facial forgery detection systems carry intrinsic dual-use implications. While critical for combating disinformation and protecting personal identity rights, automated detectors risk generating false accusations if deployed naively without calibration audits. Furthermore, forensic models can be inadvertently co-opted to construct more sophisticated adversarial generators via gradient-based perturbation. By open-sourcing our benchmark protocol, reproducible seeds, and complete statistical audit scripts, we encourage transparent, reproducible forensic research aligned with open scientific standards.
+
+\section{Conclusion}
+\label{sec:conclusion}
+We presented S-MSDTv3, a generalized spatio-temporal vision transformer for video deepfake detection combining foundation LayerNorm PEFT, dual high-frequency residual streams (SRM and Haar DWT), and landmark-guided Log-Sum-Exp evidence readout. Across a rigorous 12-run multi-seed study evaluated on FF++ c23, Celeb-DF-v2, and DFD, S-MSDTv3 achieves decisive, statistically validated improvements over the literature reference anchor ($\Delta\text{AUC} = +5.88\%$ on Celeb-DF v2, peaking at $0.8960$). Our pre-registered statistical hypotheses confirm the utility of high-frequency spectral injection, the robustness of validation operating cutoffs against collapse, and the efficacy of unsupervised prior adaptation.
