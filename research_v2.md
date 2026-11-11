@@ -194,7 +194,7 @@ The spatial-only baseline **S-MSDT-S** (`smsdt_s`) completed 30 epochs of traini
 
 ### 3.4 S-MSDTv3 Full Model Evaluation Results (Seed 1)
 
-The flagship model **S-MSDTv3 Full** (`smsdt_full`) completed 30 epochs of training on the RTX 5090 (`train_full.yaml`, Seed 1).
+The full model **S-MSDTv3 Full** (`smsdt_full`) completed 30 epochs of training on the RTX 5090 (`train_full.yaml`, Seed 1).
 - **Architecture:** CLIP ViT-L/14 (LN tuned) + Spatio-Temporal NMSSS Attention (2 blocks) + Dual Forensic Residual Stream (Haar DWT + SRM) + EvidenceReadoutV3 (Log-Sum-Exp Pooling + 106-pt perioral mouth prior).
 - **Trainable Parameters:** 9,102,600 / 312,179,976 total (2.92%).
 - **Checkpoint:** [`outputs/checkpoints_smsdt_full/seed1/best_ema.pt`](file:///e:/DEEPFAKE/outputs/checkpoints_smsdt_full/seed1/best_ema.pt)
@@ -360,7 +360,7 @@ All four architectures completed 30 epochs of training on the RTX 5090 for **See
    - **DFD Video AUC:** `0.8748` (Acc@0.5: 75.66%, TPR@5%FPR: 59.96%, ECE: 0.2132)
    - *Scores:* `results/scores/smsdt_st_seed2_{celebdf,dfd,ffpp}.csv`
 
-4. **`smsdt_full_seed2` (S-MSDTv3 Full Flagship, $T=8$):**
+4. **`smsdt_full_seed2` (S-MSDTv3 Full, $T=8$):**
    - **FF++ Test Video AUC:** `0.9621` (Macro: 0.9621, Acc@0.5: 89.17%, ECE: 0.0947)
    - **Celeb-DF v2 Video AUC:** **`0.8960`** (Acc@0.5: 81.66%, TPR@5%FPR: 55.00%, ECE: 0.0864)
    - **DFD Video AUC:** `0.8689` (Acc@0.5: 76.03%, TPR@5%FPR: 58.76%, ECE: 0.2154)
@@ -394,7 +394,7 @@ All four architectures completed 30 epochs of training on the RTX 5090 for **See
    - **DFD Video AUC:** `0.8908` (95% CI: [0.8764 - 0.9047], Acc@0.5: 80.65%, TPR@5%FPR: 68.06%, ECE: 0.1650)
    - *Scores:* `results/scores/smsdt_st_seed3_{celebdf,dfd,ffpp}.csv`
 
-4. **`smsdt_full_seed3` (S-MSDTv3 Full Flagship, $T=8$):**
+4. **`smsdt_full_seed3` (S-MSDTv3 Full, $T=8$):**
    - **FF++ Test Video AUC:** `0.9625` (95% CI: [0.9502 - 0.9741], Acc@0.5: 89.88%, TPR@5%FPR: 87.86%, ECE: 0.0917)
      - *Per-Method AUC on FF++:* Deepfakes: 0.996, FaceSwap: 0.979, Face2Face: 0.978, FaceShifter: 0.967, NeuralTextures: 0.892
    - **Celeb-DF v2 Video AUC:** `0.8772` (95% CI: [0.8475 - 0.9046], Acc@0.5: 80.12%, TPR@5%FPR: 50.88%, ECE: 0.0957)
@@ -433,12 +433,12 @@ Compiled via `tools/make_tables.py` into [`results/tables/experiment_matrix.csv`
 | **`gend_ours`** | 3 | $0.9044 \pm 0.0004$ | $0.8294 \pm 0.0025$ | $0.8785 \pm 0.0032$ | Literature reference anchor |
 | **`smsdt_s`** | 3 | $0.9627 \pm 0.0049$ | $0.8826 \pm 0.0011$ | $0.8841 \pm 0.0120$ | Single-frame balanced recipe |
 | **`smsdt_st`** | 3 | $0.9629 \pm 0.0031$ | $0.8704 \pm 0.0076$ | $0.8779 \pm 0.0116$ | Spatio-temporal attention |
-| **`smsdt_full`** | 3 | $\mathbf{0.9626 \pm 0.0005}$ | $\mathbf{0.8882 \pm 0.0098}$ | $0.8649 \pm 0.0043$ | **Flagship S-MSDTv3 (Peaks at 0.8960)** |
+| **`smsdt_full`** | 3 | $\mathbf{0.9626 \pm 0.0005}$ | $\mathbf{0.8882 \pm 0.0098}$ | $0.8649 \pm 0.0043$ | **Full S-MSDTv3 (Peaks at 0.8960)** |
 
 #### Statistical Takeaways (Canonical 3-Seed Replication Insight):
-1. **Rock-Solid Cross-Dataset Generalization:**
+1. **Cross-Dataset Empirical Behavior:**
    - On **Celeb-DF v2**, `smsdt_full` achieves a canonical 3-seed mean of **$0.8882 \pm 0.0098$**, peaking at **0.8960** on Seed 2.
-   - Compared to the reproduced GenD anchor ($0.8294 \pm 0.0025$), `smsdt_full` provides a robust, statistically proven **+5.88% AUC improvement** across random seeds.
+   - Compared to our in-house reproduced GenD anchor ($0.8294 \pm 0.0025$), `smsdt_full` provides a **+5.88% AUC improvement** under our matched pipeline (Gate G1 Branch B).
 2. **Minimal Seed Variance ($\sigma \le 0.0098$):**
    - The standard deviation across independent training seeds is remarkably low ($\sigma \le 0.0098$ on Celeb-DF, $\sigma \le 0.0005$ on FF++), proving that the performance gains are intrinsic to the architecture and not artifacts of lucky weight initialization.
 3. **Controlled Ablation Consistency:**
@@ -453,9 +453,9 @@ Compiled via `tools/stats.py` into [`results/tables/hypothesis_h1_stats.csv`](fi
 
 | Dataset | Model A | Model B | Comparison Description | AUC (A) | AUC (B) | ΔAUC (A-B) | 95% Bootstrap CI | Classification ($\delta=0.01$) | Seeds | Clusters | Samples |
 | :--- | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **FFPP** | `smsdt_full` | `gend_ours` | Flagship S-MSDTv3 Full vs GenD Reference Anchor | 0.9625 | 0.9044 | **+0.0582** | [**+0.0422, +0.0733**] | **`better`** | 3 | 140 | 840 |
-| **CELEBDF** | `smsdt_full` | `gend_ours` | Flagship S-MSDTv3 Full vs GenD Reference Anchor | 0.8882 | 0.8294 | **+0.0588** | [**+0.0233, +0.0952**] | **`better`** | 3 | 124 | 518 |
-| **DFD** | `smsdt_full` | `gend_ours` | Flagship S-MSDTv3 Full vs GenD Reference Anchor | 0.8649 | 0.8785 | -0.0136 | [-0.0350, +0.0081] | `inconclusive` | 3 | 413 | 2987 |
+| **FFPP** | `smsdt_full` | `gend_ours` | S-MSDTv3 Full vs In-House GenD Reproduction | 0.9625 | 0.9044 | **+0.0582** | [**+0.0422, +0.0733**] | **`better`** | 3 | 140 | 840 |
+| **CELEBDF** | `smsdt_full` | `gend_ours` | S-MSDTv3 Full vs In-House GenD Reproduction | 0.8882 | 0.8294 | **+0.0588** | [**+0.0233, +0.0952**] | **`better`** | 3 | 124 | 518 |
+| **DFD** | `smsdt_full` | `gend_ours` | S-MSDTv3 Full vs In-House GenD Reproduction | 0.8649 | 0.8785 | -0.0136 | [-0.0350, +0.0081] | `inconclusive` | 3 | 413 | 2987 |
 | **FFPP** | `smsdt_full` | `smsdt_st` | Residual Stream & LSE Pooling Ablation (Full vs ST) | 0.9625 | 0.9629 | -0.0004 | [-0.0059, +0.0053] | **`equivalent`** | 3 | 140 | 840 |
 | **CELEBDF** | `smsdt_full` | `smsdt_st` | Residual Stream & LSE Pooling Ablation (Full vs ST) | 0.8882 | 0.8704 | **+0.0178** | [**+0.0055, +0.0325**] | `inconclusive` | 3 | 124 | 518 |
 | **DFD** | `smsdt_full` | `smsdt_st` | Residual Stream & LSE Pooling Ablation (Full vs ST) | 0.8649 | 0.8779 | -0.0130 | [-0.0210, -0.0054] | `inconclusive` | 3 | 413 | 2987 |
@@ -467,11 +467,11 @@ Compiled via `tools/stats.py` into [`results/tables/hypothesis_h1_stats.csv`](fi
 | **DFD** | `smsdt_s` | `gend_ours` | Single-Frame Recipe Ablation (SMSDT-S vs GenD) | 0.8841 | 0.8785 | 0.0056 | [-0.0121, +0.0236] | `inconclusive` | 3 | 413 | 2987 |
 
 #### Core Empirical Validations & Methodological Notes:
-1. **Statistically Significant Superiority Over GenD Anchor:**
-   - On **FF++ c23 In-Domain**, `smsdt_full` outperforms `gend_ours` by **+5.82% ΔAUC** ($p < 0.0001$), with 95% CI $[+0.0422, +0.0733]$, solidly exceeding the $\delta = 0.01$ equivalence boundary.
-   - On **Celeb-DF v2 Cross-Dataset**, `smsdt_full` outperforms `gend_ours` by **+5.88% ΔAUC** ($p < 0.001$), with 95% CI $[+0.0233, +0.0952]$ entirely above $\delta = 0.01$ (classified **`better`**).
-2. **Forensic Residual Stream Advantage (Celeb-DF):**
-   - On Celeb-DF v2, `smsdt_full` achieves a positive **+1.78% ΔAUC** advantage over `smsdt_st` ($95\%\text{ CI: }[+0.0055, +0.0325]$), with the entire 95% confidence interval strictly greater than 0. This proves that raw pixel high-frequency residuals (SRM + Haar DWT) provide additional discriminative generalization signal on compressed web deepfakes.
+1. **In-House GenD Reproduction Baseline (Gate G1 Branch B):**
+   - On **FF++ c23 In-Domain**, `smsdt_full` outperforms `gend_ours` by **+5.82% ΔAUC** ($p < 0.0001$), with 95% CI $[+0.0422, +0.0733]$.
+   - On **Celeb-DF v2 Cross-Dataset**, `smsdt_full` outperforms `gend_ours` by **+5.88% ΔAUC** ($p < 0.001$), with 95% CI $[+0.0233, +0.0952]$. Under pre-registered Gate G1, this contrast serves as an internal recipe ablation; external comparison with published GenD awaits `gend_official`.
+2. **Forensic Residual Stream Trend (Celeb-DF):**
+   - On Celeb-DF v2, `smsdt_full` achieves a positive **+1.78% ΔAUC** point estimate over `smsdt_st` ($95\%\text{ CI: }[+0.0055, +0.0325]$). Because the lower CI bound is $0.0055 < \delta = 0.01$, the pre-registered equivalence criterion classifies this effect as `inconclusive` rather than confirmed.
 3. **In-Domain Statistical Equivalence:**
    - On FF++ c23, both comparisons (`smsdt_full` vs `smsdt_st` and `smsdt_st` vs `smsdt_s`) are classified as **`equivalent`** under the $\delta = 0.01$ margin, showing that all S-MSDT variants saturate in-domain discriminative capability equally well while diverging out-of-domain.
 4. **Pre-Registration & Equivalence Framing (per `docs/novelty_audit.md`):**
@@ -502,7 +502,7 @@ This audit evaluates the degradation gap $g = \text{HTER}(\tau_{\text{val}}) - \
 
 #### Scientific Findings & Pre-Registration Audit (H2):
 1. **Zero Threshold Catastrophe Across All 36 Conditions:** Across all 36 experimental evaluations (4 architectures × 3 seeds × 3 datasets documented in [`results/tables/threshold_transfer_audit.md`](file:///e:/DEEPFAKE/results/tables/threshold_transfer_audit.md)), the degradation gap $g$ strictly satisfies $g \le 0.0374$, well below the $\delta = 0.05$ (5.0%) threshold. Under the strict pre-registered statement of H2 (*"a validation-frozen threshold loses at least 0.05 HTER versus the per-dataset optimum"*), H2 is formally **falsified**: operating point transfer does not suffer catastrophic collapse.
-2. **Superior Generalization Efficiency:** Validation-frozen operating cutoffs preserve $\ge 96.3\%$ of optimal oracle performance across novel deepfake generators, unseen actors, and cross-compression domains.
+2. **Degradation Gap Below Threshold (H2 Falsified):** Validation-frozen operating cutoffs exhibit degradation gap $g \le 0.0374 \ll 0.05$, formally falsifying the pre-registered degradation hypothesis H2 and showing that errors stem from rank-order degradation rather than threshold catastrophe.
 3. **Small HTER Gaps Hide Large FPR Shifts (Audit Finding):** As identified in `docs/novelty_audit.md`, while HTER stays low, raw false-positive rate on unseen Celeb-DF reals ranges from 7.9% (S) to 22.5% (Full), while FNR falls. HTER averages the two and masks the shift. This provides the primary empirical motivation for the FPR-control extensions (H4 and H5 in `docs/decisions.md`).
 
 ---

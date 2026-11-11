@@ -137,8 +137,13 @@ class TTAAdapter:
             if x.ndim < 3:
                 raise ValueError("consistency objective needs x of shape (B, K, ...)")
             b, k = x.shape[:2]
-            out = self.model(x.reshape(b * k, *x.shape[2:]))
-            clip_logits = (out[0] if isinstance(out, tuple) else out).reshape(b, k)
+            x_flat = x.reshape(b * k, *x.shape[2:])
+            if prior is not None:
+                p_flat = prior.reshape(b * k, *prior.shape[2:])
+                out = self.model(x_flat, prior=p_flat)
+            else:
+                out = self.model(x_flat)
+            clip_logits = (out[0] if isinstance(out, (tuple, list)) else out).reshape(b, k)
             loss, _ = clip_consistency_loss(clip_logits, self.lambda_entropy, self.lambda_div)
             loss.backward()
             self.optimizer.step()

@@ -14,10 +14,10 @@ To evaluate cross-generator and cross-domain generalization, we deploy trained c
 \paragraph{Compared Model Architectures.}
 To conduct a strictly controlled ablation, we train four matched architectures under identical optimization recipes across three independent random seeds ($\{1, 2, 3\}$), totaling 12 complete training runs:
 \begin{itemize}[leftmargin=*]
-    \item \textbf{\texttt{gend\_ours}} ($T=1$): Official reproduction of the literature reference anchor \citep{gend2024} (CLIP ViT-L/14 with LayerNorm PEFT, linear probe, and spherical linear interpolation, $103{,}425$ trainable parameters).
+    \item \textbf{\texttt{gend\_ours}} ($T=1$): In-house reproduction of the GenD architecture \citep{gend2024} (CLIP ViT-L/14 with LayerNorm PEFT, linear probe, and spherical linear interpolation, $103{,}425$ trainable parameters). Under pre-registered Gate G1, this baseline serves as our internal ablation anchor; published GenD v3 numbers ($0.946$ on Celeb-DF v2, $0.964$ on DFD) reflect differences in recipe (cyclical learning rate, cross-dataset checkpoint selection, 32 frames).
     \item \textbf{\texttt{smsdt\_s}} ($T=1$): Controlled internal single-frame baseline matching S-MSDT's balanced loss and curriculum sampling ($103{,}425$ trainable parameters).
     \item \textbf{\texttt{smsdt\_st}} ($T=8$): Spatio-temporal transformer baseline with 2 NMSSS blocks and Top-$k$ linear readout ($8{,}467{,}462$ trainable parameters).
-    \item \textbf{\texttt{smsdt\_full}} ($T=8$): The flagship S-MSDTv3 model incorporating Dual SRM + Haar DWT residual streams and EvidenceReadoutV3 ($9{,}102{,}600$ trainable parameters).
+    \item \textbf{\texttt{smsdt\_full}} ($T=8$): The full S-MSDTv3 model incorporating Dual SRM + Haar DWT residual streams and EvidenceReadoutV3 ($9{,}102{,}600$ trainable parameters).
 \end{itemize}
 
 \paragraph{Evaluation Protocol.}
@@ -69,12 +69,12 @@ Following the pre-registered benchmark protocol, each test video is evaluated us
 \end{table}
 
 \subsection{Benchmark Analysis and Scientific Findings}
-\paragraph{Superiority Over Literature Reference Anchor.}
-As documented in Table~\ref{tab:aggregated_results}, S-MSDTv3 Full demonstrates decisive superiority over the reproduced GenD anchor. Across 3 seeds, S-MSDTv3 delivers an average in-domain improvement of $\mathbf{+5.82\%}$ AUC ($0.9626$ vs $0.9044$) and an average cross-dataset improvement of $\mathbf{+5.88\%}$ AUC on Celeb-DF v2 ($0.8882$ vs $0.8294$), reaching a peak single-run performance of $\mathbf{0.8960}$ AUC on Seed 2.
+\paragraph{Disentangling Optimization Recipe from Architecture.}
+A central empirical finding emerges when comparing the two single-frame models in Table~\ref{tab:aggregated_results}. Both \texttt{gend\_ours} and \texttt{smsdt\_s} utilize identical parameter counts ($103{,}425$ trainable LayerNorm and probe weights on CLIP ViT-L/14) and identical frame sampling ($T=1$). Yet \texttt{smsdt\_s} achieves a $+5.83\%$ in-domain AUC advantage on FF++ ($0.9627$ vs $0.9044$) and a $+5.32\%$ cross-dataset advantage on Celeb-DF v2 ($0.8826$ vs $0.8294$). This substantial delta, achieved without changing the parameter footprint, demonstrates that training recipe (loss balancing, curriculum scheduling, and gradient management) accounts for performance variations that prior literature frequently attributed to architectural innovation.
 
-\paragraph{Ultra-Low Seed Variance.}
-Across independent random seeds, the empirical variance of S-MSDTv3 Full is remarkably small ($\sigma = 0.0005$ on FF++ and $\sigma = 0.0098$ on Celeb-DF v2). This demonstrates that the observed performance gains are systematic architectural benefits rather than artifacts of stochastic weight initialization.
+\paragraph{Utility of Spatio-Temporal and Forensic Heads.}
+Contrasting single-frame tuning (\texttt{smsdt\_s}) with multi-frame spatio-temporal attention (\texttt{smsdt\_st}, $8.5\text{M}$ params) and full forensic residual streams (\texttt{smsdt\_full}, $9.1\text{M}$ params) reveals an unexpected empirical trend. On Celeb-DF v2, \texttt{smsdt\_full} obtains $0.8882$ AUC, representing a marginal $+0.0056$ AUC gain over \texttt{smsdt\_s} ($0.8826$), while \texttt{smsdt\_st} slightly declines to $0.8704$ ($-0.0122$). On DFD, \texttt{smsdt\_s} achieves the highest mean performance ($0.8841$), surpassing \texttt{smsdt\_st} ($0.8779$) and \texttt{smsdt\_full} ($0.8649$, $-0.0192$). Consequently, scaling trainable capacity by nearly two orders of magnitude ($103\text{K} \rightarrow 9.1\text{M}$) does not yield consistent generalization gains across unseen datasets, supporting the pre-registered hypothesis that additional heads do not reliably improve upon clean single-frame LayerNorm adaptation.
 
 \paragraph{Resolution of the NeuralTextures Hardness Gradient.}
-Analysis of the per-manipulation breakdown on FF++ test reveals that synthetic textures generated via NeuralTextures present the steepest challenge to forensic models. The single-frame GenD anchor achieves only $0.675 - 0.676$ AUC (with raw accuracy at threshold $0.5$ falling to $22.1\% - 25.0\%$). In contrast, S-MSDTv3 Full elevates NeuralTextures detection to $\mathbf{0.892 - 0.900}$ AUC (Accuracy@0.5: $66.4\% - 69.3\%$), confirming that high-frequency noise residuals expose subtle facial expression reenactments that evade semantic self-attention.
+Analysis of the per-manipulation breakdown on FF++ test reveals that synthetic textures generated via NeuralTextures present the steepest challenge to forensic models. The single-frame GenD reproduction achieves only $0.675 - 0.676$ AUC (with raw accuracy at threshold $0.5$ falling to $22.1\% - 25.0\%$). In contrast, S-MSDTv3 Full elevates NeuralTextures detection to $\mathbf{0.892 - 0.900}$ AUC (Accuracy@0.5: $66.4\% - 69.3\%$), confirming that high-frequency noise residuals expose subtle facial expression reenactments that evade semantic self-attention.
 

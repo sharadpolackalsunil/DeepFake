@@ -85,12 +85,45 @@ def run_tta_stream(
         prior = batch.get("prior", None)
         prior_flat = prior.to(device).view(B * K, T, -1) if prior is not None else None
 
-        # Autocast during forward and backward with memory-safe chunking
-        with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device.type == "cuda")):
-            logits, loss_val = adapter.adapt_batch(frames_flat, prior=prior_flat, max_chunk=4)
+        if adapter.objective == "consistency":
+            # For consistency, adapt_batch expects (B, K, ...) shaped frames
+            with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device.type == "cuda")):
+                video_logits, loss_val = adapter.adapt_batch(frames, prior=prior)
 
-        probs = torch.sigmoid(logits).view(B, K).float().cpu().numpy()
-        p_mean = probs.mean(axis=1)
+            if mode == "batch_episodic":
+                # Re-evaluate with adapted weights BEFORE resetting
+                with torch.no_grad():
+                    with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device.type == "cuda")):
+                        if is_v3 and prior_flat is not None:
+                            out_post = adapter.model(frames_flat, prior=prior_flat)
+                        else:
+                            out_post = adapter.model(frames_flat)
+                        post_logits = out_post[0] if isinstance(out_post, (tuple, list)) else out_post
+                probs = torch.sigmoid(post_logits).view(B, K).float().cpu().numpy()
+                p_mean = probs.mean(axis=1)
+                adapter.reset()
+            else:
+                p_mean = torch.sigmoid(video_logits).float().cpu().numpy()
+        else:
+            # entropy mode
+            with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device.type == "cuda")):
+                logits, loss_val = adapter.adapt_batch(frames_flat, prior=prior_flat, max_chunk=4)
+
+            if mode == "batch_episodic":
+                # Re-evaluate with adapted weights BEFORE resetting
+                with torch.no_grad():
+                    with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device.type == "cuda")):
+                        if is_v3 and prior_flat is not None:
+                            out_post = adapter.model(frames_flat, prior=prior_flat)
+                        else:
+                            out_post = adapter.model(frames_flat)
+                        post_logits = out_post[0] if isinstance(out_post, (tuple, list)) else out_post
+                probs = torch.sigmoid(post_logits).view(B, K).float().cpu().numpy()
+                p_mean = probs.mean(axis=1)
+                adapter.reset()
+            else:
+                probs = torch.sigmoid(logits).view(B, K).float().cpu().numpy()
+                p_mean = probs.mean(axis=1)
 
         video_scores.extend(p_mean.tolist())
         video_labels.extend(batch["label"].cpu().numpy().tolist())
@@ -98,10 +131,7 @@ def run_tta_stream(
 
         if (batch_idx + 1) % 25 == 0 or (batch_idx + 1) == total_batches:
             curr_entropy = float(np.mean(batch_losses[-25:]))
-            print(f"  [{mode.upper()}] Step {batch_idx + 1}/{total_batches} ({((batch_idx + 1)/total_batches)*100:.1f}%) | Entropy Loss: {curr_entropy:.4f}")
-
-        if mode == "batch_episodic":
-            adapter.reset()
+            print(f"  [{mode.upper()}] Step {batch_idx + 1}/{total_batches} ({((batch_idx + 1)/total_batches)*100:.1f}%) | Loss: {curr_entropy:.4f}")
 
     # Final reset to restore source state
     adapter.reset()
@@ -138,6 +168,8 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-4, help="TTA LayerNorm learning rate (default 1e-4)")
     parser.add_argument("--mode", type=str, default="both", choices=["online", "batch_episodic", "both"],
                         help="TTA mode: online, batch_episodic, or both")
+    parser.add_argument("--objective", type=str, default="entropy", choices=["entropy", "consistency"],
+                        help="TTA objective: entropy (H3b) or consistency (H6)")
     parser.add_argument("--output-csv", type=str, default="results/tables/tta_summary.csv")
     parser.add_argument("--output-md", type=str, default="results/tables/tta_summary.md")
     args = parser.parse_args()
@@ -181,8 +213,9 @@ def main():
     pre_auc, static_scores, static_labels = evaluate_static(model, loader, device, is_v3)
     print(f"  * Static Pre-TTA Video AUC: {pre_auc:.4f}")
 
-    adapter = TTAAdapter(model=model, lr=args.lr, mode="online")
+    adapter = TTAAdapter(model=model, lr=args.lr, mode="online", objective=args.objective)
     print(f"  * Active LayerNorm adaptation parameters: {len(adapter.ln_params)} tensors")
+    print(f"  * TTA Objective: {args.objective}")
 
     modes_to_test = ["online", "batch_episodic"] if args.mode == "both" else [args.mode]
     results_list = []
@@ -195,7 +228,7 @@ def main():
         run_identifier = os.path.splitext(os.path.basename(args.ckpt))[0]
 
     for mode in modes_to_test:
-        print(f"\n--- Running TTA ({mode.upper()}) ---")
+        print(f"\n--- Running TTA ({mode.upper()} | {args.objective.upper()}) ---")
         tta_res = run_tta_stream(adapter, loader, device, is_v3, mode=mode)
         post_auc = tta_res["post_auc"]
         delta_auc = post_auc - pre_auc
@@ -218,6 +251,7 @@ def main():
             "Model": run_identifier,
             "Dataset": args.dataset_name,
             "Mode": mode,
+            "Objective": args.objective,
             "Pre_AUC": round(pre_auc, 4),
             "Post_AUC": round(post_auc, 4),
             "Delta_AUC": round(delta_auc, 4),
@@ -233,8 +267,11 @@ def main():
 
     if os.path.exists(args.output_csv):
         existing_df = pd.read_csv(args.output_csv)
+        if "Objective" not in existing_df.columns:
+            existing_df["Objective"] = "entropy"
+        dedup_cols = ["Model", "Dataset", "Mode", "Objective"]
         combined_df = pd.concat([existing_df, df], ignore_index=True).drop_duplicates(
-            subset=["Model", "Dataset", "Mode"], keep="last"
+            subset=dedup_cols, keep="last"
         )
     else:
         combined_df = df

@@ -42,27 +42,27 @@ DFD      & \texttt{smsdt\_s}    & \texttt{gend\_ours} & 0.8841 & 0.8785 & +0.005
 \paragraph{Statistical Conclusions (H1).}
 As detailed in Table~\ref{tab:h1_bootstrap}:
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Decisive Foundation Superiority:} On both FF++ and Celeb-DF v2, the 95\% confidence interval for $\Delta\text{AUC}(\texttt{smsdt\_full} - \texttt{gend\_ours})$ lies strictly above the pre-registered $+0.01$ margin ($[+0.0422, +0.0733]$ and $[+0.0233, +0.0952]$), confirming statistically significant superiority over the GenD literature anchor.
-    \item \textbf{Residual Stream Contribution:} Comparing \texttt{smsdt\_full} against \texttt{smsdt\_st} on Celeb-DF v2 yields $\Delta\text{AUC} = \mathbf{+0.0178}$ with a 95\% CI of $[+0.0055, +0.0325]$. Because the lower bound is strictly positive, the inclusion of raw-pixel high-frequency residuals (SRM and Haar DWT) provides a statistically verified generalization benefit on compressed out-of-domain videos.
-    \item \textbf{In-Domain Saturation Parity:} On in-domain FF++ c23, both comparisons between our proposed variants are classified as \textbf{\texttt{equivalent}} ($[-0.0059, +0.0053]$), proving that representations remain stable without sacrificing in-domain capacity.
+    \item \textbf{Heads Do Not Reliably Help (H1 Supported):} The pre-registered confirmatory comparison tests whether adding temporal attention (\texttt{smsdt\_st}) or full forensic residual streams (\texttt{smsdt\_full}) outperforms single-frame LayerNorm tuning (\texttt{smsdt\_s}) by $\delta = 0.01$. On in-domain FF++, \texttt{smsdt\_st} vs \texttt{smsdt\_s} is strictly \textbf{\texttt{equivalent}} ($[-0.0066, +0.0073]$). Out-of-domain on Celeb-DF v2 and DFD, the point estimates are negative ($-0.0122$ and $-0.0061$, both inconclusive), demonstrating that extra temporal heads do not provide a statistically reliable generalization advantage over single-frame PEFT.
+    \item \textbf{Exploratory Trend for High-Frequency Residuals:} Comparing \texttt{smsdt\_full} against \texttt{smsdt\_st} on Celeb-DF v2 yields $\Delta\text{AUC} = \mathbf{+0.0178}$ with a 95\% CI of $[+0.0055, +0.0325]$. While the lower bound is strictly positive ($>0$), because $\text{ci\_lower} = 0.0055 < \delta = 0.01$, the pre-registered equivalence criterion classifies this effect as inconclusive rather than confirmatory.
+    \item \textbf{Recipe vs. Architecture Disentanglement (Gate G1 Branch B):} The comparison between \texttt{smsdt\_full} and \texttt{gend\_ours} shows a substantial delta ($+0.0582$ on FF++, $+0.0588$ on Celeb-DF v2). Under pre-registered Gate G1, because our in-house GenD reproduction underperformed published figures ($0.829$ vs $0.946$), this contrast serves as an internal ablation highlighting the critical role of optimization recipe and loss formulation under identical pretrained backbones.
 \end{enumerate}
 
 \subsection{Hypothesis H2: Operating Point Transfer and Degradation Gap $g$}
 \paragraph{Formulation.}
-When deploying a deepfake detector, the decision threshold $\tau_{\text{val}}$ must be fixed prior to deployment (e.g., via Youden's $J$ statistic on validation data). Hypothesis H2 pre-registers that the operating point degradation gap:
+When deploying a deepfake detector, the decision threshold $\tau_{\text{val}}$ must be fixed prior to deployment (e.g., via Youden's $J$ statistic on validation data). Hypothesis H2 pre-registered that validation-frozen operating cutoffs would experience catastrophic operating point failure under cross-dataset domain shift, formulated as a degradation gap:
 \begin{equation}
-g = \text{HTER}(\tau_{\text{val}}) - \min_{\tau} \text{HTER}(\tau) < 0.05
+g = \text{HTER}(\tau_{\text{val}}) - \min_{\tau} \text{HTER}(\tau) \ge 0.05
 \end{equation}
-must remain strictly below $5.0\%$ across all unseen evaluation datasets, precluding catastrophic operating point collapse.
+exceeding 5.0\% HTER on unseen evaluation datasets.
 
-\paragraph{Audit Results.}
-As reported across all individual runs in Table~\ref{tab:master_matrix}, the empirical gap satisfies the safety bound across every single condition:
+\paragraph{Audit Results (H2 Falsified).}
+As reported across all individual runs in Table~\ref{tab:master_matrix}, the empirical degradation gap remains uniformly small across all 36 evaluated conditions:
 \begin{itemize}[leftmargin=*]
     \item In-domain FF++: $g \in [0.0000, 0.0121]$ (average $0.0061$).
     \item Cross-dataset Celeb-DF v2: $g \in [0.0029, 0.0374]$ (average $0.0118$).
     \item Cross-dataset DFD: $g \in [0.0003, 0.0173]$ (average $0.0053$).
 \end{itemize}
-In every evaluation, $g \ll 0.05$, validating Hypothesis H2 and proving that validation-frozen operating cutoffs preserve $\ge 96.3\%$ of oracle test performance under substantial domain shifts.
+Because $g \le 0.0374 \ll 0.05$ across every condition, Hypothesis H2 is formally \textbf{falsified}. This falsification delivers an important scientific insight: cross-dataset operational errors are not primarily driven by threshold miscalibration ($g$ is negligible), but rather by rank-order score overlap and false positive rate inflation on authentic out-of-domain faces.
 
 \subsection{Hypothesis H3: Operational Prior Shift and Saerens EM Correction}
 \paragraph{Formulation.}
