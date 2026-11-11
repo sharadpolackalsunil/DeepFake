@@ -77,16 +77,17 @@ def run_tta_stream(
     video_scores, video_labels = [], []
     batch_losses = []
 
-    for batch in loader:
+    total_batches = len(loader)
+    for batch_idx, batch in enumerate(loader):
         frames = batch["frames"].to(device)  # (B, K, T, C, H, W)
         B, K, T, C, H, W = frames.shape
         frames_flat = frames.view(B * K, T, C, H, W)
         prior = batch.get("prior", None)
         prior_flat = prior.to(device).view(B * K, T, -1) if prior is not None else None
 
-        # Autocast during forward and backward
+        # Autocast during forward and backward with memory-safe chunking
         with torch.autocast("cuda", dtype=torch.bfloat16, enabled=(device.type == "cuda")):
-            logits, loss_val = adapter.adapt_batch(frames_flat, prior=prior_flat)
+            logits, loss_val = adapter.adapt_batch(frames_flat, prior=prior_flat, max_chunk=4)
 
         probs = torch.sigmoid(logits).view(B, K).float().cpu().numpy()
         p_mean = probs.mean(axis=1)
@@ -94,6 +95,10 @@ def run_tta_stream(
         video_scores.extend(p_mean.tolist())
         video_labels.extend(batch["label"].cpu().numpy().tolist())
         batch_losses.append(loss_val)
+
+        if (batch_idx + 1) % 25 == 0 or (batch_idx + 1) == total_batches:
+            curr_entropy = float(np.mean(batch_losses[-25:]))
+            print(f"  [{mode.upper()}] Step {batch_idx + 1}/{total_batches} ({((batch_idx + 1)/total_batches)*100:.1f}%) | Entropy Loss: {curr_entropy:.4f}")
 
         if mode == "batch_episodic":
             adapter.reset()
@@ -127,9 +132,9 @@ def main():
     parser.add_argument("--split", type=str, default="test", help="Dataset split")
     parser.add_argument("--dataset-name", type=str, default="Celeb-DF-v2", help="Dataset display name")
     parser.add_argument("--methods", nargs="*", default=None, help="Optional subset of methods")
-    parser.add_argument("--K", type=int, default=8, help="Clips per video (default 8)")
+    parser.add_argument("--K", type=int, default=4, help="Clips per video (default 4)")
     parser.add_argument("--T", type=int, default=None, help="Frames per clip (auto-detected if None)")
-    parser.add_argument("--batch-size", type=int, default=8, help="Test batch size (videos per step)")
+    parser.add_argument("--batch-size", type=int, default=2, help="Test batch size (videos per step, default 2)")
     parser.add_argument("--lr", type=float, default=1e-4, help="TTA LayerNorm learning rate (default 1e-4)")
     parser.add_argument("--mode", type=str, default="both", choices=["online", "batch_episodic", "both"],
                         help="TTA mode: online, batch_episodic, or both")
