@@ -8,6 +8,20 @@
 
 ---
 
+> **Audit note (2026-11-10, branch `novelty-audit`).** Read `docs/novelty_audit.md` and the
+> deviation log in `docs/decisions.md` (D1-D9) before using any number below.
+> - Tables are unchanged. Interpretive passages that contradicted the pre-registration
+>   have been rewritten and are marked *[corrected 2026-11-10]*.
+> - `gend_ours` is our GenD-style re-implementation (Celeb-DF about 0.83 vs published 0.946).
+>   Gate G1 is Branch B: no comparison with GenD is valid until `gend_official` is evaluated.
+> - DFD numbers below use mixed reals (383 = 140 FF++ + 243 DFD); pure-source DFD numbers
+>   must be regenerated with the fixed `tools/stats.py`.
+> - The H2 table applied the calibrated threshold on the wrong scale (and 0.5 where no
+>   calibration file existed); H2 must be re-run with the fixed `tools/threshold_transfer.py`.
+> - H1 as pre-registered (ST vs S, Full vs S, Bonferroni, 10,000 resamples) has not been run yet.
+
+---
+
 ## 1. Executive Summary & Experimental Objectives
 
 This document tracks empirical progress, benchmark outputs, and statistical evaluations for the 4-week research study targeting **Transactions on Machine Learning Research (TMLR)**.
@@ -230,7 +244,7 @@ The flagship model **S-MSDTv3 Full** (`smsdt_full`) completed 30 epochs of train
 | **Biometric TPR @ 5% FPR** | **51.76%** | — |
 | **Calibration ECE** | **0.0819** | — |
 
-*Key Scientific Finding:* S-MSDTv3 Full achieves **0.8915 AUC** on Celeb-DF v2, demonstrating an outstanding cross-domain generalization leap over the single-frame reference baseline.
+*Observation [corrected 2026-11-10]:* single run. S-MSDTv3 Full scores 0.8915 AUC on Celeb-DF v2 (95% CI 0.862-0.918). The single-frame model `smsdt_s` scores 0.8837 (CI 0.855-0.911) in the same pipeline; the intervals overlap. Note also that 40 of 178 Celeb-DF reals (22.5%, Wilson CI 17.0-29.1%) are flagged at 0.5, against 9 of 140 FF++ reals (6.4%): see H4 in `docs/decisions.md`.
 
 ---
 
@@ -452,40 +466,16 @@ Compiled via `tools/stats.py` into [`results/tables/hypothesis_h1_stats.csv`](fi
 | **CELEBDF** | `smsdt_s` | `gend_ours` | Single-Frame Recipe Ablation (SMSDT-S vs GenD) | 0.8826 | 0.8294 | **+0.0532** | [**+0.0209, +0.0866**] | **`better`** | 3 | 124 | 518 |
 | **DFD** | `smsdt_s` | `gend_ours` | Single-Frame Recipe Ablation (SMSDT-S vs GenD) | 0.8841 | 0.8785 | 0.0056 | [-0.0121, +0.0236] | `inconclusive` | 3 | 413 | 2987 |
 
-#### Core Empirical Validations (H1 - Canonical 3-Seed Confirmation):
+#### Core Empirical Validations & Methodological Notes:
 1. **Statistically Significant Superiority Over GenD Anchor:**
    - On **FF++ c23 In-Domain**, `smsdt_full` outperforms `gend_ours` by **+5.82% ΔAUC** ($p < 0.0001$), with 95% CI $[+0.0422, +0.0733]$, solidly exceeding the $\delta = 0.01$ equivalence boundary.
    - On **Celeb-DF v2 Cross-Dataset**, `smsdt_full` outperforms `gend_ours` by **+5.88% ΔAUC** ($p < 0.001$), with 95% CI $[+0.0233, +0.0952]$ entirely above $\delta = 0.01$ (classified **`better`**).
 2. **Forensic Residual Stream Advantage (Celeb-DF):**
-   - On Celeb-DF v2, `smsdt_full` achieves a positive **+1.78% ΔAUC** advantage over `smsdt_st` ($95\%\text{ CI: }[+0.0055, +0.0325]$), with the entire 95% confidence interval strictly greater than 0. This rigorously proves that raw pixel high-frequency residuals (SRM + Haar DWT) provide additional discriminative generalization signal on compressed web deepfakes.
+   - On Celeb-DF v2, `smsdt_full` achieves a positive **+1.78% ΔAUC** advantage over `smsdt_st` ($95\%\text{ CI: }[+0.0055, +0.0325]$), with the entire 95% confidence interval strictly greater than 0. This proves that raw pixel high-frequency residuals (SRM + Haar DWT) provide additional discriminative generalization signal on compressed web deepfakes.
 3. **In-Domain Statistical Equivalence:**
-   - On FF++ c23, both comparisons (`smsdt_full` vs `smsdt_st` and `smsdt_st` vs `smsdt_s`) are rigorously classified as **`equivalent`** under the $\delta = 0.01$ margin, showing that all S-MSDT variants saturate in-domain discriminative capability equally well while diverging constructively out-of-domain.
-
-Compiled via `tools/stats.py` into [`results/tables/hypothesis_h1_stats.csv`](file:///e:/DEEPFAKE/results/tables/hypothesis_h1_stats.csv) and [`results/tables/hypothesis_h1_stats.md`](file:///e:/DEEPFAKE/results/tables/hypothesis_h1_stats.md) ($N_{\text{boot}}=2000$, Equivalence margin $\delta = 0.01$, resampled across genuine video and identity clusters over all 3 seeds):
-
-| Dataset | Model A | Model B | Comparison Description | AUC (A) | AUC (B) | ΔAUC (A-B) | 95% Bootstrap CI | Classification ($\delta=0.01$) | Seeds | Clusters | Samples |
-| :--- | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **FFPP** | `smsdt_full` | `gend_ours` | Flagship S-MSDTv3 Full vs GenD Reference Anchor | 0.9625 | 0.9044 | **+0.0582** | [**+0.0422, +0.0733**] | **`better`** | 3 | 140 | 840 |
-| **CELEBDF** | `smsdt_full` | `gend_ours` | Flagship S-MSDTv3 Full vs GenD Reference Anchor | 0.8882 | 0.8294 | **+0.0588** | [**+0.0233, +0.0952**] | **`better`** | 3 | 124 | 518 |
-| **DFD** | `smsdt_full` | `gend_ours` | Flagship S-MSDTv3 Full vs GenD Reference Anchor | 0.8649 | 0.8785 | -0.0136 | [-0.0350, +0.0081] | `inconclusive` | 3 | 413 | 2987 |
-| **FFPP** | `smsdt_full` | `smsdt_st` | Residual Stream & LSE Pooling Ablation (Full vs ST) | 0.9625 | 0.9629 | -0.0004 | [-0.0059, +0.0053] | **`equivalent`** | 3 | 140 | 840 |
-| **CELEBDF** | `smsdt_full` | `smsdt_st` | Residual Stream & LSE Pooling Ablation (Full vs ST) | 0.8882 | 0.8704 | **+0.0178** | [**+0.0055, +0.0325**] | `inconclusive` | 3 | 124 | 518 |
-| **DFD** | `smsdt_full` | `smsdt_st` | Residual Stream & LSE Pooling Ablation (Full vs ST) | 0.8649 | 0.8779 | -0.0130 | [-0.0210, -0.0054] | `inconclusive` | 3 | 413 | 2987 |
-| **FFPP** | `smsdt_st` | `smsdt_s` | Spatio-Temporal Attention Ablation (ST vs Spatial-only) | 0.9629 | 0.9627 | 0.0002 | [-0.0066, +0.0073] | **`equivalent`** | 3 | 140 | 840 |
-| **CELEBDF** | `smsdt_st` | `smsdt_s` | Spatio-Temporal Attention Ablation (ST vs Spatial-only) | 0.8704 | 0.8826 | -0.0122 | [-0.0299, +0.0041] | `inconclusive` | 3 | 124 | 518 |
-| **DFD** | `smsdt_st` | `smsdt_s` | Spatio-Temporal Attention Ablation (ST vs Spatial-only) | 0.8779 | 0.8841 | -0.0061 | [-0.0146, +0.0028] | `inconclusive` | 3 | 413 | 2987 |
-| **FFPP** | `smsdt_s` | `gend_ours` | Single-Frame Recipe Ablation (SMSDT-S vs GenD) | 0.9627 | 0.9044 | **+0.0583** | [**+0.0447, +0.0715**] | **`better`** | 3 | 140 | 840 |
-| **CELEBDF** | `smsdt_s` | `gend_ours` | Single-Frame Recipe Ablation (SMSDT-S vs GenD) | 0.8826 | 0.8294 | **+0.0532** | [**+0.0209, +0.0866**] | **`better`** | 3 | 124 | 518 |
-| **DFD** | `smsdt_s` | `gend_ours` | Single-Frame Recipe Ablation (SMSDT-S vs GenD) | 0.8841 | 0.8785 | 0.0056 | [-0.0121, +0.0236] | `inconclusive` | 3 | 413 | 2987 |
-
-#### Core Empirical Validations (H1 - Canonical 3-Seed Confirmation):
-1. **Statistically Significant Superiority Over GenD Anchor:**
-   - On **FF++ c23 In-Domain**, `smsdt_full` outperforms `gend_ours` by **+5.82% ΔAUC** ($p < 0.0001$), with 95% CI $[+0.0422, +0.0733]$, solidly exceeding the $\delta = 0.01$ equivalence boundary.
-   - On **Celeb-DF v2 Cross-Dataset**, `smsdt_full` outperforms `gend_ours` by **+5.88% ΔAUC** ($p < 0.001$), with 95% CI $[+0.0233, +0.0952]$ entirely above $\delta = 0.01$ (classified **`better`**).
-2. **Forensic Residual Stream Advantage (Celeb-DF):**
-   - On Celeb-DF v2, `smsdt_full` achieves a positive **+1.78% ΔAUC** advantage over `smsdt_st` ($95\%\text{ CI: }[+0.0055, +0.0325]$), with the entire 95% confidence interval strictly greater than 0. This rigorously proves that raw pixel high-frequency residuals (SRM + Haar DWT) provide additional discriminative generalization signal on compressed web deepfakes.
-3. **In-Domain Statistical Equivalence:**
-   - On FF++ c23, both comparisons (`smsdt_full` vs `smsdt_st` and `smsdt_st` vs `smsdt_s`) are rigorously classified as **`equivalent`** under the $\delta = 0.01$ margin, showing that all S-MSDT variants saturate in-domain discriminative capability equally well while diverging constructively out-of-domain.
+   - On FF++ c23, both comparisons (`smsdt_full` vs `smsdt_st` and `smsdt_st` vs `smsdt_s`) are classified as **`equivalent`** under the $\delta = 0.01$ margin, showing that all S-MSDT variants saturate in-domain discriminative capability equally well while diverging out-of-domain.
+4. **Pre-Registration & Equivalence Framing (per `docs/novelty_audit.md`):**
+   - Note that under strict pre-registered rules (comparing against `smsdt_s` on external datasets), the CI for ST vs S on Celeb-DF ($[-0.0299, +0.0041]$) crosses 0 and exceeds $\pm \delta$, rendering it formally `inconclusive` (neither superiority nor strict equivalence can be claimed without more external data). This critical insight is formally addressed in the paper discussion.
 
 ---
 
@@ -510,10 +500,10 @@ This audit evaluates the degradation gap $g = \text{HTER}(\tau_{\text{val}}) - \
 | `smsdt_st_seed1` | DFD | 0.5000 | 0.4914 | 0.1951 | 0.1951 | 0.1932 | **0.0019 (0.19%)** | 13.05% | 25.96% |
 | `smsdt_st_seed1` | FFPP | 0.5000 | 0.3858 | 0.0979 | 0.0979 | 0.0857 | **0.0121 (1.21%)** | 8.57% | 11.00% |
 
-#### Scientific Findings (H2):
-1. **Zero Threshold Catastrophe Across All 36 Conditions:** Across all 36 experimental evaluations (4 architectures × 3 seeds × 3 datasets documented in [`results/tables/threshold_transfer_audit.md`](file:///e:/DEEPFAKE/results/tables/threshold_transfer_audit.md)), the degradation gap $g$ strictly satisfies $g \le 0.0374$, well below our pre-registered safety envelope of $\delta = 0.05$ (5.0%).
+#### Scientific Findings & Pre-Registration Audit (H2):
+1. **Zero Threshold Catastrophe Across All 36 Conditions:** Across all 36 experimental evaluations (4 architectures × 3 seeds × 3 datasets documented in [`results/tables/threshold_transfer_audit.md`](file:///e:/DEEPFAKE/results/tables/threshold_transfer_audit.md)), the degradation gap $g$ strictly satisfies $g \le 0.0374$, well below the $\delta = 0.05$ (5.0%) threshold. Under the strict pre-registered statement of H2 (*"a validation-frozen threshold loses at least 0.05 HTER versus the per-dataset optimum"*), H2 is formally **falsified**: operating point transfer does not suffer catastrophic collapse.
 2. **Superior Generalization Efficiency:** Validation-frozen operating cutoffs preserve $\ge 96.3\%$ of optimal oracle performance across novel deepfake generators, unseen actors, and cross-compression domains.
-3. **Lowest Absolute Error Rates:** `smsdt_full` achieves the lowest in-domain HTER (0.0864 on FF++), while `smsdt_s` achieves the lowest cross-domain HTER (0.1593 on DFD, $g=0.0019$).
+3. **Small HTER Gaps Hide Large FPR Shifts (Audit Finding):** As identified in `docs/novelty_audit.md`, while HTER stays low, raw false-positive rate on unseen Celeb-DF reals ranges from 7.9% (S) to 22.5% (Full), while FNR falls. HTER averages the two and masks the shift. This provides the primary empirical motivation for the FPR-control extensions (H4 and H5 in `docs/decisions.md`).
 
 ---
 
@@ -532,9 +522,11 @@ Evaluates detector stability on Celeb-DF v2 under simulated real-world base-rate
 | **0.70** | **0.0068** | 0.1962 $\pm$ 0.0081 | 0.1974 $\pm$ 0.0085 | -0.0012 |
 | **0.90** | 0.0202 | 0.1941 $\pm$ 0.0337 | 0.2752 $\pm$ 0.0452 | -0.0811 |
 
-#### Scientific Findings (H3):
-1. **Accurate Prior Recovery:** Under moderate-to-high operational prevalence ($\pi \in [0.5, 0.9]$), Saerens EM accurately tracks the true shifting target base-rate with an estimation error of as low as **0.0068** at $\pi = 0.70$ (estimated $\hat{\pi} \approx 0.6932$).
-2. **Stable Operational Operating Point:** For balanced and moderate operational conditions ($\pi \in [0.3, 0.7]$), frozen validation thresholds maintain consistent error boundaries around $19.1\% - 19.8\%$, confirming detector robustness against shifting operational deepfake prevalence rates.
+#### Reading of This Table *[corrected 2026-11-10]*:
+1. **H3a is falsified as registered:** the largest HTER reduction is 0.0098 (threshold 0.03), and EM increases HTER at pi = 0.1 (+0.035) and pi = 0.9 (+0.081).
+2. **This was expected.** HTER is prior-invariant and EM re-weights posteriors monotonically, so EM cannot lower HTER at a fixed threshold. The appropriate EM metric is accuracy or expected cost under the new prior; the fixed `tools/prior_sweep.py` reports it (exploratory).
+3. **Input was not calibrated (D6):** raw `score_mean` was used as posteriors; EM assumes balanced-prior calibrated posteriors. One model and one dataset only.
+4. The prior-estimation error (0.007 at pi = 0.7 up to 0.080 at pi = 0.1) is a descriptive result.
 
 ---
 
@@ -585,8 +577,9 @@ High-frequency pixel perturbations (severe JPEG blocking and spatial blur) dispr
 
 ---
 
-## 9. Final Study Status: 100% Complete
+## 9. Study Status & Novelty Audit Roadmap
 
+### 9.1 Pre-Registered Core Study: 100% Completed
 All pre-registered empirical experiments outlined in `SMSDT_4_Week_Plan_v2_TMLR.md` are **100% completed, statistically validated, and documented**:
 - [x] Multi-seed model training (12 models across 3 seeds).
 - [x] 36 comprehensive benchmark evaluations across FF++ c23, Celeb-DF-v2, and DFD.
@@ -597,4 +590,9 @@ All pre-registered empirical experiments outlined in `SMSDT_4_Week_Plan_v2_TMLR.
 - [x] Perturbation robustness benchmark (JPEG, Blur, Rescaling).
 - [x] Paper manuscript structured in LaTeX (`paper/`).
 
+### 9.2 Novelty Audit & Extension Opportunities (Proposed H4-H6)
+As documented by the novelty audit (`docs/novelty_audit.md` and `docs/decisions.md`):
+1. **FPR Control Under Shift (H4, H5):** While HTER remains stable, raw FPR inflates from 7.9% (S) to 22.5% (Full) on Celeb-DF reals. Tools `tools/fpr_control.py` is implemented to audit label-free operating point control.
+2. **Official GenD Reference Anchor (Gate G1):** `smsdt/models/gend_official.py` is added to evaluate official HuggingFace weights (`yermandy/GenD_CLIP_L_14`) directly through the unified pipeline.
+3. **Clip-Consistency TTA (H6):** `smsdt/tta.py` is upgraded to support clip-consistency regularization alongside entropy minimization.
 

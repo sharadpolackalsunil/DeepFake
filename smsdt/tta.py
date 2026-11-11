@@ -6,6 +6,10 @@ Implements:
 3. Deterministic state reset guaranteeing bit-identical parameters between datasets
 4. Explicit collapse detection (AUC drop > 0.03 or degenerate majority prediction > 95%)
 5. Saerens-style Expectation-Maximization prior shift correction
+6. Clip-consistency objective (hypothesis H6, docs/decisions.md): the K clips of one
+   video share one label, so their logits should agree. This is a label-free signal that
+   single-image TTA does not have. Loss = Var_k(clip logits) + lambda_e * H(video prob)
+   - lambda_d * H(batch-mean prob). Entropy-only (pre-registered H3b) stays the default.
 """
 import copy
 import math
@@ -44,6 +48,37 @@ def binary_entropy_loss(logits: torch.Tensor, eps: float = 1e-7) -> torch.Tensor
     return entropy.mean()
 
 
+def clip_consistency_loss(
+    clip_logits: torch.Tensor,
+    lambda_entropy: float = 1.0,
+    lambda_div: float = 0.1,
+    eps: float = 1e-7,
+) -> Tuple[torch.Tensor, Dict[str, float]]:
+    """Label-free loss for a batch of videos, each scored as K clips.
+
+    Args:
+        clip_logits: (B, K) clip logits for B videos
+        lambda_entropy: weight of the video-level prediction entropy
+        lambda_div: weight of the anti-collapse term (maximise the entropy of the
+            batch-mean prediction). Note it pulls the batch towards 50% fake; keep it small
+            and report the lambda_div = 0 ablation.
+
+    Returns:
+        (loss, parts) where parts are the float values of each term.
+    """
+    if clip_logits.ndim != 2:
+        raise ValueError(f"clip_logits must be (B, K), got {tuple(clip_logits.shape)}")
+    consist = clip_logits.var(dim=1, unbiased=False).mean() if clip_logits.shape[1] > 1 else clip_logits.new_zeros(())
+    video_logit = clip_logits.mean(dim=1)
+    p = torch.sigmoid(video_logit).clamp(eps, 1 - eps)
+    ent = -(p * torch.log(p) + (1 - p) * torch.log(1 - p)).mean()
+    pm = p.mean().clamp(eps, 1 - eps)
+    marg_ent = -(pm * torch.log(pm) + (1 - pm) * torch.log(1 - pm))
+    loss = consist + lambda_entropy * ent - lambda_div * marg_ent
+    return loss, {"consistency": float(consist.detach()), "entropy": float(ent.detach()),
+                  "marginal_entropy": float(marg_ent.detach())}
+
+
 class TTAAdapter:
     """Manages test-time adaptation across evaluation datasets with strict reset guarantees."""
 
@@ -53,7 +88,10 @@ class TTAAdapter:
         lr: float = 1e-4,
         mode: str = "online",
         batch_size: int = 32,
-        seed: int = 42
+        seed: int = 42,
+        objective: str = "entropy",
+        lambda_entropy: float = 1.0,
+        lambda_div: float = 0.1,
     ):
         """
         Args:
@@ -64,6 +102,10 @@ class TTAAdapter:
             seed: Deterministic RNG seed for stream ordering
         """
         assert mode in ["online", "batch_episodic"], f"Unknown mode: {mode}"
+        assert objective in ["entropy", "consistency"], f"Unknown objective: {objective}"
+        self.objective = objective
+        self.lambda_entropy = lambda_entropy
+        self.lambda_div = lambda_div
         self.model = model
         self.lr = lr
         self.mode = mode
@@ -82,15 +124,25 @@ class TTAAdapter:
         self.optimizer = torch.optim.Adam(self.ln_params, lr=self.lr)
 
     def adapt_batch(self, x: torch.Tensor, prior: Optional[torch.Tensor] = None, max_chunk: int = 4) -> Tuple[torch.Tensor, float]:
-        """Perform one step of entropy minimization on unlabeled test batch with memory-safe sub-chunking.
-        
-        Args:
-            x: Tensor of shape (N, T, C, H, W) where N = B * K clips
-            prior: Optional soft prior tensor of shape (N, T, ...)
-            max_chunk: Maximum number of clips to pass through autograd simultaneously (prevents CUDA OOM)
+        """Perform one adaptation step on an unlabeled test batch.
+
+        entropy:     x is whatever the model takes; loss = mean binary entropy.
+        consistency: x is (B, K, ...) = K clips per video; the model is run on the
+                     (B*K, ...) clips; returns video logits (B,) = mean over clips.
         """
         self.model.eval()
         self.optimizer.zero_grad()
+
+        if self.objective == "consistency":
+            if x.ndim < 3:
+                raise ValueError("consistency objective needs x of shape (B, K, ...)")
+            b, k = x.shape[:2]
+            out = self.model(x.reshape(b * k, *x.shape[2:]))
+            clip_logits = (out[0] if isinstance(out, tuple) else out).reshape(b, k)
+            loss, _ = clip_consistency_loss(clip_logits, self.lambda_entropy, self.lambda_div)
+            loss.backward()
+            self.optimizer.step()
+            return clip_logits.detach().mean(dim=1), float(loss.item())
         
         N = x.size(0)
         if N <= max_chunk:
@@ -186,7 +238,8 @@ class TTAAdapter:
             "auc_drop_collapse": bool(auc_drop),
             "degenerate_collapse": bool(degenerate),
             "collapsed": collapsed,
-            "mode": self.mode
+            "mode": self.mode,
+            "objective": self.objective,
         }
 
 
