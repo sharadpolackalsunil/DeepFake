@@ -110,6 +110,17 @@ def test_eval_clip_dataset_dfd_isolation():
     assert "DeepFakeDetection" not in ffpp_counts
     assert "DFD" not in ffpp_counts
 
+    # Explicit "real" in methods must still isolate DFD actor reals on test and val splits
+    for sp in ("test", "val"):
+        ds_explicit = EvalClipDataset(
+            index_csv="data/splits/index.csv",
+            store_root="data/store",
+            split=sp,
+            methods=["real", "Deepfakes", "Face2Face", "FaceSwap", "NeuralTextures", "FaceShifter"],
+        )
+        assert len(ds_explicit) == 840
+        assert not any(str(r.get("video_id", "")).startswith("dfd_") for r in ds_explicit.rows)
+
 
 if __name__ == "__main__":
     print("Running Phase 3 tests directly...")

@@ -299,11 +299,12 @@ class EvalClipDataset(Dataset):
                 m = r["method"]
                 vid = r.get("video_id", "")
                 tid = r.get("target_id", "")
-                if m in norm_methods:
-                    filtered.append(r)
-                elif m == "real":
+                if m == "real":
+                    # Keep DFD actor reals isolated even when "real" is explicitly in methods
                     if not include_dfd and (vid.startswith("dfd_") or tid.startswith("dfd_")):
                         continue
+                    filtered.append(r)
+                elif m in norm_methods:
                     filtered.append(r)
             rows = filtered
         self.rows = rows
