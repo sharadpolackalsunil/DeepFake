@@ -3,9 +3,9 @@
 - source_quantile: threshold from source reals only (deployment default).
 - target_gmm / target_gmm_anchored: label-free, fitted on unlabelled target logits.
 - oracle: uses target labels; reference only.
-- H4 failures (lower CI of FPR > 2 alpha under source_quantile): 6 of 52 rows
+- H4 failures (lower CI of FPR > 2 alpha under source_quantile): 9 of 78 rows
 - H4a verdict (confirmatory seeds [3, 4, 5] only, conservative CI): undetermined (fewer than 3 confirmatory seeds)
-- H5 verdicts: {'target_gmm@alpha=0.05': 'falsified (degenerate fits)', 'target_gmm@alpha=0.1': 'falsified', 'target_gmm_anchored@alpha=0.05': 'falsified (degenerate fits)', 'target_gmm_anchored@alpha=0.1': 'falsified'}
+- H5 verdicts: {'target_gmm@alpha=0.05': 'falsified (degenerate fits)', 'target_gmm@alpha=0.1': 'falsified (degenerate fits)', 'target_gmm_anchored@alpha=0.05': 'falsified (degenerate fits)', 'target_gmm_anchored@alpha=0.1': 'falsified (degenerate fits)'}
 
 | model | seed | dataset | role | source | policy | alpha | fpr | fpr_ci_low | fpr_ci_high | fpr_over_alpha | tpr | degenerate | swapped |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -25,6 +25,14 @@
 | gend_official | seed0 | dfd | dev_overlap | ffppval | target_gmm | 0.1000 | 0.0494 | 0.0074 | 0.1039 | 0.4938 | 0.6425 | False | False |
 | gend_official | seed0 | dfd | dev_overlap | ffppval | target_gmm_anchored | 0.1000 | 0.0494 | 0.0084 | 0.1106 | 0.4938 | 0.6482 | False | False |
 | gend_official | seed0 | dfd | dev_overlap | ffppval | oracle | 0.1000 | 0.0988 | 0.0877 | 0.1000 | 0.9877 | 0.7485 | False | False |
+| gend_official | seed0 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.0500 | 0.0842 | 0.0589 | 0.1097 | 1.6834 | 0.9352 | False | False |
+| gend_official | seed0 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.0500 | 0.0040 | 0.0000 | 0.0099 | 0.0802 | 0.5402 | False | False |
+| gend_official | seed0 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0040 | 0.0000 | 0.0099 | 0.0802 | 0.5470 | False | False |
+| gend_official | seed0 | fakeavceleb | confirmatory | ffppval | oracle | 0.0500 | 0.0481 | 0.0441 | 0.0500 | 0.9619 | 0.9140 | False | False |
+| gend_official | seed0 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.1000 | 0.2285 | 0.1907 | 0.2683 | 2.2846 | 0.9704 | False | False |
+| gend_official | seed0 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.1000 | 0.0040 | 0.0000 | 0.0125 | 0.0401 | 0.7207 | False | False |
+| gend_official | seed0 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.1000 | 0.0060 | 0.0000 | 0.0134 | 0.0601 | 0.7255 | False | False |
+| gend_official | seed0 | fakeavceleb | confirmatory | ffppval | oracle | 0.1000 | 0.0982 | 0.0935 | 0.1000 | 0.9820 | 0.9388 | False | False |
 | gend_ours | seed1 | celebdf | confirmatory | ffppval | source_quantile | 0.0500 | 0.0169 | 0.0000 | 0.0387 | 0.3371 | 0.4029 | False | False |
 | gend_ours | seed1 | celebdf | confirmatory | ffppval | target_gmm | 0.0500 | 0.1573 | 0.0402 | 0.2367 | 3.1461 | 0.6647 | False | False |
 | gend_ours | seed1 | celebdf | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.1573 | 0.0405 | 0.2367 | 3.1461 | 0.6647 | False | False |
@@ -41,6 +49,14 @@
 | gend_ours | seed1 | dfd | dev_overlap | ffppval | target_gmm | 0.1000 | 0.0288 | 0.0119 | 0.0568 | 0.2881 | 0.6571 | False | False |
 | gend_ours | seed1 | dfd | dev_overlap | ffppval | target_gmm_anchored | 0.1000 | 0.0288 | 0.0119 | 0.0568 | 0.2881 | 0.6571 | False | False |
 | gend_ours | seed1 | dfd | dev_overlap | ffppval | oracle | 0.1000 | 0.0988 | 0.0870 | 0.1000 | 0.9877 | 0.7385 | False | False |
+| gend_ours | seed1 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.0500 | 0.0962 | 0.0731 | 0.1225 | 1.9238 | 0.7575 | False | False |
+| gend_ours | seed1 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.0500 | 0.0080 | 0.0000 | 0.0259 | 0.1603 | 0.3445 | False | False |
+| gend_ours | seed1 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0080 | 0.0000 | 0.0266 | 0.1603 | 0.3453 | False | False |
+| gend_ours | seed1 | fakeavceleb | confirmatory | ffppval | oracle | 0.0500 | 0.0481 | 0.0443 | 0.0500 | 0.9619 | 0.6515 | False | False |
+| gend_ours | seed1 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.1000 | 0.2665 | 0.2253 | 0.3053 | 2.6653 | 0.8647 | False | False |
+| gend_ours | seed1 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.1000 | 0.0220 | 0.0041 | 0.0433 | 0.2204 | 0.4654 | False | False |
+| gend_ours | seed1 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.1000 | 0.0220 | 0.0059 | 0.0443 | 0.2204 | 0.4662 | False | False |
+| gend_ours | seed1 | fakeavceleb | confirmatory | ffppval | oracle | 0.1000 | 0.0982 | 0.0929 | 0.1000 | 0.9820 | 0.7615 | False | False |
 | gend_ours | seed2 | celebdf | confirmatory | ffppval | source_quantile | 0.0500 | 0.0169 | 0.0000 | 0.0387 | 0.3371 | 0.4088 | False | False |
 | gend_ours | seed2 | celebdf | confirmatory | ffppval | target_gmm | 0.0500 | 0.1573 | 0.0445 | 0.2367 | 3.1461 | 0.6618 | False | False |
 | gend_ours | seed2 | celebdf | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.1573 | 0.0445 | 0.2367 | 3.1461 | 0.6618 | False | False |
@@ -57,6 +73,14 @@
 | gend_ours | seed2 | dfd | dev_overlap | ffppval | target_gmm | 0.1000 | 0.0288 | 0.0123 | 0.0566 | 0.2881 | 0.6690 | False | False |
 | gend_ours | seed2 | dfd | dev_overlap | ffppval | target_gmm_anchored | 0.1000 | 0.0288 | 0.0123 | 0.0568 | 0.2881 | 0.6697 | False | False |
 | gend_ours | seed2 | dfd | dev_overlap | ffppval | oracle | 0.1000 | 0.0988 | 0.0879 | 0.1000 | 0.9877 | 0.7546 | False | False |
+| gend_ours | seed2 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.0500 | 0.1222 | 0.0944 | 0.1538 | 2.4449 | 0.7727 | False | False |
+| gend_ours | seed2 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.0500 | 0.0100 | 0.0000 | 0.0231 | 0.2004 | 0.2985 | False | False |
+| gend_ours | seed2 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0100 | 0.0000 | 0.0239 | 0.2004 | 0.3081 | False | False |
+| gend_ours | seed2 | fakeavceleb | confirmatory | ffppval | oracle | 0.0500 | 0.0481 | 0.0442 | 0.0500 | 0.9619 | 0.6399 | False | False |
+| gend_ours | seed2 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.1000 | 0.2866 | 0.2461 | 0.3266 | 2.8657 | 0.8671 | False | False |
+| gend_ours | seed2 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.1000 | 0.0160 | 0.0040 | 0.0392 | 0.1603 | 0.4330 | False | False |
+| gend_ours | seed2 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.1000 | 0.0160 | 0.0041 | 0.0399 | 0.1603 | 0.4370 | False | False |
+| gend_ours | seed2 | fakeavceleb | confirmatory | ffppval | oracle | 0.1000 | 0.0982 | 0.0941 | 0.1000 | 0.9820 | 0.7531 | False | False |
 | gend_ours | seed3 | celebdf | confirmatory | ffppval | source_quantile | 0.0500 | 0.0169 | 0.0000 | 0.0387 | 0.3371 | 0.4000 | False | False |
 | gend_ours | seed3 | celebdf | confirmatory | ffppval | target_gmm | 0.0500 | 0.1573 | 0.0289 | 0.2209 | 3.1461 | 0.6618 | False | False |
 | gend_ours | seed3 | celebdf | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.1573 | 0.0306 | 0.2216 | 3.1461 | 0.6618 | False | False |
@@ -73,6 +97,14 @@
 | gend_ours | seed3 | dfd | dev_overlap | ffppval | target_gmm | 0.1000 | 0.0288 | 0.0120 | 0.0558 | 0.2881 | 0.6486 | False | False |
 | gend_ours | seed3 | dfd | dev_overlap | ffppval | target_gmm_anchored | 0.1000 | 0.0288 | 0.0120 | 0.0558 | 0.2881 | 0.6494 | False | False |
 | gend_ours | seed3 | dfd | dev_overlap | ffppval | oracle | 0.1000 | 0.0988 | 0.0879 | 0.1000 | 0.9877 | 0.7373 | False | False |
+| gend_ours | seed3 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.0500 | 0.1182 | 0.0902 | 0.1474 | 2.3647 | 0.7787 | False | False |
+| gend_ours | seed3 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.0500 | 0.0080 | 0.0000 | 0.0245 | 0.1603 | 0.3413 | False | False |
+| gend_ours | seed3 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0080 | 0.0000 | 0.0245 | 0.1603 | 0.3429 | False | False |
+| gend_ours | seed3 | fakeavceleb | confirmatory | ffppval | oracle | 0.0500 | 0.0481 | 0.0438 | 0.0500 | 0.9619 | 0.6515 | False | False |
+| gend_ours | seed3 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.1000 | 0.3206 | 0.2777 | 0.3612 | 3.2064 | 0.8852 | False | False |
+| gend_ours | seed3 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.1000 | 0.0160 | 0.0040 | 0.0437 | 0.1603 | 0.4670 | False | False |
+| gend_ours | seed3 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.1000 | 0.0160 | 0.0042 | 0.0437 | 0.1603 | 0.4682 | False | False |
+| gend_ours | seed3 | fakeavceleb | confirmatory | ffppval | oracle | 0.1000 | 0.0982 | 0.0940 | 0.1000 | 0.9820 | 0.7515 | False | False |
 | smsdt_full | seed1 | celebdf | confirmatory | ffppval | source_quantile | 0.0500 | 0.1180 | 0.0699 | 0.1714 | 2.3596 | 0.7000 | False | False |
 | smsdt_full | seed1 | celebdf | confirmatory | ffppval | target_gmm | 0.0500 | 0.0000 | 0.0000 | 0.0293 | 0.0000 | 0.1588 | False | False |
 | smsdt_full | seed1 | celebdf | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0000 | 0.0000 | 0.0305 | 0.0000 | 0.1588 | False | False |
@@ -89,6 +121,14 @@
 | smsdt_full | seed1 | dfd | dev_overlap | ffppval | target_gmm | 0.1000 | 0.0082 | 0.0000 | 0.0281 | 0.0823 | 0.3322 | False | False |
 | smsdt_full | seed1 | dfd | dev_overlap | ffppval | target_gmm_anchored | 0.1000 | 0.0082 | 0.0000 | 0.0281 | 0.0823 | 0.3322 | False | False |
 | smsdt_full | seed1 | dfd | dev_overlap | ffppval | oracle | 0.1000 | 0.0988 | 0.0881 | 0.1000 | 0.9877 | 0.5887 | False | False |
+| smsdt_full | seed1 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.0500 | 0.1022 | 0.0747 | 0.1303 | 2.0441 | 0.8575 | False | False |
+| smsdt_full | seed1 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.0500 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | True | False |
+| smsdt_full | seed1 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | True | False |
+| smsdt_full | seed1 | fakeavceleb | confirmatory | ffppval | oracle | 0.0500 | 0.0481 | 0.0427 | 0.0500 | 0.9619 | 0.8043 | False | False |
+| smsdt_full | seed1 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.1000 | 0.1202 | 0.0913 | 0.1499 | 1.2024 | 0.8832 | False | False |
+| smsdt_full | seed1 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.1000 | 0.0000 | 0.0000 | 0.0040 | 0.0000 | 0.3669 | False | False |
+| smsdt_full | seed1 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.1000 | 0.0000 | 0.0000 | 0.0040 | 0.0000 | 0.3673 | False | False |
+| smsdt_full | seed1 | fakeavceleb | confirmatory | ffppval | oracle | 0.1000 | 0.0982 | 0.0943 | 0.1000 | 0.9820 | 0.8555 | False | False |
 | smsdt_full | seed2 | celebdf | confirmatory | ffppval | source_quantile | 0.0500 | 0.0899 | 0.0494 | 0.1397 | 1.7978 | 0.6500 | False | False |
 | smsdt_full | seed2 | celebdf | confirmatory | ffppval | target_gmm | 0.0500 | 0.0000 | 0.0000 | 0.0111 | 0.0000 | 0.1529 | False | False |
 | smsdt_full | seed2 | celebdf | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0000 | 0.0000 | 0.0111 | 0.0000 | 0.1529 | False | False |
@@ -105,6 +145,14 @@
 | smsdt_full | seed2 | dfd | dev_overlap | ffppval | target_gmm | 0.1000 | 0.0123 | 0.0000 | 0.0258 | 0.1235 | 0.3925 | False | False |
 | smsdt_full | seed2 | dfd | dev_overlap | ffppval | target_gmm_anchored | 0.1000 | 0.0123 | 0.0000 | 0.0258 | 0.1235 | 0.3925 | False | False |
 | smsdt_full | seed2 | dfd | dev_overlap | ffppval | oracle | 0.1000 | 0.0988 | 0.0865 | 0.1000 | 0.9877 | 0.6455 | False | False |
+| smsdt_full | seed2 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.0500 | 0.0661 | 0.0444 | 0.0893 | 1.3226 | 0.8083 | False | False |
+| smsdt_full | seed2 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.0500 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | True | False |
+| smsdt_full | seed2 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | True | False |
+| smsdt_full | seed2 | fakeavceleb | confirmatory | ffppval | oracle | 0.0500 | 0.0481 | 0.0436 | 0.0500 | 0.9619 | 0.7743 | False | False |
+| smsdt_full | seed2 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.1000 | 0.1162 | 0.0870 | 0.1455 | 1.1623 | 0.8583 | False | False |
+| smsdt_full | seed2 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.1000 | 0.0020 | 0.0000 | 0.0083 | 0.0200 | 0.5502 | False | False |
+| smsdt_full | seed2 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.1000 | 0.0020 | 0.0000 | 0.0083 | 0.0200 | 0.5502 | False | False |
+| smsdt_full | seed2 | fakeavceleb | confirmatory | ffppval | oracle | 0.1000 | 0.0982 | 0.0942 | 0.1000 | 0.9820 | 0.8427 | False | False |
 | smsdt_full | seed3 | celebdf | confirmatory | ffppval | source_quantile | 0.0500 | 0.1573 | 0.1046 | 0.2156 | 3.1461 | 0.6912 | False | False |
 | smsdt_full | seed3 | celebdf | confirmatory | ffppval | target_gmm | 0.0500 | 0.0000 | 0.0000 | 0.3063 | 0.0000 | 0.1500 | False | False |
 | smsdt_full | seed3 | celebdf | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0000 | 0.0000 | 0.5692 | 0.0000 | 0.1500 | False | False |
@@ -121,6 +169,14 @@
 | smsdt_full | seed3 | dfd | dev_overlap | ffppval | target_gmm | 0.1000 | 0.0123 | 0.0000 | 0.0341 | 0.1235 | 0.3690 | False | False |
 | smsdt_full | seed3 | dfd | dev_overlap | ffppval | target_gmm_anchored | 0.1000 | 0.0123 | 0.0000 | 0.0341 | 0.1235 | 0.3690 | False | False |
 | smsdt_full | seed3 | dfd | dev_overlap | ffppval | oracle | 0.1000 | 0.0988 | 0.0870 | 0.1000 | 0.9877 | 0.6313 | False | False |
+| smsdt_full | seed3 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.0500 | 0.1082 | 0.0812 | 0.1377 | 2.1643 | 0.8631 | False | False |
+| smsdt_full | seed3 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.0500 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | True | False |
+| smsdt_full | seed3 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | True | False |
+| smsdt_full | seed3 | fakeavceleb | confirmatory | ffppval | oracle | 0.0500 | 0.0481 | 0.0440 | 0.0500 | 0.9619 | 0.8099 | False | False |
+| smsdt_full | seed3 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.1000 | 0.1483 | 0.1179 | 0.1808 | 1.4830 | 0.8824 | False | False |
+| smsdt_full | seed3 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.1000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.5170 | False | False |
+| smsdt_full | seed3 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.1000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.5170 | False | False |
+| smsdt_full | seed3 | fakeavceleb | confirmatory | ffppval | oracle | 0.1000 | 0.0982 | 0.0940 | 0.1000 | 0.9820 | 0.8583 | False | False |
 | smsdt_s | seed1 | celebdf | confirmatory | ffppval | source_quantile | 0.0500 | 0.0506 | 0.0226 | 0.0828 | 1.0112 | 0.5088 | False | False |
 | smsdt_s | seed1 | celebdf | confirmatory | ffppval | target_gmm | 0.0500 | 0.0506 | 0.0060 | 0.0941 | 1.0112 | 0.5324 | False | False |
 | smsdt_s | seed1 | celebdf | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0506 | 0.0060 | 0.0941 | 1.0112 | 0.5324 | False | False |
@@ -137,6 +193,14 @@
 | smsdt_s | seed1 | dfd | dev_overlap | ffppval | target_gmm | 0.1000 | 0.0082 | 0.0000 | 0.0187 | 0.0823 | 0.4785 | False | False |
 | smsdt_s | seed1 | dfd | dev_overlap | ffppval | target_gmm_anchored | 0.1000 | 0.0082 | 0.0000 | 0.0187 | 0.0823 | 0.4785 | False | False |
 | smsdt_s | seed1 | dfd | dev_overlap | ffppval | oracle | 0.1000 | 0.0988 | 0.0867 | 0.1000 | 0.9877 | 0.7097 | False | False |
+| smsdt_s | seed1 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.0500 | 0.0220 | 0.0105 | 0.0358 | 0.4409 | 0.7851 | False | False |
+| smsdt_s | seed1 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.0500 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.5094 | False | False |
+| smsdt_s | seed1 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.5094 | False | False |
+| smsdt_s | seed1 | fakeavceleb | confirmatory | ffppval | oracle | 0.0500 | 0.0481 | 0.0441 | 0.0500 | 0.9619 | 0.8347 | False | False |
+| smsdt_s | seed1 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.1000 | 0.0401 | 0.0227 | 0.0580 | 0.4008 | 0.8227 | False | False |
+| smsdt_s | seed1 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.1000 | 0.0020 | 0.0000 | 0.0083 | 0.0200 | 0.6367 | False | False |
+| smsdt_s | seed1 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.1000 | 0.0020 | 0.0000 | 0.0083 | 0.0200 | 0.6367 | False | False |
+| smsdt_s | seed1 | fakeavceleb | confirmatory | ffppval | oracle | 0.1000 | 0.0982 | 0.0929 | 0.1000 | 0.9820 | 0.8719 | False | False |
 | smsdt_s | seed2 | celebdf | confirmatory | ffppval | source_quantile | 0.0500 | 0.0562 | 0.0270 | 0.0909 | 1.1236 | 0.5941 | False | False |
 | smsdt_s | seed2 | celebdf | confirmatory | ffppval | target_gmm | 0.0500 | 0.0506 | 0.0000 | 0.1320 | 1.0112 | 0.5324 | False | False |
 | smsdt_s | seed2 | celebdf | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0506 | 0.0000 | 0.1300 | 1.0112 | 0.5324 | False | False |
@@ -153,6 +217,14 @@
 | smsdt_s | seed2 | dfd | dev_overlap | ffppval | target_gmm | 0.1000 | 0.0082 | 0.0000 | 0.0233 | 0.0823 | 0.4939 | False | False |
 | smsdt_s | seed2 | dfd | dev_overlap | ffppval | target_gmm_anchored | 0.1000 | 0.0082 | 0.0000 | 0.0233 | 0.0823 | 0.4939 | False | False |
 | smsdt_s | seed2 | dfd | dev_overlap | ffppval | oracle | 0.1000 | 0.0988 | 0.0865 | 0.1000 | 0.9877 | 0.7661 | False | False |
+| smsdt_s | seed2 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.0500 | 0.0401 | 0.0240 | 0.0583 | 0.8016 | 0.8123 | False | False |
+| smsdt_s | seed2 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.0500 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.5270 | False | False |
+| smsdt_s | seed2 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.5270 | False | False |
+| smsdt_s | seed2 | fakeavceleb | confirmatory | ffppval | oracle | 0.0500 | 0.0481 | 0.0442 | 0.0500 | 0.9619 | 0.8219 | False | False |
+| smsdt_s | seed2 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.1000 | 0.0922 | 0.0664 | 0.1187 | 0.9218 | 0.8571 | False | False |
+| smsdt_s | seed2 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.1000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.6359 | False | False |
+| smsdt_s | seed2 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.1000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.6359 | False | False |
+| smsdt_s | seed2 | fakeavceleb | confirmatory | ffppval | oracle | 0.1000 | 0.0982 | 0.0941 | 0.1000 | 0.9820 | 0.8595 | False | False |
 | smsdt_s | seed3 | celebdf | confirmatory | ffppval | source_quantile | 0.0500 | 0.0674 | 0.0311 | 0.1086 | 1.3483 | 0.6118 | False | False |
 | smsdt_s | seed3 | celebdf | confirmatory | ffppval | target_gmm | 0.0500 | 0.0225 | 0.0000 | 0.1006 | 0.4494 | 0.4441 | False | False |
 | smsdt_s | seed3 | celebdf | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0225 | 0.0000 | 0.1006 | 0.4494 | 0.4441 | False | False |
@@ -169,6 +241,14 @@
 | smsdt_s | seed3 | dfd | dev_overlap | ffppval | target_gmm | 0.1000 | 0.0000 | 0.0000 | 0.0092 | 0.0000 | 0.4750 | False | False |
 | smsdt_s | seed3 | dfd | dev_overlap | ffppval | target_gmm_anchored | 0.1000 | 0.0000 | 0.0000 | 0.0092 | 0.0000 | 0.4750 | False | False |
 | smsdt_s | seed3 | dfd | dev_overlap | ffppval | oracle | 0.1000 | 0.0988 | 0.0862 | 0.1000 | 0.9877 | 0.7312 | False | False |
+| smsdt_s | seed3 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.0500 | 0.0741 | 0.0504 | 0.0992 | 1.4830 | 0.8211 | False | False |
+| smsdt_s | seed3 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.0500 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.4818 | False | False |
+| smsdt_s | seed3 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.4818 | False | False |
+| smsdt_s | seed3 | fakeavceleb | confirmatory | ffppval | oracle | 0.0500 | 0.0481 | 0.0441 | 0.0500 | 0.9619 | 0.8039 | False | False |
+| smsdt_s | seed3 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.1000 | 0.1142 | 0.0868 | 0.1441 | 1.1423 | 0.8515 | False | False |
+| smsdt_s | seed3 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.1000 | 0.0000 | 0.0000 | 0.0096 | 0.0000 | 0.6214 | False | False |
+| smsdt_s | seed3 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.1000 | 0.0000 | 0.0000 | 0.0096 | 0.0000 | 0.6214 | False | False |
+| smsdt_s | seed3 | fakeavceleb | confirmatory | ffppval | oracle | 0.1000 | 0.0982 | 0.0944 | 0.1000 | 0.9820 | 0.8479 | False | False |
 | smsdt_st | seed1 | celebdf | confirmatory | ffppval | source_quantile | 0.0500 | 0.0955 | 0.0517 | 0.1475 | 1.9101 | 0.5853 | False | False |
 | smsdt_st | seed1 | celebdf | confirmatory | ffppval | target_gmm | 0.0500 | 0.2022 | 0.0317 | 0.3980 | 4.0449 | 0.7794 | False | False |
 | smsdt_st | seed1 | celebdf | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.2022 | 0.0361 | 0.3980 | 4.0449 | 0.7794 | False | False |
@@ -185,6 +265,14 @@
 | smsdt_st | seed1 | dfd | dev_overlap | ffppval | target_gmm | 0.1000 | 0.0123 | 0.0000 | 0.0470 | 0.1235 | 0.4900 | False | False |
 | smsdt_st | seed1 | dfd | dev_overlap | ffppval | target_gmm_anchored | 0.1000 | 0.0123 | 0.0000 | 0.0470 | 0.1235 | 0.4900 | False | False |
 | smsdt_st | seed1 | dfd | dev_overlap | ffppval | oracle | 0.1000 | 0.0988 | 0.0873 | 0.1000 | 0.9877 | 0.6690 | False | False |
+| smsdt_st | seed1 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.0500 | 0.0581 | 0.0381 | 0.0798 | 1.1623 | 0.7931 | False | False |
+| smsdt_st | seed1 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.0500 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | True | False |
+| smsdt_st | seed1 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | True | False |
+| smsdt_st | seed1 | fakeavceleb | confirmatory | ffppval | oracle | 0.0500 | 0.0481 | 0.0438 | 0.0500 | 0.9619 | 0.7835 | False | False |
+| smsdt_st | seed1 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.1000 | 0.1082 | 0.0813 | 0.1360 | 1.0822 | 0.8327 | False | False |
+| smsdt_st | seed1 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.1000 | 0.0020 | 0.0000 | 0.0094 | 0.0200 | 0.6279 | False | False |
+| smsdt_st | seed1 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.1000 | 0.0020 | 0.0000 | 0.0094 | 0.0200 | 0.6279 | False | False |
+| smsdt_st | seed1 | fakeavceleb | confirmatory | ffppval | oracle | 0.1000 | 0.0982 | 0.0936 | 0.1000 | 0.9820 | 0.8275 | False | False |
 | smsdt_st | seed2 | celebdf | confirmatory | ffppval | source_quantile | 0.0500 | 0.0787 | 0.0410 | 0.1212 | 1.5730 | 0.5235 | False | False |
 | smsdt_st | seed2 | celebdf | confirmatory | ffppval | target_gmm | 0.0500 | 0.0955 | 0.0454 | 0.1476 | 1.9101 | 0.5706 | False | False |
 | smsdt_st | seed2 | celebdf | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0955 | 0.0454 | 0.1476 | 1.9101 | 0.5706 | False | False |
@@ -201,6 +289,14 @@
 | smsdt_st | seed2 | dfd | dev_overlap | ffppval | target_gmm | 0.1000 | 0.0041 | 0.0000 | 0.0137 | 0.0412 | 0.4059 | False | False |
 | smsdt_st | seed2 | dfd | dev_overlap | ffppval | target_gmm_anchored | 0.1000 | 0.0041 | 0.0000 | 0.0137 | 0.0412 | 0.4063 | False | False |
 | smsdt_st | seed2 | dfd | dev_overlap | ffppval | oracle | 0.1000 | 0.0988 | 0.0868 | 0.1000 | 0.9877 | 0.6674 | False | False |
+| smsdt_st | seed2 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.0500 | 0.0381 | 0.0226 | 0.0562 | 0.7615 | 0.7979 | False | False |
+| smsdt_st | seed2 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.0500 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | True | False |
+| smsdt_st | seed2 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | True | False |
+| smsdt_st | seed2 | fakeavceleb | confirmatory | ffppval | oracle | 0.0500 | 0.0481 | 0.0442 | 0.0500 | 0.9619 | 0.8247 | False | False |
+| smsdt_st | seed2 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.1000 | 0.0942 | 0.0685 | 0.1195 | 0.9419 | 0.8515 | False | False |
+| smsdt_st | seed2 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.1000 | 0.0000 | 0.0000 | 0.0039 | 0.0000 | 0.5926 | False | False |
+| smsdt_st | seed2 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.1000 | 0.0000 | 0.0000 | 0.0039 | 0.0000 | 0.5926 | False | False |
+| smsdt_st | seed2 | fakeavceleb | confirmatory | ffppval | oracle | 0.1000 | 0.0982 | 0.0942 | 0.1000 | 0.9820 | 0.8551 | False | False |
 | smsdt_st | seed3 | celebdf | confirmatory | ffppval | source_quantile | 0.0500 | 0.0787 | 0.0422 | 0.1230 | 1.5730 | 0.5588 | False | False |
 | smsdt_st | seed3 | celebdf | confirmatory | ffppval | target_gmm | 0.0500 | 0.0281 | 0.0000 | 0.3958 | 0.5618 | 0.4441 | False | False |
 | smsdt_st | seed3 | celebdf | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0281 | 0.0000 | 0.3954 | 0.5618 | 0.4441 | False | False |
@@ -217,3 +313,11 @@
 | smsdt_st | seed3 | dfd | dev_overlap | ffppval | target_gmm | 0.1000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.3441 | False | False |
 | smsdt_st | seed3 | dfd | dev_overlap | ffppval | target_gmm_anchored | 0.1000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.3441 | False | False |
 | smsdt_st | seed3 | dfd | dev_overlap | ffppval | oracle | 0.1000 | 0.0988 | 0.0863 | 0.1000 | 0.9877 | 0.7158 | False | False |
+| smsdt_st | seed3 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.0500 | 0.0561 | 0.0378 | 0.0759 | 1.1222 | 0.8035 | False | False |
+| smsdt_st | seed3 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.0500 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | True | False |
+| smsdt_st | seed3 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.0500 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | True | False |
+| smsdt_st | seed3 | fakeavceleb | confirmatory | ffppval | oracle | 0.0500 | 0.0481 | 0.0442 | 0.0500 | 0.9619 | 0.7919 | False | False |
+| smsdt_st | seed3 | fakeavceleb | confirmatory | ffppval | source_quantile | 0.1000 | 0.1363 | 0.1055 | 0.1677 | 1.3627 | 0.8559 | False | False |
+| smsdt_st | seed3 | fakeavceleb | confirmatory | ffppval | target_gmm | 0.1000 | 0.0000 | 0.0000 | 0.0061 | 0.0000 | 0.4802 | False | False |
+| smsdt_st | seed3 | fakeavceleb | confirmatory | ffppval | target_gmm_anchored | 0.1000 | 0.0000 | 0.0000 | 0.0061 | 0.0000 | 0.4802 | False | False |
+| smsdt_st | seed3 | fakeavceleb | confirmatory | ffppval | oracle | 0.1000 | 0.0982 | 0.0937 | 0.1000 | 0.9820 | 0.8363 | False | False |
