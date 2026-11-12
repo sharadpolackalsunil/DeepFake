@@ -7,6 +7,8 @@ Usage:
     python -m smsdt.preprocess.build_store --index data/splits/index.csv --raw-root . --out data/store --size 256 --margin 1.3 --workers 8 --device 0
 """
 import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 import csv
 import argparse
 import multiprocessing as mp

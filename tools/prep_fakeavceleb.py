@@ -164,8 +164,16 @@ def prune_from_store(
     """Filter out videos from index and identities where build_store failed or has < min_contiguous_frames."""
     if not out_index.exists():
         raise FileNotFoundError(f"Missing index file: {out_index}")
+    if not store_dir.exists() or not any(store_dir.iterdir()):
+        raise RuntimeError(
+            f"Store directory '{store_dir}' does not exist or is empty! "
+            f"build_store must successfully run and populate '{store_dir}' before pruning. "
+            f"Refusing to wipe out {out_index}!"
+        )
     idx_df = pd.read_csv(out_index)
     init_total = len(idx_df)
+    if init_total == 0:
+        raise ValueError(f"Index file {out_index} has 0 rows. Cannot prune an empty index.")
 
     valid_mask = []
     for vid in idx_df["video_id"]:
@@ -182,6 +190,12 @@ def prune_from_store(
             valid_mask.append(bool(has_contiguous))
         except Exception:
             valid_mask.append(False)
+
+    if not any(valid_mask):
+        raise RuntimeError(
+            f"Pruning would drop ALL {init_total} videos! None had >= {min_contiguous_frames} contiguous frames "
+            f"in '{store_dir}'. Check build_store output before pruning."
+        )
 
     pruned_idx = idx_df[valid_mask].copy()
     pruned_idx.to_csv(out_index, index=False)
