@@ -153,8 +153,10 @@ def audit_threshold_transfer(
     g = max(0.0, hter_val - hter_ora)
     g_lo, g_hi = float("nan"), float("nan")
     if n_boot and n_boot > 0:
-        ccol = cluster_col or ("cluster_id" if "cluster_id" in df.columns else None)
-        clusters = df[ccol].values if ccol else np.arange(len(df))
+        # Resolve identity clusters (a coarse cluster_id such as Celeb-DF's 3 source
+        # labels collapses the bootstrap; see docs/decisions.md D13).
+        from tools.fpr_control import resolve_clusters
+        clusters = resolve_clusters(df, cluster_col or "cluster_id")
         g_lo, g_hi, _ = bootstrap_gap_ci(labels, scores, tau_val, clusters, n_boot=n_boot, random_seed=random_seed)
 
     # 5. Decomposition per real_source (FPR breakdown, Wilson 95% CI)

@@ -226,8 +226,13 @@ def evaluate_policies(
     n_boot: int = 1000,
     cluster_col: Optional[str] = "cluster_id",
     random_seed: int = 0,
+    resample_source: bool = False,
 ) -> pd.DataFrame:
     """All policies x alphas on one target set, with cluster-bootstrap CIs.
+
+    resample_source: also resample the source reals in every bootstrap draw, so the CI
+    includes the uncertainty of the source threshold (about 140 dev reals, i.e. the 5%
+    quantile rests on ~7 videos). Off by default to keep the registered H4 analysis.
 
     In each resample the label-free thresholds are re-estimated from the resampled
     target logits (they are functions of the target sample); the source threshold is
@@ -260,7 +265,9 @@ def evaluate_policies(
         yb, ub = y[idx], u[idx]
         for a in alphas:
             for p in POLICIES:
-                thr, binfo = policy_threshold(p, a, ub, yb, src_real, anchor)
+                src_b = (src_real[rng.integers(0, len(src_real), len(src_real))]
+                         if resample_source else src_real)
+                thr, binfo = policy_threshold(p, a, ub, yb, src_b, anchor)
                 boot_store[(p, a)].append(rates_at(yb, ub, thr))
                 boot_deg[(p, a)].append(bool(binfo.get("degenerate", False) or binfo.get("swapped", False)))
 
@@ -488,6 +495,8 @@ def main():
     ap.add_argument("--n-boot", type=int, default=1000)
     ap.add_argument("--n-repeats", type=int, default=100)
     ap.add_argument("--out-dir", default="results/tables")
+    ap.add_argument("--resample-source", action="store_true",
+                    help="Include source-threshold uncertainty in the CIs (sensitivity analysis).")
     ap.add_argument("--confirmatory-seeds", nargs="*", type=int, default=[3, 4, 5],
                     help="Seeds that count toward the H4a verdict (seeds looked at before H4 was "
                          "registered are exploratory).")
@@ -518,7 +527,8 @@ def main():
         if sdf is None:
             notes.append(f"{model}_{seed}/{ds}: no source file")
             continue
-        res = evaluate_policies(tdf, sdf, alphas=args.alphas, n_boot=args.n_boot)
+        res = evaluate_policies(tdf, sdf, alphas=args.alphas, n_boot=args.n_boot,
+                                resample_source=args.resample_source)
         res.insert(0, "source", source_label)
         res.insert(0, "role", DEFAULT_DATASET_ROLES.get(ds, "unknown"))
         res.insert(0, "dataset", ds)
