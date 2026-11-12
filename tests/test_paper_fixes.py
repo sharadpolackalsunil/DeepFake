@@ -237,3 +237,64 @@ def test_prep_fakeavceleb_filters_and_stratifies(tmp_path):
     assert "rtvc" not in set(idx_df["method"])
     assert idx_df["video_id"].is_unique and id_df["video_id"].is_unique
     assert len(idx_df) == len(id_df) == 3 + 2 * len(VISUAL_FAKE_METHODS)
+
+
+def test_prep_fakeavceleb_prune_from_store(tmp_path):
+    from tools.prep_fakeavceleb import prune_from_store
+    store_dir = tmp_path / "store"
+    # Create fakeavceleb_index.csv with 3 videos:
+    # v1: valid fidx with 8 contiguous frames
+    # v2: valid fidx but only 4 frames (too short)
+    # v3: missing directory / fidx
+    idx_path = tmp_path / "fakeavceleb_index.csv"
+    id_path = tmp_path / "fakeavceleb_identities.csv"
+
+    v1_dir = store_dir / "favc_real_id0_001"
+    v1_dir.mkdir(parents=True)
+    np.save(v1_dir / "fidx.npy", np.arange(10, dtype=np.int32))
+
+    v2_dir = store_dir / "favc_real_id1_002"
+    v2_dir.mkdir(parents=True)
+    np.save(v2_dir / "fidx.npy", np.arange(4, dtype=np.int32))
+
+    # v3 not created in store
+
+    pd.DataFrame({
+        "video_id": ["favc_real_id0_001", "favc_real_id1_002", "favc_fake_c_003"],
+        "split": ["test", "test", "test"],
+        "label": [0, 0, 1],
+        "method": ["real", "real", "wav2lip"],
+        "target_id": ["id0", "id1", "id2"],
+        "source_id": ["", "", "id2"],
+        "path": ["a.mp4", "b.mp4", "c.mp4"]
+    }).to_csv(idx_path, index=False)
+
+    pd.DataFrame({
+        "video_id": ["favc_real_id0_001", "favc_real_id1_002", "favc_fake_c_003"],
+        "identity": ["id0", "id1", "fake_id2"]
+    }).to_csv(id_path, index=False)
+
+    res = prune_from_store(store_dir, idx_path, id_path, min_contiguous_frames=8)
+    assert res["initial_total"] == 3
+    assert res["pruned_total"] == 1
+    assert res["dropped_count"] == 2
+    assert res["n_reals"] == 1
+    assert res["n_real_identities"] == 1
+
+    pruned_idx = pd.read_csv(idx_path)
+    pruned_ids = pd.read_csv(id_path)
+    assert list(pruned_idx["video_id"]) == ["favc_real_id0_001"]
+    assert list(pruned_ids["video_id"]) == ["favc_real_id0_001"]
+
+
+def test_eval_cross_fakeavceleb_fallbacks():
+    src = open("smsdt/eval_cross.py", encoding="utf-8").read()
+    assert 'elif "fakeavceleb" in args.dataset_name.lower():' in src
+    assert 'v_id.startswith("favc_")' in src
+
+
+def test_make_tables_preferred_order_has_fakeavceleb():
+    src = open("tools/make_tables.py", encoding="utf-8").read()
+    assert '"fakeavceleb_auc"' in src
+    assert '"fakeavceleb_tpr5"' in src
+

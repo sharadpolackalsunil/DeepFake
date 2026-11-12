@@ -822,6 +822,8 @@ def main():
                     manip_str = ""
                     if args.real_source:
                         real_src = args.real_source
+                    elif "fakeavceleb" in args.dataset_name.lower():
+                        real_src = "fakeavceleb_real"
                     elif "celeb" in args.dataset_name.lower():
                         real_src = "celebdf_real"
                     elif "dfd" in args.dataset_name.lower() or "deepfakedetection" in m_name.lower():
@@ -837,6 +839,10 @@ def main():
                     cluster_id = v_id.split("_")[0]  # Celeb-DF celebrity id, e.g. id0
                 elif "__" in v_id:
                     cluster_id = v_id.split("__")[0]  # DFD actor pair, e.g. DFD_01_02
+                elif v_id.startswith("favc_"):
+                    # FakeAVCeleb: favc_real_<src>_<stem> or favc_fake_<cat>_<meth>_<idx>_<stem>
+                    parts = v_id.split("_")
+                    cluster_id = parts[2] if len(parts) > 2 else v_id
                 elif "_" in v_id:
                     parts = v_id.split("_")
                     cluster_id = parts[1] if len(parts) > 1 else v_id
