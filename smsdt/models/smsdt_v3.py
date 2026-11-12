@@ -159,7 +159,13 @@ class SMSDTv3(nn.Module):
 
         # 8. Dual readout balance
         w = torch.sigmoid(self.beta)
-        logit = w * logit_tok + (1.0 - w) * logit_cls
+        branch = getattr(self, "branch_mode", "learned")   # eval-time diagnostic, not saved
+        if branch == "token_only":
+            logit = logit_tok
+        elif branch == "cls_only":
+            logit = logit_cls
+        else:
+            logit = w * logit_tok + (1.0 - w) * logit_cls
 
         # Video-level auxiliary frequency prediction
         aux_logit = rearrange(aux_frame_logits, "(b t) -> b t", b=B, t=T).mean(dim=1)
