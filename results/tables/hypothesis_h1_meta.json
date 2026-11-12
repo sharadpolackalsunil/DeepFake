@@ -1,5 +1,5 @@
 {
-  "verdict": "undetermined (underpowered)",
+  "verdict": "supported",
   "delta": 0.01,
   "delta_rule": "pre-registered default",
   "n_boot": 10000,
@@ -7,10 +7,11 @@
   "confirmatory_level": 0.975,
   "negatives": "pure",
   "dataset_roles": {
-    "celebdf": "confirmatory",
-    "dfd": "dev_overlap",
+    "celebdf": "exploratory",
+    "dfd": "exploratory",
+    "fakeavceleb": "confirmatory",
     "ffpp": "in_domain",
-    "ffppval": "unknown"
+    "ffppval": "exploratory"
   },
   "seeds_available": [
     0,
@@ -28,6 +29,11 @@
       "pure": true,
       "n_real_kept": 243,
       "n_real_removed": 140
+    },
+    "gend_official_seed0_fakeavceleb": {
+      "pure": true,
+      "n_real_kept": 499,
+      "n_real_removed": 0
     },
     "gend_official_seed0_ffpp": {
       "pure": true,
@@ -49,6 +55,11 @@
       "n_real_kept": 243,
       "n_real_removed": 140
     },
+    "gend_ours_seed1_fakeavceleb": {
+      "pure": true,
+      "n_real_kept": 499,
+      "n_real_removed": 0
+    },
     "gend_ours_seed1_ffpp": {
       "pure": true,
       "n_real_kept": 140,
@@ -68,6 +79,11 @@
       "pure": true,
       "n_real_kept": 243,
       "n_real_removed": 140
+    },
+    "gend_ours_seed2_fakeavceleb": {
+      "pure": true,
+      "n_real_kept": 499,
+      "n_real_removed": 0
     },
     "gend_ours_seed2_ffpp": {
       "pure": true,
@@ -89,6 +105,11 @@
       "n_real_kept": 243,
       "n_real_removed": 140
     },
+    "gend_ours_seed3_fakeavceleb": {
+      "pure": true,
+      "n_real_kept": 499,
+      "n_real_removed": 0
+    },
     "gend_ours_seed3_ffpp": {
       "pure": true,
       "n_real_kept": 140,
@@ -108,6 +129,11 @@
       "pure": true,
       "n_real_kept": 243,
       "n_real_removed": 140
+    },
+    "smsdt_full_seed1_fakeavceleb": {
+      "pure": true,
+      "n_real_kept": 499,
+      "n_real_removed": 0
     },
     "smsdt_full_seed1_ffpp": {
       "pure": true,
@@ -129,6 +155,11 @@
       "n_real_kept": 243,
       "n_real_removed": 140
     },
+    "smsdt_full_seed2_fakeavceleb": {
+      "pure": true,
+      "n_real_kept": 499,
+      "n_real_removed": 0
+    },
     "smsdt_full_seed2_ffpp": {
       "pure": true,
       "n_real_kept": 140,
@@ -148,6 +179,11 @@
       "pure": true,
       "n_real_kept": 243,
       "n_real_removed": 140
+    },
+    "smsdt_full_seed3_fakeavceleb": {
+      "pure": true,
+      "n_real_kept": 499,
+      "n_real_removed": 0
     },
     "smsdt_full_seed3_ffpp": {
       "pure": true,
@@ -169,6 +205,11 @@
       "n_real_kept": 243,
       "n_real_removed": 140
     },
+    "smsdt_st_seed1_fakeavceleb": {
+      "pure": true,
+      "n_real_kept": 499,
+      "n_real_removed": 0
+    },
     "smsdt_st_seed1_ffpp": {
       "pure": true,
       "n_real_kept": 140,
@@ -188,6 +229,11 @@
       "pure": true,
       "n_real_kept": 243,
       "n_real_removed": 140
+    },
+    "smsdt_st_seed2_fakeavceleb": {
+      "pure": true,
+      "n_real_kept": 499,
+      "n_real_removed": 0
     },
     "smsdt_st_seed2_ffpp": {
       "pure": true,
@@ -209,6 +255,11 @@
       "n_real_kept": 243,
       "n_real_removed": 140
     },
+    "smsdt_st_seed3_fakeavceleb": {
+      "pure": true,
+      "n_real_kept": 499,
+      "n_real_removed": 0
+    },
     "smsdt_st_seed3_ffpp": {
       "pure": true,
       "n_real_kept": 140,
@@ -228,6 +279,11 @@
       "pure": true,
       "n_real_kept": 243,
       "n_real_removed": 140
+    },
+    "smsdt_s_seed1_fakeavceleb": {
+      "pure": true,
+      "n_real_kept": 499,
+      "n_real_removed": 0
     },
     "smsdt_s_seed1_ffpp": {
       "pure": true,
@@ -249,6 +305,11 @@
       "n_real_kept": 243,
       "n_real_removed": 140
     },
+    "smsdt_s_seed2_fakeavceleb": {
+      "pure": true,
+      "n_real_kept": 499,
+      "n_real_removed": 0
+    },
     "smsdt_s_seed2_ffpp": {
       "pure": true,
       "n_real_kept": 140,
@@ -268,6 +329,11 @@
       "pure": true,
       "n_real_kept": 243,
       "n_real_removed": 140
+    },
+    "smsdt_s_seed3_fakeavceleb": {
+      "pure": true,
+      "n_real_kept": 499,
+      "n_real_removed": 0
     },
     "smsdt_s_seed3_ffpp": {
       "pure": true,
