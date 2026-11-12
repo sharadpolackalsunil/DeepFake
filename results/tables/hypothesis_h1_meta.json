@@ -26,8 +26,8 @@
     },
     "gend_official_seed0_dfd": {
       "pure": true,
-      "n_real_kept": 383,
-      "n_real_removed": 0
+      "n_real_kept": 243,
+      "n_real_removed": 140
     },
     "gend_official_seed0_ffpp": {
       "pure": true,
@@ -46,8 +46,8 @@
     },
     "gend_ours_seed1_dfd": {
       "pure": true,
-      "n_real_kept": 383,
-      "n_real_removed": 0
+      "n_real_kept": 243,
+      "n_real_removed": 140
     },
     "gend_ours_seed1_ffpp": {
       "pure": true,
@@ -66,8 +66,8 @@
     },
     "gend_ours_seed2_dfd": {
       "pure": true,
-      "n_real_kept": 383,
-      "n_real_removed": 0
+      "n_real_kept": 243,
+      "n_real_removed": 140
     },
     "gend_ours_seed2_ffpp": {
       "pure": true,
@@ -86,8 +86,8 @@
     },
     "gend_ours_seed3_dfd": {
       "pure": true,
-      "n_real_kept": 383,
-      "n_real_removed": 0
+      "n_real_kept": 243,
+      "n_real_removed": 140
     },
     "gend_ours_seed3_ffpp": {
       "pure": true,
@@ -106,8 +106,8 @@
     },
     "smsdt_full_seed1_dfd": {
       "pure": true,
-      "n_real_kept": 383,
-      "n_real_removed": 0
+      "n_real_kept": 243,
+      "n_real_removed": 140
     },
     "smsdt_full_seed1_ffpp": {
       "pure": true,
@@ -126,8 +126,8 @@
     },
     "smsdt_full_seed2_dfd": {
       "pure": true,
-      "n_real_kept": 383,
-      "n_real_removed": 0
+      "n_real_kept": 243,
+      "n_real_removed": 140
     },
     "smsdt_full_seed2_ffpp": {
       "pure": true,
@@ -146,8 +146,8 @@
     },
     "smsdt_full_seed3_dfd": {
       "pure": true,
-      "n_real_kept": 383,
-      "n_real_removed": 0
+      "n_real_kept": 243,
+      "n_real_removed": 140
     },
     "smsdt_full_seed3_ffpp": {
       "pure": true,
@@ -166,8 +166,8 @@
     },
     "smsdt_st_seed1_dfd": {
       "pure": true,
-      "n_real_kept": 383,
-      "n_real_removed": 0
+      "n_real_kept": 243,
+      "n_real_removed": 140
     },
     "smsdt_st_seed1_ffpp": {
       "pure": true,
@@ -186,8 +186,8 @@
     },
     "smsdt_st_seed2_dfd": {
       "pure": true,
-      "n_real_kept": 383,
-      "n_real_removed": 0
+      "n_real_kept": 243,
+      "n_real_removed": 140
     },
     "smsdt_st_seed2_ffpp": {
       "pure": true,
@@ -206,8 +206,8 @@
     },
     "smsdt_st_seed3_dfd": {
       "pure": true,
-      "n_real_kept": 383,
-      "n_real_removed": 0
+      "n_real_kept": 243,
+      "n_real_removed": 140
     },
     "smsdt_st_seed3_ffpp": {
       "pure": true,
@@ -226,8 +226,8 @@
     },
     "smsdt_s_seed1_dfd": {
       "pure": true,
-      "n_real_kept": 383,
-      "n_real_removed": 0
+      "n_real_kept": 243,
+      "n_real_removed": 140
     },
     "smsdt_s_seed1_ffpp": {
       "pure": true,
@@ -246,8 +246,8 @@
     },
     "smsdt_s_seed2_dfd": {
       "pure": true,
-      "n_real_kept": 383,
-      "n_real_removed": 0
+      "n_real_kept": 243,
+      "n_real_removed": 140
     },
     "smsdt_s_seed2_ffpp": {
       "pure": true,
@@ -266,8 +266,8 @@
     },
     "smsdt_s_seed3_dfd": {
       "pure": true,
-      "n_real_kept": 383,
-      "n_real_removed": 0
+      "n_real_kept": 243,
+      "n_real_removed": 140
     },
     "smsdt_s_seed3_ffpp": {
       "pure": true,
