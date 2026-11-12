@@ -155,6 +155,60 @@ def prepare_fakeavceleb(
     }
 
 
+def prune_from_store(
+    store_dir: Path,
+    out_index: Path,
+    out_identities: Path,
+    min_contiguous_frames: int = 8,
+) -> dict:
+    """Filter out videos from index and identities where build_store failed or has < min_contiguous_frames."""
+    if not out_index.exists():
+        raise FileNotFoundError(f"Missing index file: {out_index}")
+    idx_df = pd.read_csv(out_index)
+    init_total = len(idx_df)
+
+    valid_mask = []
+    for vid in idx_df["video_id"]:
+        fidx_path = store_dir / str(vid) / "fidx.npy"
+        if not fidx_path.exists():
+            valid_mask.append(False)
+            continue
+        try:
+            fidx = np.load(fidx_path)
+            span = min_contiguous_frames - 1
+            has_contiguous = len(fidx) >= min_contiguous_frames and any(
+                fidx[s + span] - fidx[s] == span for s in range(len(fidx) - span)
+            )
+            valid_mask.append(bool(has_contiguous))
+        except Exception:
+            valid_mask.append(False)
+
+    pruned_idx = idx_df[valid_mask].copy()
+    pruned_idx.to_csv(out_index, index=False)
+
+    sha_ids = ""
+    n_real_ids = 0
+    if out_identities.exists():
+        id_df = pd.read_csv(out_identities)
+        id_df = id_df[id_df["video_id"].isin(pruned_idx["video_id"])].copy()
+        id_df.to_csv(out_identities, index=False)
+        sha_ids = hashlib.sha256(out_identities.read_bytes()).hexdigest()
+        n_real_ids = int(id_df[id_df["video_id"].str.startswith("favc_real_")]["identity"].nunique())
+
+    sha_index = hashlib.sha256(out_index.read_bytes()).hexdigest()
+    return {
+        "initial_total": init_total,
+        "pruned_total": len(pruned_idx),
+        "dropped_count": init_total - len(pruned_idx),
+        "n_reals": int((pruned_idx["label"] == 0).sum()),
+        "n_real_identities": n_real_ids,
+        "n_fakes": int((pruned_idx["label"] == 1).sum()),
+        "fake_method_counts": pruned_idx[pruned_idx["label"] == 1]["method"].value_counts().to_dict(),
+        "sha256_index": sha_index,
+        "sha256_identities": sha_ids,
+    }
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--raw-dir", default="data/raw/FakeAVCeleb_v1.2")
@@ -164,7 +218,24 @@ def main():
     ap.add_argument("--fakes-per-method", type=int, default=500,
                     help="Stratified fakes per visual method (5 methods -> 2,500 fakes). 0 = keep all.")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--prune-from-store", default=None,
+                    help="Path to frame store (e.g. data/store_fakeavceleb) to prune unindexed/failed videos.")
     args = ap.parse_args()
+
+    if args.prune_from_store:
+        stats = prune_from_store(
+            store_dir=Path(args.prune_from_store),
+            out_index=Path(args.out_index),
+            out_identities=Path(args.out_identities),
+        )
+        print(f"[Store Pruning Complete]")
+        print(f"Total videos: {stats['initial_total']} -> {stats['pruned_total']} (dropped {stats['dropped_count']})")
+        print(f"Reals: {stats['n_reals']} ({stats['n_real_identities']} unique identities)")
+        print(f"Visual fakes: {stats['n_fakes']}")
+        print(f"Fake methods: {stats['fake_method_counts']}")
+        print(f"Updated index sha256: {stats['sha256_index']}")
+        print(f"Updated identities sha256: {stats['sha256_identities']}")
+        return
 
     stats = prepare_fakeavceleb(
         raw_dir=Path(args.raw_dir),

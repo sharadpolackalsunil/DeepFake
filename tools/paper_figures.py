@@ -57,6 +57,9 @@ def fig_zero_shot(tables, target, alpha, out):
     d = d[(d.dataset == target) & (np.isclose(d.alpha, alpha))
           & d.policy.isin(["source_quantile", "target_gmm"])]
     models = [m for m in MODEL_ORDER if m in set(d.model)]
+    if not models:
+        print(f"fig_zero_shot: no models found for dataset '{target}' in {tables}/fpr_control.csv")
+        return
     fig, ax = plt.subplots(figsize=(6.2, 2.6))
     width = 0.38
     for j, (pol, col) in enumerate((("source_quantile", "#7f7f7f"), ("target_gmm", "#bcbd22"))):
@@ -90,6 +93,9 @@ def fig_real_shot(tables, tag, alpha, out):
     c = _curve(tables, tag)
     c = c[np.isclose(c.alpha, alpha)]
     models = [m for m in MODEL_ORDER if m in set(c.model)]
+    if not models:
+        print(f"fig_real_shot: no models found in real_shot_curve{tag}.csv")
+        return
     oracle = c[c.policy == "oracle"][["model", "seed", "n_draw", "mean_tpr"]].rename(
         columns={"mean_tpr": "oracle_tpr"})
     c = c.merge(oracle, on=["model", "seed", "n_draw"], how="left")
@@ -127,6 +133,9 @@ def fig_shape(scores, target, out, runs=("gend_official_seed0", "smsdt_full_seed
     from tools.stats import apply_pure_negatives
     plt = _plt()
     runs = [r for r in runs if os.path.exists(os.path.join(scores, f"{r}_{target}.csv"))]
+    if not runs:
+        print(f"fig_shape: no score files found for target='{target}' in {scores}")
+        return
     fig, axes = plt.subplots(1, len(runs), figsize=(2.3 * len(runs), 2.2), sharey=True)
     axes = np.atleast_1d(axes)
     grid = np.linspace(-5, 8, 400)

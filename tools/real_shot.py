@@ -605,8 +605,11 @@ def main():
         json.dump(meta, f, indent=2)
 
     # Compact markdown: mean over seeds per (model, dataset, policy, n) at each alpha.
+    agg_cols = ["mean_fpr", "p_fpr_gt_2alpha", "mean_abs_err", "mean_tpr", "abstain_rate"]
+    if "mean_fpr_idw" in curve.columns:
+        agg_cols.insert(1, "mean_fpr_idw")
     agg = (curve.groupby(["dataset", "model", "alpha", "policy", "n_draw"], as_index=False)
-           [["mean_fpr", "p_fpr_gt_2alpha", "mean_abs_err", "mean_tpr", "abstain_rate"]].mean())
+           [agg_cols].mean())
     with open(os.path.join(args.out_dir, f"real_shot_curve{args.tag}.md"), "w", encoding="utf-8") as f:
         f.write("# Real-shot calibration curves (mean over seeds)\n\n")
         f.write("n_draw = number of target real identities used for calibration (zero-shot policies "
