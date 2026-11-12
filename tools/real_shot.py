@@ -415,18 +415,21 @@ def h7v2_dataset_verdicts(curve: pd.DataFrame, alpha: float = 0.05, n: int = H7V
 
     H7a-v2 (zero-shot is unsafe): for EACH zero-shot policy (source_quantile, target_gmm)
         at least one run has P(FPR_eval > 2 alpha) > 0.20.
-    H7b-v2 (n real identities suffice): conformal at n identities has, in EVERY run,
-        mean FPR <= alpha + 0.01 and mean TPR >= 0.75 x oracle TPR. Needs >= 40 identities.
+    H7b-v2 (n real identities suffice, amended per docs/decisions.md 6.3(b)): conformal at
+        n identities has, in EVERY run, mean FPR <= alpha + 0.01, identity-weighted
+        mean FPR (when present) <= alpha + 0.01, and mean TPR >= 0.75 x oracle TPR.
+        Needs >= 40 identities.
     H7c-v2 (the finite-sample correction matters): naive_quantile at n has mean FPR >
         alpha + 0.02 in a strict majority of runs.
     """
     a_ = np.isclose(curve.alpha, alpha)
+    has_idw = "mean_fpr_idw" in curve.columns
     runs = curve[["model", "seed"]].drop_duplicates().itertuples(index=False)
     per_run = []
     for model, seed in runs:
         g = curve[a_ & (curve.model == model) & (curve.seed == seed)]
         get = lambda pol, col, nn=n: _get(g, pol, nn, alpha, col)  # noqa: E731
-        per_run.append({
+        row = {
             "model": model, "seed": seed,
             "src_p2a": get("source_quantile", "p_fpr_gt_2alpha"),
             "gmm_p2a": get("target_gmm", "p_fpr_gt_2alpha"),
@@ -434,7 +437,10 @@ def h7v2_dataset_verdicts(curve: pd.DataFrame, alpha: float = 0.05, n: int = H7V
             "conf_tpr": get("conformal", "mean_tpr"),
             "oracle_tpr": get("oracle", "mean_tpr"),
             "naive_fpr": get("naive_quantile", "mean_fpr"),
-        })
+        }
+        if has_idw:
+            row["conf_fpr_idw"] = get("conformal", "mean_fpr_idw")
+        per_run.append(row)
     pr = pd.DataFrame(per_run)
     n_id = int(curve["n_real_clusters"].max()) if len(curve) else 0
     if pr.empty or pr["conf_fpr"].isna().all():
@@ -442,6 +448,8 @@ def h7v2_dataset_verdicts(curve: pd.DataFrame, alpha: float = 0.05, n: int = H7V
                 "n_real_identities": n_id, "per_run": []}
     a_ok = bool((pr.src_p2a > H7V2_UNSAFE_P).any() and (pr.gmm_p2a > H7V2_UNSAFE_P).any())
     b_rows = (pr.conf_fpr <= alpha + H7V2_FPR_TOL) & (pr.conf_tpr >= H7V2_TPR_RATIO * pr.oracle_tpr)
+    if has_idw:
+        b_rows &= pr.conf_fpr_idw.fillna(pr.conf_fpr) <= alpha + H7V2_FPR_TOL
     if n_id < H7V2_MIN_IDENTITIES:
         b = f"undetermined ({n_id} real identities < {H7V2_MIN_IDENTITIES})"
     else:
