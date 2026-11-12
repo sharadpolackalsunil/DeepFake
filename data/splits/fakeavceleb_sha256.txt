@@ -1,0 +1,7 @@
+﻿
+Algorithm       Hash                                                                   Path                                                               
+---------       ----                                                                   ----                                                               
+SHA256          C3087770776D4744998AD277392537AE19A5B2661898B8B86468590F15F6530D       E:\DeepFake\data\splits\fakeavceleb_identities.csv                 
+SHA256          2EA98AE84F185F4AAA24922AC95555B5B9E492BBCB4B1560E0A67125DD4BDF3D       E:\DeepFake\data\splits\fakeavceleb_index.csv                      
+
+
