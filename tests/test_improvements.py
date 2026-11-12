@@ -94,7 +94,7 @@ def test_video_level_evaluation_scoring():
             }
 
     class MockModel(torch.nn.Module):
-        def forward(self, f, c, return_features=False):
+        def forward(self, f, c, return_features=False, prior=None):
             logits = np.log(probs / (1.0 - probs))
             return torch.from_numpy(logits).float()
 

@@ -119,7 +119,7 @@ def test_blocker_7_per_manipulation_auc_scores_against_real():
 
     # Evaluate directly with mock model where model returns logits matching our data
     class IdentityModel(torch.nn.Module):
-        def forward(self, frames, conf, return_features=False):
+        def forward(self, frames, conf, return_features=False, prior=None):
             logits = np.log(all_probs / (1.0 - all_probs))
             return torch.from_numpy(logits).float()
 
