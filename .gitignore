@@ -36,8 +36,9 @@ calib_cache.bin
 data/raw/
 data/cache/
 data/store/
-data/store_celebdf/
+data/store_*/
 data/splits/*.csv
+!data/splits/fakeavceleb_*.csv
 !data/raw/.gitkeep
 !data/cache/.gitkeep
 !data/splits/.gitkeep
