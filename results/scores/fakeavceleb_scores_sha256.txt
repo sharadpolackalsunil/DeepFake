@@ -1,0 +1,18 @@
+﻿
+Algorithm       Hash                                                                   Path                                                               
+---------       ----                                                                   ----                                                               
+SHA256          EF733F0D79C82620A1A07B9A8322FB7392369678AEEA73F166F7A9D9AEBAC032       E:\DeepFake\results\scores\gend_official_seed0_fakeavceleb.csv     
+SHA256          1F1ECF095B10F6D7053728CB8CE1F3B6F731203BA8E7DBB9613B1567D74A9D31       E:\DeepFake\results\scores\gend_ours_seed1_fakeavceleb.csv         
+SHA256          888F8DFB6D96B862327B5B6322940CE51C906C04FA8FCBEF3F72B49E04EBEC64       E:\DeepFake\results\scores\gend_ours_seed2_fakeavceleb.csv         
+SHA256          548281AAC66E8E55E7359CD3287E199A50D0EEB465EC6D2DB9A8DA107AD2F627       E:\DeepFake\results\scores\gend_ours_seed3_fakeavceleb.csv         
+SHA256          B5EC0FE19E48950307586B385C6C5E1A7EA97B9B3BDAB2955D030458D0ECAA32       E:\DeepFake\results\scores\smsdt_full_seed1_fakeavceleb.csv        
+SHA256          67A384D864F8D0B2C83FAA26DB6A67259BF9A5CB9E75C98718EC4B927D16E89F       E:\DeepFake\results\scores\smsdt_full_seed2_fakeavceleb.csv        
+SHA256          716F284704FE24A9870AFBAAEF887E488B401AAF175A086B372F04E1B74B6405       E:\DeepFake\results\scores\smsdt_full_seed3_fakeavceleb.csv        
+SHA256          35FCADAA6B83B4B55D3819AB446F51C20B60E3CC1C47975C560F3D394E94DA82       E:\DeepFake\results\scores\smsdt_st_seed1_fakeavceleb.csv          
+SHA256          99F303A45B51E87C9E7690AF95B9A72F9462BAADC6E9F1D743EC24D9DC12CE74       E:\DeepFake\results\scores\smsdt_st_seed2_fakeavceleb.csv          
+SHA256          C5E853B312DC037FB440D983992D8668DB6B8ADDE8544C3C48CC71D4F679623D       E:\DeepFake\results\scores\smsdt_st_seed3_fakeavceleb.csv          
+SHA256          88080C4E0C712948550AEFBF567D46FE3DD502B38E0A13DF4CF32D877621304E       E:\DeepFake\results\scores\smsdt_s_seed1_fakeavceleb.csv           
+SHA256          2F04AABEA2037AFA2CE1B9657803781C27CC53A7DC04B5A2272B5EE056DB85B1       E:\DeepFake\results\scores\smsdt_s_seed2_fakeavceleb.csv           
+SHA256          73C4628B7CC550585FDA29C3DAE0230CCE4023D52B44DF1D46ADE1D3019769EE       E:\DeepFake\results\scores\smsdt_s_seed3_fakeavceleb.csv           
+
+
