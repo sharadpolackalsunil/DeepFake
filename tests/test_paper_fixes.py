@@ -167,3 +167,73 @@ def test_paper_figures_build_from_tables(tmp_path):
     paper_figures.fig_real_shot(tables, "_dev_celebdf", 0.05, str(tmp_path))
     names = {p.name for p in tmp_path.iterdir()}
     assert {"fig1_zero_shot_fpr.pdf", "fig2_real_shot_fpr.pdf", "fig4_real_shot_fail.png"} <= names
+
+
+def test_h7v2_verdicts_enforce_idw_amendment_6_3_b():
+    from tools.real_shot import h7v2_dataset_verdicts
+    rows = []
+    for model, idw_fpr in (("m1", 0.050), ("m2", 0.070)):
+        base = {"model": model, "seed": "seed1", "alpha": 0.05, "n_draw": 20, "n_real_clusters": 100}
+        rows += [
+            dict(base, policy="source_quantile", p_fpr_gt_2alpha=0.5, mean_fpr=0.1, mean_fpr_idw=0.1, mean_tpr=0.8),
+            dict(base, policy="target_gmm", p_fpr_gt_2alpha=0.5, mean_fpr=0.1, mean_fpr_idw=0.1, mean_tpr=0.5),
+            dict(base, policy="conformal", p_fpr_gt_2alpha=0.1, mean_fpr=0.048, mean_fpr_idw=idw_fpr, mean_tpr=0.50),
+            dict(base, policy="oracle", p_fpr_gt_2alpha=0.0, mean_fpr=0.05, mean_fpr_idw=0.05, mean_tpr=0.60),
+            dict(base, policy="naive_quantile", p_fpr_gt_2alpha=0.3, mean_fpr=0.09, mean_fpr_idw=0.09, mean_tpr=0.7),
+        ]
+    v = h7v2_dataset_verdicts(pd.DataFrame(rows))
+    assert v["h7b_v2"] == "not supported (m2_seed1)"
+
+
+def test_prep_fakeavceleb_filters_and_stratifies(tmp_path):
+    from tools.prep_fakeavceleb import VISUAL_FAKE_METHODS, prepare_fakeavceleb
+    from tools.stats import DEFAULT_DATASET_ROLES, PURE_NEGATIVE_SOURCES
+
+    assert DEFAULT_DATASET_ROLES["fakeavceleb"] == "confirmatory"
+    assert PURE_NEGATIVE_SOURCES["fakeavceleb"] is None
+
+    raw = tmp_path / "FakeAVCeleb_v1.2"
+    rows = []
+    # 3 real Category A (same filename 00010.mp4 under different identity folders)
+    for i in range(3):
+        rel = f"RealVideo-RealAudio/African/men/id0000{i}"
+        (raw / rel).mkdir(parents=True, exist_ok=True)
+        (raw / rel / "00010.mp4").write_bytes(b"mp4")
+        rows.append({"source": f"id0000{i}", "target1": "-", "target2": "-", "method": "real",
+                     "category": "A", "type": "RealVideo-RealAudio", "race": "African", "gender": "men",
+                     "path": "00010.mp4", "Unnamed: 9": f"FakeAVCeleb/{rel}"})
+    # 2 Category B (RealVideo-FakeAudio) -> must be excluded
+    for i in range(2):
+        rel = f"RealVideo-FakeAudio/African/men/id0000{i}"
+        (raw / rel).mkdir(parents=True, exist_ok=True)
+        (raw / rel / "00010_rtvc.mp4").write_bytes(b"mp4")
+        rows.append({"source": f"id0000{i}", "target1": "-", "target2": "-", "method": "rtvc",
+                     "category": "B", "type": "RealVideo-FakeAudio", "race": "African", "gender": "men",
+                     "path": "00010_rtvc.mp4", "Unnamed: 9": f"FakeAVCeleb/{rel}"})
+    # 3 fakes per visual method across C & D, plus 1 missing .mp4 in D
+    for m in VISUAL_FAKE_METHODS:
+        for j, cat_type in enumerate((("C", "FakeVideo-RealAudio"), ("D", "FakeVideo-FakeAudio"), ("D", "FakeVideo-FakeAudio"))):
+            cat, tname = cat_type
+            rel = f"{tname}/African/men/id0000{j}"
+            (raw / rel).mkdir(parents=True, exist_ok=True)
+            fname = f"fake_{m}_{j}.mp4"
+            (raw / rel / fname).write_bytes(b"mp4")
+            rows.append({"source": f"id0000{j}", "target1": f"id0000{(j+1)%3}", "target2": "-", "method": m,
+                         "category": cat, "type": tname, "race": "African", "gender": "men",
+                         "path": fname, "Unnamed: 9": f"FakeAVCeleb/{rel}"})
+    rows.append({"source": "id00000", "target1": "id00001", "target2": "-", "method": "wav2lip",
+                 "category": "D", "type": "FakeVideo-FakeAudio", "race": "African", "gender": "men",
+                 "path": "missing.mp4", "Unnamed: 9": "FakeAVCeleb/FakeVideo-FakeAudio/African/men/id00000"})
+    pd.DataFrame(rows).to_csv(raw / "meta_data.csv", index=False)
+
+    out_idx = tmp_path / "fakeavceleb_index.csv"
+    out_ids = tmp_path / "fakeavceleb_identities.csv"
+    stats = prepare_fakeavceleb(raw, out_idx, out_ids, fakes_per_method=2, seed=0)
+    assert stats["n_reals"] == 3 and stats["n_real_identities"] == 3
+    assert stats["n_fakes"] == 2 * len(VISUAL_FAKE_METHODS)
+    assert stats["n_missing_fakes_skipped"] == 1
+    idx_df = pd.read_csv(out_idx)
+    id_df = pd.read_csv(out_ids)
+    assert "rtvc" not in set(idx_df["method"])
+    assert idx_df["video_id"].is_unique and id_df["video_id"].is_unique
+    assert len(idx_df) == len(id_df) == 3 + 2 * len(VISUAL_FAKE_METHODS)
