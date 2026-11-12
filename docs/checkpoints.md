@@ -47,9 +47,9 @@ This registry tracks the exact storage location, architecture specifications, pa
 - **Architecture:** CLIP ViT-L/14 with LayerNorm-only PEFT + 2 Spatio-Temporal transformer blocks ($L=2$, $H=6$, dim=384) with factorized spatial attention and TemporalDiff velocity ($\Delta_t$).
 - **Input:** $T=8$ frames per clip ($224 \times 224$).
 - **Weights Stored At:**
-  - Seed 1: `outputs/checkpoints_st/seed1/best_ema.pt`
-  - Seed 2: `outputs/checkpoints_st/seed2/best_ema.pt`
-  - Seed 3: `outputs/checkpoints_st/seed3/best_ema.pt`
+  - Seed 1: `outputs/checkpoints_smsdt_st/seed1/best_ema.pt`
+  - Seed 2: `outputs/checkpoints_smsdt_st/seed2/best_ema.pt`
+  - Seed 3: `outputs/checkpoints_smsdt_st/seed3/best_ema.pt`
 - **Output Scores:**
   - Celeb-DF v2: `results/scores/smsdt_st_seed{seed}_celebdf.csv`
   - DFD: `results/scores/smsdt_st_seed{seed}_dfd.csv`

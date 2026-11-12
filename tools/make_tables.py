@@ -229,7 +229,8 @@ def generate_experiment_matrix(
         "Model", "seed", "tau_val",
         "ffpp_pure_macro_auc", "ffpp_auc", "ffpp_hter", "ffpp_tpr5",
         "celebdf_auc", "celebdf_hter", "celebdf_gap_g", "celebdf_tpr5",
-        "dfd_auc", "dfd_hter", "dfd_gap_g", "dfd_tpr5"
+        "dfd_auc", "dfd_hter", "dfd_gap_g", "dfd_tpr5",
+        "fakeavceleb_auc", "fakeavceleb_hter", "fakeavceleb_gap_g", "fakeavceleb_tpr5",
     ]
     present_preferred = [c for c in preferred_order if c in df_out.columns]
     remaining = [c for c in df_out.columns if c not in present_preferred]
