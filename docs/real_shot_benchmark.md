@@ -62,8 +62,8 @@ times. All settings were fixed before the run.
    are held out (8 on DFD, which has only 18).
 3. Record FPR and TPR for every policy on the same split.
 
-Report mean FPR, mean |FPR - alpha|, P(FPR_eval > 2 alpha), mean TPR, the abstain rate,
-and the oracle TPR on the same splits.
+Report mean FPR (video-weighted and identity-weighted), mean |FPR - alpha|,
+P(FPR_eval > 2 alpha), mean TPR, the abstain rate, and the oracle TPR on the same splits.
 
 `P(FPR_eval > 2 alpha)` is the practical failure rate. The evaluation FPR is itself an
 estimate from about 100 to 160 held-out reals. Even a threshold whose true FPR is exactly
@@ -92,6 +92,14 @@ row. Celeb-DF has been inspected before, so these numbers are development eviden
 Per run, conformal at n = 20 gives mean FPR 0.039 to 0.054 in all 13 runs. Its TPR is
 0.78 to 0.96 of the oracle's. At alpha = 0.10 and n = 20 it gives FPR 0.081 to 0.092,
 with P(FPR > 2 alpha) of 0.03 to 0.07.
+
+**Identity weighting and real-source strata (D18, exploratory).** The 121 Celeb-DF real
+clusters are 51 celebrities (108 videos) plus 70 unlabelled YouTube-real clips. The
+guarantee covers a new identity's video, so the tool now also reports the FPR averaged per
+held-out identity (`mean_fpr_idw`). For conformal at n = 20 this is 0.043 to 0.052 across
+the 13 runs. With the reals restricted to one source (`--real-strata`), conformal gives FPR
+0.041 to 0.052 on each source, but the TPR/oracle ratio falls to 0.73 to 0.93. At alpha =
+0.05 and n = 20 the conformal threshold is the maximum of the 20 calibration reals.
 
 **What failed**
 

@@ -1,104 +1,107 @@
-"""Measure trainable and total parameter counts per module for all models.
+"""Count trainable / total parameters for each study architecture, from its training YAML (D17).
 
-Provides empirical parameter figures to replace estimates in manuscript tables.
+Each model is built exactly as its trainer builds it (``smsdt.train_gend``, ``smsdt.train_v2``,
+``smsdt.train_v3``) with a randomly initialised CLIP ViT-L/14 vision tower, so no download or
+checkpoint is needed: parameter counts depend only on the architecture.
+
+Writes ``docs/param_counts.md``. Every parameter count quoted in the paper, README and
+research_v2.md should come from that table.
+
+Why this replaced the previous version (D17): the old script modelled ``smsdt_s`` as
+"LayerNorm-CLIP + nn.Linear(1024, 1)" (103,425 trainable). That is not what was trained:
+``configs/train_s.yaml`` is trained by ``smsdt.train_v2`` as ``SMSDTv2`` with depth 0, whose
+checkpoints have 415 state keys (the "415/415 matched" eval log). That model also trains the
+1024->384 projection, the attention-MIL / top-k readout and a CLS head.
 """
+import argparse
 import os
 import sys
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import torch
-import torch.nn as nn
-from typing import Dict, Tuple
+import yaml
 
-from smsdt.models.smsdt_v3 import SMSDTv3
-from smsdt.models.smsdt_v2 import SMSDTv2
-from smsdt.models.smsdt import SMSDT as SMSDTv1
-from smsdt.models.clip_encoder import CLIPFrameEncoder
-
-
-def count_parameters(model: nn.Module) -> Tuple[int, int, Dict[str, Tuple[int, int]]]:
-    """Count total and trainable parameters overall and by top-level submodule."""
-    total = sum(p.numel() for p in model.parameters())
-    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    
-    breakdown = {}
-    for name, child in model.named_children():
-        c_tot = sum(p.numel() for p in child.parameters())
-        c_trn = sum(p.numel() for p in child.parameters() if p.requires_grad)
-        breakdown[name] = (c_tot, c_trn)
-        
-    return total, trainable, breakdown
+ARCH_CONFIGS = {
+    "gend_ours": "configs/train_gend.yaml",
+    "smsdt_s": "configs/train_s.yaml",
+    "smsdt_st": "configs/train_st.yaml",
+    "smsdt_full": "configs/train_full.yaml",
+}
+VIT_L14 = dict(hidden_size=1024, intermediate_size=4096, num_hidden_layers=24,
+               num_attention_heads=16, patch_size=14, image_size=224)
 
 
-def build_s_model(encoder: nn.Module) -> nn.Module:
-    """Build single-frame S model (CLIP ViT-L/14 with LN-only tuning)."""
-    class SMSDTS(nn.Module):
-        def __init__(self, enc):
-            super().__init__()
-            self.encoder = enc
-            self.head = nn.Linear(1024, 1)
-        def forward(self, x):
-            cls, _ = self.encoder(x)
-            return self.head(cls).squeeze(-1)
-    return SMSDTS(encoder)
+def offline_clip():
+    """Make CLIPVisionModel.from_pretrained build a random ViT-L/14 (no network)."""
+    from transformers import CLIPVisionConfig, CLIPVisionModel
+    cfg = CLIPVisionConfig(**VIT_L14)
+    CLIPVisionModel.from_pretrained = classmethod(lambda cls, name, **kw: CLIPVisionModel(cfg))
+
+
+def build(arch: str, mc: dict):
+    """Mirror the trainers' constructor calls."""
+    from smsdt.models.clip_encoder import CLIPFrameEncoder
+    name = mc.get("backbone", "openai/clip-vit-large-patch14")
+    if arch == "gend_ours":
+        from smsdt.models.gend import GenDModel
+        return GenDModel(name=name, tune=mc.get("tune", "layernorm"),
+                         normalize_inputs=mc.get("normalize_inputs", True))
+    enc = CLIPFrameEncoder(name=name, tune=mc.get("tune", "layernorm"), grad_ckpt=False)
+    common = dict(encoder=enc, dim=mc.get("dim", 384), depth=mc.get("depth", 2),
+                  heads=mc.get("heads", 6), max_frames=mc.get("max_frames", 16),
+                  grid=mc.get("grid", 16), topk_frac=mc.get("topk_frac", 0.05))
+    if arch == "smsdt_full":
+        from smsdt.models.smsdt_v3 import SMSDTv3
+        return SMSDTv3(n_queries=mc.get("n_queries", 4), r0=mc.get("r0", 3.0),
+                       init_bias=mc.get("init_bias", -4.0), **common)
+    from smsdt.models.smsdt_v2 import SMSDTv2
+    return SMSDTv2(**common)
+
+
+def count(model) -> dict:
+    named = list(model.named_parameters())
+    trainable = sum(p.numel() for _, p in named if p.requires_grad)
+    total = sum(p.numel() for _, p in named)
+    ln = sum(p.numel() for n, p in named if p.requires_grad and "norm" in n.lower()
+             and (n.startswith("encoder.") or n.startswith("vit.") or ".vit." in n))
+    return {"trainable": trainable, "total": total, "trainable_backbone_ln": ln,
+            "trainable_head": trainable - ln, "n_state_keys": len(model.state_dict())}
+
+
+def count_all(archs=tuple(ARCH_CONFIGS)) -> list:
+    offline_clip()
+    rows = []
+    for arch in archs:
+        with open(ARCH_CONFIGS[arch]) as f:
+            mc = yaml.safe_load(f)["model"]
+        c = count(build(arch, mc))
+        c.update(arch=arch, config=ARCH_CONFIGS[arch], pct=100.0 * c["trainable"] / c["total"])
+        rows.append(c)
+    return rows
 
 
 def main():
-    print("=" * 80, flush=True)
-    print("S-MSDT PARAMETER AUDIT REPORT (Measured Values)", flush=True)
-    print("=" * 80, flush=True)
-    
-    models = {}
-    
-    try:
-        print("\n[1/4] Auditing S-MSDT v1 (Phase 1 Baseline)...", flush=True)
-        m_v1 = SMSDTv1()
-        models["SMSDT v1 (EffNet-B4 + Wavelet)"] = m_v1
-        print("  ✓ S-MSDT v1 initialized.", flush=True)
-    except Exception as e:
-        print(f"  Note: S-MSDT v1 initialization: {e}", flush=True)
-        
-    print("\nLoading shared CLIP ViT-L/14 backbone (LN-only)...", flush=True)
-    shared_encoder = CLIPFrameEncoder(name="openai/clip-vit-large-patch14", tune="layernorm")
-    print("  ✓ Backbone loaded.", flush=True)
-
-    try:
-        print("\n[2/4] Auditing S-MSDT-S (Static LN-CLIP)...", flush=True)
-        m_s = build_s_model(shared_encoder)
-        models["S-MSDT-S (Static LN-CLIP)"] = m_s
-        print("  ✓ S-MSDT-S built.", flush=True)
-    except Exception as e:
-        print(f"  Note: S-MSDT-S initialization: {e}", flush=True)
-        
-    try:
-        print("\n[3/4] Auditing S-MSDT-ST (v2 Video ViT)...", flush=True)
-        m_st = SMSDTv2(encoder=shared_encoder, dim=384, depth=2, heads=6)
-        models["S-MSDT-ST (v2 Video ViT)"] = m_st
-        print("  ✓ S-MSDT-ST built.", flush=True)
-    except Exception as e:
-        print(f"  Note: S-MSDT-ST initialization: {e}", flush=True)
-        
-    try:
-        print("\n[4/4] Auditing S-MSDT Full / v3 (Stage C)...", flush=True)
-        m_v3 = SMSDTv3(encoder=shared_encoder, dim=384, depth=2, heads=6)
-        models["S-MSDT Full / v3 (Stage C)"] = m_v3
-        print("  ✓ S-MSDT Full / v3 built.", flush=True)
-    except Exception as e:
-        print(f"  Note: S-MSDT-v3 initialization: {e}", flush=True)
-        
-    print("\n" + "=" * 80, flush=True)
-    print(f"{'Model Name':<35} | {'Total Params':<14} | {'Trainable':<12} | {'Trainable %':<10}", flush=True)
-    print("-" * 80, flush=True)
-    
-    for name, model in models.items():
-        total, trainable, breakdown = count_parameters(model)
-        pct = (trainable / total) * 100.0 if total > 0 else 0.0
-        print(f"{name:<35} | {total:>14,d} | {trainable:>12,d} | {pct:>9.2f}%", flush=True)
-        for sub_name, (sub_tot, sub_trn) in breakdown.items():
-            sub_pct = (sub_trn / sub_tot) * 100.0 if sub_tot > 0 else 0.0
-            print(f"   ├─ {sub_name:<30} : {sub_tot:>12,d} | {sub_trn:>10,d} ({sub_pct:5.2f}%)", flush=True)
-            
-    print("=" * 80, flush=True)
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--archs", nargs="*", default=list(ARCH_CONFIGS))
+    ap.add_argument("--out", default="docs/param_counts.md")
+    args = ap.parse_args()
+    rows = count_all(args.archs)
+    for c in rows:
+        print(f"{c['arch']:11s} trainable={c['trainable']:,} ({c['pct']:.3f}%) "
+              f"total={c['total']:,} keys={c['n_state_keys']}")
+    with open(args.out, "w", encoding="utf-8") as f:
+        f.write("# Parameter counts (generated by `python -m tools.count_params`)\n\n")
+        f.write("Each model is built from its training YAML as its trainer builds it, with a random "
+                "CLIP ViT-L/14 vision tower (architecture only, no checkpoint). `State keys` must "
+                "equal the denominator of the 'Weight loading report' that `smsdt.eval_cross` "
+                "prints for that run (393 GenD, 415 S, 471 ST, 489 Full in the eval logs).\n\n")
+        f.write("| Model | Config | Trainable | LayerNorm (backbone) | Head and other | Total | Trainable % | State keys |\n")
+        f.write("|---|---|---:|---:|---:|---:|---:|---:|\n")
+        for c in rows:
+            f.write(f"| `{c['arch']}` | `{c['config']}` | {c['trainable']:,} | {c['trainable_backbone_ln']:,} | "
+                    f"{c['trainable_head']:,} | {c['total']:,} | {c['pct']:.3f}% | {c['n_state_keys']} |\n")
+        f.write("\nCLIP ViT-L/14 vision tower: 303,179,776 parameters, of which 102,400 are LayerNorm "
+                "weights and biases.\n")
 
 
 if __name__ == "__main__":

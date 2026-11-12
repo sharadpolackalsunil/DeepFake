@@ -48,6 +48,20 @@ held-out reals, so even a threshold with true FPR exactly alpha shows P(FPR_eval
 near 0.5. P(FPR_eval > 2 alpha) is the robust practical failure rate; the synthetic
 tests check the guarantees against the true (population) FPR.
 
+Identity-weighted FPR (D18). `mean_fpr` weights every held-out real VIDEO equally, so
+identities with many videos count more. The conformal guarantee is for a NEW IDENTITY's
+video (one per identity, as in calibration). `mean_fpr_idw` averages the per-identity
+flag rate over held-out identities and is the quantity the guarantee covers; report both.
+
+Real-source strata (D18, `--real-strata`). Some targets pool real videos of different
+provenance (Celeb-DF: 108 Celeb-real videos from 51 celebrities and 70 YouTube-real clips
+with no identity label, each its own cluster). `--real-strata` reruns the curve with the
+reals restricted to one value of the coarse `cluster_id` column at a time (all fakes kept),
+as a sensitivity analysis.
+
+At alpha = 0.05 and n = 19 or 20 the conformal rank k = ceil((n+1)(1-alpha)) equals n, so
+the threshold is the MAXIMUM of the calibration reals.
+
 All hyperparameters are fixed in advance (delta = 0.05, B = 200, R = 500, n grid
 below). Do not tune them on confirmatory datasets.
 """
@@ -263,6 +277,9 @@ def real_shot_curve(
     real_cl = clusters[real_idx]
     uniq = np.unique(real_cl)
     by_cl = {c: real_idx[real_cl == c] for c in uniq}
+    code_of = {c: i for i, c in enumerate(uniq)}
+    real_code = np.full(len(y), -1, dtype=int)
+    real_code[real_idx] = [code_of[c] for c in real_cl]
     src_real = source_df.loc[source_df["label"] == 0, logit_col].values.astype(np.float64)
     rng = np.random.default_rng(random_seed)
 
@@ -278,13 +295,15 @@ def real_shot_curve(
     for n in ns:
         if n > max_n:
             continue
-        rec = {(p, a): {"fpr": [], "tpr": [], "abst": []} for p in ALL_POLICIES for a in alphas}
+        rec = {(p, a): {"fpr": [], "fpr_idw": [], "tpr": [], "abst": []} for p in ALL_POLICIES for a in alphas}
         for _ in range(n_rep):
             pick = rng.choice(uniq, size=n, replace=False)
             calib = np.array([rng.choice(by_cl[c]) for c in pick])
             eval_real = np.concatenate([by_cl[c] for c in uniq if c not in set(pick)])
             ev = np.concatenate([eval_real, fake_idx])
             ye, ue = y[ev], u[ev]
+            er_codes = real_code[eval_real]
+            _, er_inv, er_cnt = np.unique(er_codes, return_inverse=True, return_counts=True)
             cal_u = u[calib]
             for a in alphas:
                 thrs = {p: zero[(p, a)] for p in ZERO_SHOT_POLICIES}
@@ -293,12 +312,16 @@ def real_shot_curve(
                 thrs["oracle"] = float(np.quantile(u[eval_real], 1.0 - a))
                 for p, t in thrs.items():
                     f, tp = rates(ye, ue, t)
+                    flag = (u[eval_real] > t).astype(float)
+                    f_idw = float(np.mean(np.bincount(er_inv, weights=flag) / er_cnt))
                     r = rec[(p, a)]
                     r["fpr"].append(f)
+                    r["fpr_idw"].append(f_idw)
                     r["tpr"].append(tp)
                     r["abst"].append(not np.isfinite(t))
         for (p, a), r in rec.items():
             f = np.array(r["fpr"])
+            fi = np.array(r["fpr_idw"])
             t = np.array(r["tpr"])
             rows.append({
                 "policy": p, "n_real_identities": n if p in FEW_SHOT_POLICIES else 0,
@@ -307,6 +330,8 @@ def real_shot_curve(
                 "p_fpr_gt_alpha": float((f > a).mean()),
                 "p_fpr_gt_2alpha": float((f > 2 * a).mean()),
                 "mean_abs_err": float(np.abs(f - a).mean()),
+                "mean_fpr_idw": float(fi.mean()),
+                "p_fpr_idw_gt_2alpha": float((fi > 2 * a).mean()),
                 "mean_tpr": float(t.mean()),
                 "abstain_rate": float(np.mean(r["abst"])),
                 "n_rep": n_rep,
@@ -432,6 +457,56 @@ def h7v2_dataset_verdicts(curve: pd.DataFrame, alpha: float = 0.05, n: int = H7V
 # CLI
 # ---------------------------------------------------------------------------
 
+def strata_curves(target_df: pd.DataFrame, source_df: pd.DataFrame, column: str = "cluster_id",
+                  **kw) -> pd.DataFrame:
+    """Real-shot curves with the reals restricted to each value of `column` (D18)."""
+    out = []
+    reals = target_df[target_df["label"] == 0]
+    if column not in reals.columns:
+        return pd.DataFrame()
+    for v in sorted(reals[column].dropna().astype(str).unique()):
+        sub = target_df[(target_df["label"] == 1) | (target_df[column].astype(str) == v)]
+        c = real_shot_curve(sub.reset_index(drop=True), source_df, **kw)
+        if not c.empty:
+            c.insert(0, "real_stratum", v)
+            out.append(c)
+    return pd.concat(out, ignore_index=True) if out else pd.DataFrame()
+
+
+def write_strata(runs: Dict, src_key: str, args) -> None:
+    from tools.make_tables import df_to_markdown
+    rows = []
+    for (model, seed, ds), tdf in sorted(runs.items()):
+        if ds.startswith("ffpp") or (args.targets and ds not in args.targets):
+            continue
+        sdf = runs.get((model, seed, src_key))
+        if sdf is None:
+            continue
+        c = strata_curves(tdf, sdf, ns=args.ns, alphas=args.alphas, n_rep=args.n_rep,
+                          min_eval_clusters=args.min_eval_clusters)
+        if c.empty:
+            continue
+        c.insert(0, "dataset", ds)
+        c.insert(0, "seed", seed)
+        c.insert(0, "model", model)
+        rows.append(c)
+    if not rows:
+        print("strata: nothing to report")
+        return
+    st = pd.concat(rows, ignore_index=True)
+    st.to_csv(os.path.join(args.out_dir, f"real_shot_strata{args.tag}.csv"), index=False)
+    keep = st[st.policy.isin(["source_quantile", "naive_quantile", "conformal", "oracle"])]
+    agg = (keep.groupby(["dataset", "real_stratum", "alpha", "model", "policy", "n_draw"], as_index=False)
+           [["n_real_clusters", "mean_fpr", "mean_fpr_idw", "p_fpr_gt_2alpha", "mean_tpr", "abstain_rate"]].mean())
+    with open(os.path.join(args.out_dir, f"real_shot_strata{args.tag}.md"), "w", encoding="utf-8") as f:
+        f.write("# Real-shot curves by real-source stratum (D18; exploratory sensitivity)\n\n")
+        f.write("Reals restricted to one value of the coarse `cluster_id`; all fakes kept. "
+                "Mean over seeds.\n\n")
+        for (ds, stratum, a), g in agg.groupby(["dataset", "real_stratum", "alpha"]):
+            f.write(f"## {ds}, reals = {stratum}, alpha = {a}\n\n")
+            f.write(df_to_markdown(g.drop(columns=["dataset", "real_stratum", "alpha"]).round(4)) + "\n\n")
+
+
 def main():
     from tools.stats import apply_pure_negatives, dataset_key, DEFAULT_DATASET_ROLES, _parse_score_filename
     from tools.make_tables import df_to_markdown
@@ -450,6 +525,10 @@ def main():
     ap.add_argument("--primary", default="loc", choices=["loc", "ls", "shrink"],
                     help="Frozen primary transfer mode for the H7 checks (set from the development "
                          "selection, then never changed).")
+    ap.add_argument("--real-strata", action="store_true",
+                    help="Sensitivity (D18): also run with reals restricted to each value of the "
+                         "coarse cluster_id column (e.g. Celeb-real / YouTube-real); writes "
+                         "real_shot_strata{tag}.{csv,md}. Exploratory; no verdicts.")
     ap.add_argument("--checks-on", nargs="*", default=None,
                     help="Datasets on which to compute H7 checks (default: confirmatory role or unknown).")
     args = ap.parse_args()
@@ -497,6 +576,8 @@ def main():
         return
     curve = pd.concat(curves, ignore_index=True)
     os.makedirs(args.out_dir, exist_ok=True)
+    if args.real_strata:
+        write_strata(runs, src_key, args)
     curve.to_csv(os.path.join(args.out_dir, f"real_shot_curve{args.tag}.csv"), index=False)
 
     by_ds: Dict[str, Dict] = {}
