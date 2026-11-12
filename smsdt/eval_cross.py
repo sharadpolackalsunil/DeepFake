@@ -66,11 +66,25 @@ def youden_tau(p, y):
     return float(thr[idx])
 
 
+def load_identity_map(path: str) -> dict:
+    """video_id -> identity from a CSV with columns video_id, identity."""
+    import csv as _csv
+    with open(path, newline="", encoding="utf-8") as f:
+        rows = list(_csv.DictReader(f))
+    if not rows or not {"video_id", "identity"} <= set(rows[0]):
+        raise ValueError(f"{path}: needs columns video_id, identity")
+    return {r["video_id"]: r["identity"] for r in rows}
+
+
 def tpr_at_fpr(p, y, target_fpr):
-    """Calculate True Positive Rate at a fixed False Positive Rate target (e.g. 1% or 5%)."""
-    from sklearn.metrics import roc_curve
-    fpr, tpr, _ = roc_curve(y, p)
-    return float(np.interp(target_fpr, fpr, tpr))
+    """True Positive Rate at a fixed False Positive Rate target (e.g. 1% or 5%).
+
+    D16: conservative empirical operating point (achieved FPR <= target), shared with
+    tools/make_tables.py via smsdt/metric_defs.py. It previously interpolated the ROC
+    linearly, which disagreed with the tables.
+    """
+    from smsdt.metric_defs import tpr_at_fpr as _canonical
+    return _canonical(y, p, target_fpr)
 
 
 def compute_ece(p, y, n_bins=15):
@@ -659,6 +673,13 @@ def main():
                         choices=["learned", "mean_patch", "lse_only", "att_only"],
                         help="Eval-time diagnostic for S-MSDTv3 readout (H4 mechanism check). "
                              "Not a substitute for retraining with a different readout.")
+    parser.add_argument("--real-source", type=str, default=None,
+                        help="real_source tag for the reals of this dataset (e.g. dfdc_real). Required for "
+                             "any dataset other than FF++, Celeb-DF and DFD: the automatic rule labels "
+                             "every other dataset's reals ffpp_youtube.")
+    parser.add_argument("--identity-csv", type=str, default=None,
+                        help="CSV with columns video_id,identity; sets cluster_id from it (needed for "
+                             "identity-level H7 calibration on a new dataset).")
     parser.add_argument("--skip-sweep", action="store_true", help="Skip printing threshold sensitivity sweep table")
     args = parser.parse_args()
 
@@ -790,6 +811,7 @@ def main():
                 "manipulation", "cluster_id", "n_clips", "logit_mean",
                 "score_mean", "score_topk50"
             ])
+            identity_of = load_identity_map(args.identity_csv) if args.identity_csv else {}
             for i in range(len(res["video_ids"])):
                 v_id = str(res["video_ids"][i])
                 lbl = int(res["labels"][i])
@@ -798,7 +820,9 @@ def main():
                 # Assign real_source vs manipulation
                 if lbl == 0:
                     manip_str = ""
-                    if "celeb" in args.dataset_name.lower():
+                    if args.real_source:
+                        real_src = args.real_source
+                    elif "celeb" in args.dataset_name.lower():
                         real_src = "celebdf_real"
                     elif "dfd" in args.dataset_name.lower() or "deepfakedetection" in m_name.lower():
                         real_src = "dfd_actor"
@@ -818,6 +842,8 @@ def main():
                     cluster_id = parts[1] if len(parts) > 1 else v_id
                 else:
                     cluster_id = v_id
+                if v_id in identity_of:
+                    cluster_id = identity_of[v_id]
 
                 top50_score = f"{res['scores_top50'][i]:.4f}" if "scores_top50" in res and i < len(res["scores_top50"]) else ""
                 

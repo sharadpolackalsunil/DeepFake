@@ -84,6 +84,15 @@ All three authors (**Sharad**, **Aditya Raj**, **Aditya Kumar**) confirm and fre
 | D14 | DFD score files contain the 140 FF++ test reals (video_id `real_NNN`, logits identical to the FF++ file) with `real_source = dfd_actor`, so `apply_pure_negatives` kept them | Every "pure DFD" number since 2026-11-10 still used mixed reals (383 instead of 243; 18 DFD actor identities) | `apply_pure_negatives` also requires the `dfd_real` video_id prefix; re-run every DFD row. DFD stays exploratory |
 | D15 | Eval-time readout ablation (10.4 of research_v2) changed only the token readout; the final logit also blends a global CLS head (`sigmoid(beta)`) | "Rules out LSE pooling / points to capacity" over-reaches | Added `--branch-ablation token_only|cls_only`; the 10.4 conclusion should read "the token-readout swap does not change FPR" |
 
+### 2026-11-12: paper-consistency audit of research_v2.md @ 77f4c8f
+
+| ID | Deviation | Effect | Action |
+|:---|:---|:---|:---|
+| D16 | Two definitions of "TPR at 5% FPR": `smsdt/eval_cross.py` interpolated the ROC linearly; `tools/make_tables.py` used `fakes >= np.percentile(reals, 95)`. The research_v2 matrix (4.1) mixed both (seed-1 rows from the eval logs, seeds 2-3 from the tables); they differ by up to 4.1 points on Celeb-DF (`smsdt_s` seed 1: 50.29 vs 54.41) | Celeb-DF TPR@5% values in 3.x and 4.1 are not comparable across rows | One conservative definition in `smsdt/metric_defs.py` (lowest threshold with empirical FPR <= target; flag strictly above), used by both. Regenerate every TPR@FPR from score files with `python -m tools.make_tables` |
+| D17 | `smsdt_s` reported with 103,425 trainable parameters (README, docs/checkpoints.md, research_v2 sections 2-3, paper abstract: "matching the 103,425-parameter footprint"). The old `tools/count_params.py` modelled S as LayerNorm-CLIP + `nn.Linear(1024, 1)`, but `configs/train_s.yaml` trains `SMSDTv2` with depth 0 (415 state keys, the "415/415 matched" eval log), which has **777,478** trainable parameters (102,400 LayerNorm + 675,078 projection, attention-MIL/top-k readout and CLS head). Section 2 of research_v2 also listed ST and Full as 8,474,881 and 9,103,363; the built models have 8,467,462 and 9,102,600 | `gend_ours` vs `smsdt_s` is NOT a matched-footprint comparison: the +0.053 Celeb-DF AUC gap mixes recipe and head architecture. "Recipe alone accounts for..." must be removed | `tools/count_params.py` rewritten to build each model from its training YAML; output in `docs/param_counts.md`. Quote only those numbers |
+| D18 | Celeb-DF's 121 "real identities" are 51 celebrities (108 Celeb-real videos) plus 70 YouTube-real clips with no identity label, each its own cluster. `real_shot` evaluation FPR weighted held-out videos equally, while calibration draws one video per identity | The conformal guarantee is for a new identity's video; the reported mean FPR is video-weighted; the pooled Celeb-DF result mixes two real-source sub-populations | `real_shot` now also reports identity-weighted FPR (`mean_fpr_idw`, `p_fpr_idw_gt_2alpha`) and, with `--real-strata`, curves per real source. Exploratory sensitivity; see section 6.3 for the proposed pre-registration amendment |
+| D19 (PROPOSED, needs sign-off) | Seeds 4-5 (pre-registered confirmatory seeds for H1/H4a) not trained | H1 stays "undetermined (underpowered)"; H4a stays "undetermined (fewer than 3 confirmatory seeds)"; both are reported as descriptive 3-seed results, not tested | Recommended only if the GPU budget goes to the H7 confirmatory dataset. If all three authors sign, record the date here. If seeds 4-5 do get trained, delete this row |
+
 ### 2026-11-10: Gate G1 decision
 Branch B. Until `gend_official` has been evaluated through this pipeline, no sentence may
 compare S-MSDT with GenD; `gend_ours` is called "our GenD-style re-implementation".
@@ -177,3 +186,19 @@ Development values, for reference only (not evidence). On Celeb-DF:
 - H7a-v2: the source threshold has P = 1.00 for official GenD; the GMM has P = 1.00 for `gend_ours`.
 - H7b-v2: conformal FPR is 0.039 to 0.054 and the TPR ratio 0.78 to 0.96.
 - H7c-v2: naive FPR at n = 20 is 0.078 to 0.089.
+
+### 6.3 Proposed amendment before sign-off (2026-11-12, D18)
+
+Celeb-DF development data showed that the evaluation FPR in `tools/real_shot.py` was
+video-weighted while the calibration draws one video per identity. Before signing section 6,
+the authors choose ONE of these for H7b-v2 and record it here:
+
+- (a) keep H7b-v2 as written (video-weighted `mean_fpr`), and report `mean_fpr_idw` as secondary;
+- (b) require both `mean_fpr` AND `mean_fpr_idw` <= alpha + 0.01 at n = 20 (recommended:
+  this is what the conformal guarantee covers, and it is stricter).
+
+Either way, `--real-strata` results are exploratory and not part of any verdict. The choice
+must be made before any confirmatory score file exists.
+
+Chosen: ______  Date: ______  Initials: ______ / ______ / ______
+

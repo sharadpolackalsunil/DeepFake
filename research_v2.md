@@ -21,7 +21,8 @@
 > - **Eval-Time Readout & D15 Branch Ablations (§10.4):** Swapping `smsdt_full` token readout at evaluation time does not change FPR (`11.99%–12.17%` vs `12.17%` learned; Celeb-DF AUC `0.8845–0.8886` vs `0.8882`). Under D15 `--branch-ablation`, `token_only` keeps both Celeb-DF AUC (`0.8843`) and FPR inflation (`11.80%`, mean TPR `67.94%`), whereas `cls_only` drops Celeb-DF AUC to `0.7456` and TPR to `31.18%` (`4.87%` FPR).
 > - **Real-Shot Budget Transfer Benchmark — H7 Development Evidence Only (§11):** [`tools/real_shot.py`](file:///e:/DEEPFAKE/tools/real_shot.py) evaluates few-shot authentic calibration on Celeb-DF (`121` real identities) and DFD (`18` real actors). Original **H7-v1 is `not supported`** (shape transfer `loc` fails and over-corrects `gend_official`); **H7-v2 receives development support on Celeb-DF only** (`n = 20` authentic identities with identity-level `conformal` keeps mean FPR `0.0391–0.0543` across all `13` runs at `0.78–0.96` oracle TPR), while DFD (`n <= 10`) is `undetermined`. Confirmatory testing requires sign-off of [`docs/decisions.md`](file:///e:/DEEPFAKE/docs/decisions.md) Section 6 and a new unseen dataset (`>= 40` real identities).
 > - **H3a, H6 & Robustness (§§6–8):** **H3a `falsified`** on HTER under calibrated EM (`prior_sweep.py`; Bayes accuracy improves at extreme priors $\pi \in \{0.1, 0.9\}$); **H6 `falsified`** (online consistency TTA collapses to `0.5409` AUC; single model/seed/dataset); robustness perturbation curve verified on `smsdt_full_seed1` Celeb-DF only.
-> - **Provenance Note:** Section 3 and §4.1–4.2 retain the per-run raw RTX 5090 evaluation logs (where DFD CSVs had `2,987` rows including `140` mislabelled FF++ test reals) for traceability; §§4.3–12 reflect the post-PR-#12 D13/D14/D15 audited tables.
+> - **Paper-Consistency Audit (2026-11-12, D16-D19, [`docs/decisions.md`](file:///e:/DEEPFAKE/docs/decisions.md)):** (D16) one TPR@FPR definition (`smsdt/metric_defs.py`); the old §4.1 matrix mixed ROC-interpolated eval-log values (seed-1 rows) with percentile-table values (seeds 2-3), up to 4.1 points apart on Celeb-DF. §4.1 is now regenerated from the score files with pure DFD. (D17) `smsdt_s` has **777,478** trainable parameters, not 103,425 (`docs/param_counts.md`); `gend_ours` vs `smsdt_s` is not a matched-footprint comparison. (D18) Celeb-DF's 121 real "identities" are 51 celebrities + 70 unlabelled YouTube-real clips; §11 adds identity-weighted FPR and per-source strata. (D19, proposed) seeds 4-5 dropped in favour of the H7 confirmatory dataset.
+> - **Provenance Note:** Section 3 and §4.1–4.2 retain the per-run raw RTX 5090 evaluation logs (where DFD CSVs had `2,987` rows including `140` mislabelled FF++ test reals) for traceability; their TPR@1%/5% values use the pre-D16 ROC-interpolation rule and their DFD rows include the 140 mislabelled FF++ reals. **Do not quote §3 numbers in the paper; use §4.1 (regenerated) and §§4.3–12.**
 
 ---
 
@@ -38,12 +39,14 @@ The core research questions are:
 
 ## 2. Models & Experimental Design
 
+*Parameter counts from `python -m tools.count_params` ([`docs/param_counts.md`](file:///e:/DEEPFAKE/docs/param_counts.md)); checkpoint directories from each config's `output_dir`.*
+
 | Model Identifier | Architecture | Trainable Params | Frame Count ($T$) | Checkpoint Path | Purpose |
 | :--- | :--- | :---: | :---: | :--- | :--- |
 | `gend_ours` | CLIP ViT-L/14 + LN PEFT + Linear Probe + Slerp | 103,425 (0.034%) | $T=1$ | `outputs/checkpoints_gend_ours/seed1/` | GenD-style in-house baseline (not a reproduction; Celeb-DF 0.83 vs 0.933 for the official weights) |
-| `smsdt_s` | CLIP ViT-L/14 + LN PEFT + Linear Probe | 103,425 (0.034%) | $T=1$ | `outputs/checkpoints_smsdt_s/seed1/` | Internal controlled single-frame baseline |
-| `smsdt_st` | CLIP ViT-L/14 + LN PEFT + Spatio-Temporal Transformer | 8,474,881 (2.72%) | $T=8$ | `outputs/checkpoints_st/seed1/` | Tests temporal attention utility (RQ1) |
-| `smsdt_full` | S-MSDTv3 (Dual SRM + Haar DWT + LSE Pooling + Mouth Prior) | 9,103,363 (2.92%) | $T=8$ | `outputs/checkpoints_v3_stage_c/seed1/` | Full proposed forensic foundation model |
+| `smsdt_s` | CLIP ViT-L/14 + LN PEFT + `SMSDTv2` head with depth 0 (projection + attention-MIL/top-k readout + CLS head) | 777,478 (0.256%) | $T=1$ | `outputs/checkpoints_smsdt_s/seed1/` | Internal controlled single-frame baseline |
+| `smsdt_st` | CLIP ViT-L/14 + LN PEFT + Spatio-Temporal Transformer | 8,467,462 (2.72%) | $T=8$ | `outputs/checkpoints_smsdt_st/seed1/` | Tests temporal attention utility (RQ1) |
+| `smsdt_full` | S-MSDTv3 (Dual SRM + Haar DWT + LSE Pooling + Mouth Prior) | 9,102,600 (2.92%) | $T=8$ | `outputs/checkpoints_smsdt_full/seed1/` | Full proposed forensic foundation model |
 
 ---
 
@@ -59,7 +62,7 @@ The core research questions are:
 ### 3.2 GenD-Style In-House Baseline Evaluation Results (Seed 1, Not a Reproduction)
 
 Evaluated with the matched `GenDModel` architecture (CLIP ViT-L/14 + LN PEFT + Linear Probe + Slerp, 393/393 parameters matched, $T=1$ frame) trained under our in-house FF++ c23 recipe (Celeb-DF `0.83` vs `0.9327` for official weights `gend_official`; see §9).
-- **Trainable Parameters:** 103,425 / 304,064,769 total (0.034%).
+- **Trainable Parameters:** 103,425 / 303,180,801 total (0.034%).
 - **Checkpoint:** [`outputs/checkpoints_gend_ours/seed1/best_ema.pt`](file:///e:/DEEPFAKE/outputs/checkpoints_gend_ours/seed1/best_ema.pt)
 
 #### 1. In-Domain Benchmark: FaceForensics++ c23 (Test Split, N=840 videos)
@@ -127,8 +130,8 @@ Evaluated with the matched `GenDModel` architecture (CLIP ViT-L/14 + LN PEFT + L
 ### 3.3 S-MSDT-S (Spatial-Only Baseline) Evaluation Results (Seed 1)
 
 The spatial-only baseline **S-MSDT-S** (`smsdt_s`) completed 30 epochs of training on the RTX 5090 (`train_s.yaml`, Seed 1).
-- **Architecture:** CLIP ViT-L/14 with LayerNorm-only PEFT + Linear Probe Head ($T=1$ frame, 0 temporal blocks).
-- **Trainable Parameters:** 103,425 / 304,064,769 total (0.034%).
+- **Architecture:** CLIP ViT-L/14 with LayerNorm PEFT + `SMSDTv2` head with 0 temporal blocks (1024->384 projection, attention-MIL/top-k readout, CLS head; $T=1$ frame).
+- **Trainable Parameters:** 777,478 / 303,854,854 total (0.256%) [corrected 2026-11-12, D17; previously misreported as 103,425].
 - **Checkpoint:** [`outputs/checkpoints_smsdt_s/seed1/best_ema.pt`](file:///e:/DEEPFAKE/outputs/checkpoints_smsdt_s/seed1/best_ema.pt)
 - **Weight Loading Report:** 415/415 parameters matched (100% matched, 0 missing).
 - **Evaluation Mode:** Auto-detected Phase A checkpoint $\rightarrow$ evaluated with $T=1$ frame per clip.
@@ -410,43 +413,48 @@ All four architectures completed 30 epochs of training on the RTX 5090 for **See
 
 Compiled via `tools/make_tables.py` into [`results/tables/experiment_matrix.csv`](file:///e:/DEEPFAKE/results/tables/experiment_matrix.csv) and [`results/tables/experiment_matrix.md`](file:///e:/DEEPFAKE/results/tables/experiment_matrix.md):
 
-### 4.1 Master Experiment Matrix (All 12 Runs)
+### 4.1 Master Experiment Matrix (All 13 Runs, regenerated 2026-11-12)
 
-| Model | Seed | FF++ Test AUC | Celeb-DF AUC | Celeb-DF TPR@5% | DFD AUC | DFD TPR@5% | Primary Role / Finding |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| `gend_ours` | 1 | **0.9047** | **0.8321** | 52.59% | **0.8776** | 69.13% | GenD-style in-house baseline (not a reproduction; $T=1$) |
-| `gend_ours` | 2 | **0.9040** | **0.8273** | 51.76% | **0.8820** | 69.05% | GenD-style in-house baseline (Seed 2) |
-| `gend_ours` | 3 | **0.9045** | **0.8288** | 54.71% | **0.8758** | 69.51% | GenD-style in-house baseline (Seed 3) |
-| `smsdt_s` | 1 | **0.9587** | **0.8837** | 50.29% | **0.8742** | 67.47% | Controlled single-frame baseline ($T=1$, LN tuned) |
-| `smsdt_s` | 2 | **0.9613** | **0.8825** | 54.12% | **0.8807** | 70.74% | Controlled single-frame baseline (Seed 2) |
-| `smsdt_s` | 3 | **0.9681** | **0.8815** | 52.35% | **0.8974** | 68.86% | Controlled single-frame baseline (Seed 3) |
-| `smsdt_st` | 1 | **0.9604** | **0.8706** | 45.29% | **0.8682** | 61.91% | Spatio-temporal transformer ($T=8$) |
-| `smsdt_st` | 2 | **0.9664** | **0.8779** | 44.12% | **0.8748** | 60.06% | Spatio-temporal transformer (Seed 2) |
-| `smsdt_st` | 3 | **0.9618** | **0.8628** | 55.00% | **0.8908** | 68.13% | Spatio-temporal transformer (Seed 3) |
-| `smsdt_full` | 1 | **0.9631** | **0.8914** | 52.94% | **0.8604** | 51.04% | Full model (+ SRM + Haar DWT + LSE readout, $T=8$) |
-| `smsdt_full` | 2 | **0.9621** | **0.8960** | 55.59% | **0.8689** | 58.79% | Full model (Seed 2) |
-| `smsdt_full` | 3 | **0.9625** | **0.8772** | 50.88% | **0.8655** | 55.65% | Full model (Seed 3) |
+Generated by `python -m tools.make_tables` from `results/scores/` (D14 pure reals: DFD = `243` actor reals; D16 canonical TPR at the conservative empirical 5%-FPR point). Supersedes the hand-assembled matrix, whose TPR columns mixed two definitions and whose DFD columns used `383` mixed reals.
+
+| Model | Seed | FF++ Test AUC | Celeb-DF AUC | Celeb-DF TPR@5% | DFD AUC (pure) | DFD TPR@5% (pure) |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| `gend_official` | 0 | 0.9452 | 0.9327 | 73.82% | 0.8840 | 64.98% |
+| `gend_ours` | 1 | 0.9047 | 0.8321 | 52.06% | 0.8657 | 69.93% |
+| `gend_ours` | 2 | 0.9040 | 0.8273 | 51.18% | 0.8688 | 70.97% |
+| `gend_ours` | 3 | 0.9045 | 0.8288 | 51.47% | 0.8623 | 70.16% |
+| `smsdt_s` | 1 | 0.9587 | 0.8837 | 50.29% | 0.8667 | 65.09% |
+| `smsdt_s` | 2 | 0.9613 | 0.8825 | 50.59% | 0.8775 | 69.16% |
+| `smsdt_s` | 3 | 0.9681 | 0.8815 | 51.47% | 0.8876 | 68.36% |
+| `smsdt_st` | 1 | 0.9604 | 0.8706 | 45.29% | 0.8607 | 58.76% |
+| `smsdt_st` | 2 | 0.9664 | 0.8779 | 42.06% | 0.8559 | 57.60% |
+| `smsdt_st` | 3 | 0.9618 | 0.8628 | 54.41% | 0.8701 | 65.55% |
+| `smsdt_full` | 1 | 0.9631 | 0.8914 | 51.76% | 0.8321 | 46.51% |
+| `smsdt_full` | 2 | 0.9621 | 0.8960 | 55.00% | 0.8577 | 56.34% |
+| `smsdt_full` | 3 | 0.9625 | 0.8772 | 50.88% | 0.8445 | 52.04% |
+
+Mean +/- sd per architecture: [`results/tables/experiment_matrix_agg.md`](file:///e:/DEEPFAKE/results/tables/experiment_matrix_agg.md).
 
 ---
 
 ### 4.2 Canonical 3-Seed Aggregated Performance (Mean $\pm$ Std Dev)
 
-| Model Architecture | Seeds / Runs | In-Domain FF++ Test AUC | Cross-Dataset Celeb-DF v2 AUC | Cross-Dataset DFD AUC | Role / Summary |
+| Model Architecture | Seeds / Runs | In-Domain FF++ Test AUC | Cross-Dataset Celeb-DF v2 AUC | Cross-Dataset DFD AUC (pure, `243` reals) | Role / Summary |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **`gend_official`** | 1 (`seed0`) | `0.9452` | **`0.9327`** | **`0.9076`** | Official author weights (`hf:yermandy/GenD_CLIP_L_14`) |
-| **`gend_ours`** | 3 | $0.9044 \pm 0.0004$ | $0.8294 \pm 0.0025$ | $0.8785 \pm 0.0032$ | GenD-style in-house baseline (not a reproduction; Celeb-DF 0.83 vs 0.933 for official weights) |
-| **`smsdt_s`** | 3 | $0.9627 \pm 0.0049$ | $0.8826 \pm 0.0011$ | $0.8841 \pm 0.0120$ | Controlled single-frame baseline ($T=1$) |
-| **`smsdt_st`** | 3 | $0.9629 \pm 0.0031$ | $0.8704 \pm 0.0076$ | $0.8779 \pm 0.0116$ | Spatio-temporal attention ($T=8$) |
-| **`smsdt_full`** | 3 | $0.9626 \pm 0.0005$ | $0.8882 \pm 0.0098$ | $0.8649 \pm 0.0043$ | Full S-MSDTv3 ($T=8$) |
+| **`gend_official`** | 1 (`seed0`) | `0.9452` | **`0.9327`** | **`0.8840`** | Official author weights (`hf:yermandy/GenD_CLIP_L_14`) |
+| **`gend_ours`** | 3 | $0.9044 \pm 0.0004$ | $0.8294 \pm 0.0025$ | $0.8656 \pm 0.0033$ | GenD-style in-house baseline (not a reproduction; Celeb-DF 0.83 vs 0.933 for official weights) |
+| **`smsdt_s`** | 3 | $0.9627 \pm 0.0049$ | $0.8826 \pm 0.0011$ | $0.8773 \pm 0.0105$ | Controlled single-frame baseline ($T=1$) |
+| **`smsdt_st`** | 3 | $0.9629 \pm 0.0031$ | $0.8704 \pm 0.0076$ | $0.8622 \pm 0.0072$ | Spatio-temporal attention ($T=8$) |
+| **`smsdt_full`** | 3 | $0.9626 \pm 0.0005$ | $0.8882 \pm 0.0098$ | $0.8447 \pm 0.0128$ | Full S-MSDTv3 ($T=8$) |
 
 #### Statistical Takeaways (3-Seed Summary):
-1. **Recipe vs. Published SOTA Comparison (Celeb-DF v2):**
-   - `smsdt_full` achieves a 3-seed mean of **$0.8882 \pm 0.0098$** (`+0.059` AUC over our in-house GenD-style baseline at $0.8294 \pm 0.0025$). **This is a recipe comparison, not a comparison with GenD:** official GenD (`gend_official`) scores **`0.9327`** on Celeb-DF, above every S-MSDT variant (`smsdt_s`: `0.8826`, `smsdt_st`: `0.8704`, `smsdt_full`: `0.8882`).
+1. **In-House Baseline vs. Published GenD (Celeb-DF v2):**
+   - `smsdt_full` achieves a 3-seed mean of **$0.8882 \pm 0.0098$** (`+0.059` AUC over our in-house GenD-style baseline at $0.8294 \pm 0.0025$). **This is not a comparison with GenD, and not a recipe-only comparison either (D17):** `smsdt_s` trains 777,478 parameters (projection, attention-MIL readout and CLS head on top of the LayerNorms) against `gend_ours`'s 103,425, so the gap mixes training recipe and head architecture. Official GenD (`gend_official`) scores **`0.9327`** on Celeb-DF, above every S-MSDT variant (`smsdt_s`: `0.8826`, `smsdt_st`: `0.8704`, `smsdt_full`: `0.8882`).
 2. **Run-to-Run Seed Spread:**
    - Across the 3 training seeds, seed $\text{sd} \le 0.0098$ on Celeb-DF (and $\le 0.0049$ on FF++). Three seeds characterize empirical variance under our pipeline rather than proving architectural causality, and no ablation isolates loss weighting or curriculum sampling.
    - In-domain on FF++ c23, `smsdt_s`, `smsdt_st`, and `smsdt_full` all cluster around `0.9626 – 0.9629`.
 
-*(Note on DFD in §§4.1–4.2: the legacy matrix shows raw unstripped `2,987`-video DFD scores including `140` FF++ test reals labelled `dfd_actor`. Under the D14 pure-DFD filter [`243` reals / `18` actor identities, `2,847` total videos] in §4.3, mean DFD AUCs are `gend_official`: `0.8840`, `smsdt_s`: `0.8773`, `gend_ours`: `0.8656`, `smsdt_st`: `0.8622`, and `smsdt_full`: `0.8447`; DFD stays `dev_overlap` exploratory.)*
+*(DFD columns in §§4.1–4.2 now use the D14 pure-DFD reals (`243` reals / `18` actor identities, `2,847` videos); DFD stays `dev_overlap` exploratory.)*
 
 ---
 
@@ -560,7 +568,8 @@ Evaluates the degradation gap $g = \text{HTER}(\tau_{\text{cal}}) - \text{HTER}(
 #### Scientific Findings & Pre-Registration Audit (H2):
 1. **Why Earlier Runs Showed $g \le 0.0374$:** The prior run fell back to raw `0.5000` (`tau_val = 0.5000` on every S-MSDT model) because dev-split Platt calibration JSONs had not yet been generated. Re-running with actual dev calibration (`results/calib/*.json`), D13 identity clusters, and D14 pure DFD changes the picture substantially.
 2. **H2 Is Formally `undetermined` (Not Falsified):** With Celeb-DF's `121` resolved identity clusters (**D13**), `smsdt_s` seed 1 still clears the H2 degradation threshold ($g = 0.0984$, $95\%\text{ CI }[0.0796, 0.1283]$, lower CI $\ge 0.05$, with `FNR = 0.5000` at $\tau_{\text{cal}}=0.6937$), while seeds 2–3 stay below `0.05` (`0.0259 [0.0130, 0.0627]` and `0.0389 [0.0221, 0.0628]`); `gend_ours` stays below `0.05` on Celeb-DF (`0.0074–0.0258`, though `0.1112 [0.0793, 0.1511]` and `0.1060 [0.0756, 0.1456]` on exploratory pure DFD seeds 1–2). Exploratory `smsdt_st` seed 2 also exceeds `0.05` on Celeb-DF ($g = 0.0926$, CI $[0.0561, 0.1402]$). Additional confirmatory unseen data/seeds are required before issuing a confirm/falsify verdict for H2.
-3. **HTER Still Masks Large Asymmetric FPR Shifts:** Even where $g < 0.05$, `FPR` under the frozen calibrated cutoff inflates sharply relative to `FF++val` (`smsdt_full` seed 3: `12.92%` on Celeb-DF and `13.58%` on pure DFD vs `2.14%` = `6.03x` / `6.34x`; `gend_official` seed 0: `21.35%` on Celeb-DF and `20.58%` on pure DFD vs `6.43%` = `3.32x` / `3.20x`), motivating the explicit FPR-control audit in §10.
+3. **Threshold rule used here:** every FPR in this section is at the run's FF++-val Platt + Youden cutoff (`tau_cal`). §§9–11 use the FF++-val `(1 - α)` source quantile instead, so `gend_official` reads `21.35%` here and `15.73%` there; both are correct for their rule. Label the rule in every paper table.
+4. **HTER Still Masks Large Asymmetric FPR Shifts:** Even where $g < 0.05$, `FPR` under the frozen calibrated cutoff inflates sharply relative to `FF++val` (`smsdt_full` seed 3: `12.92%` on Celeb-DF and `13.58%` on pure DFD vs `2.14%` = `6.03x` / `6.34x`; `gend_official` seed 0: `21.35%` on Celeb-DF and `20.58%` on pure DFD vs `6.43%` = `3.32x` / `3.20x`), motivating the explicit FPR-control audit in §10.
 
 ---
 
@@ -851,6 +860,8 @@ In contrast, split-conformal quantile calibration (`conformal`) on `n = 20` targ
 
 - **Operational envelope (`Celeb-DF-v2`):** Across individual runs at `n=20, α=0.05`, conformal mean FPR spans `0.039–0.054` while retaining `0.78–0.96` of oracle TPR. At `α=0.10, n=20`, conformal achieves `0.081–0.092` FPR with `P(FPR > 2α) = 0.03–0.07`. By comparison, `naive_quantile` violates the target budget (`0.112` mean FPR at `n=10`, `0.085` at `n=20` across `0.077–0.096`, with `P(FPR > 2α) = 0.46` / `0.32`), and `np_umbrella` abstains below `n=59` identities (`0.017` FPR, `0.34` TPR at `n=60`).
 - **DFD (`18` actor identities, exploratory `n <= 10`):** With only `18` actor clusters (`<= 10` calibration draws), `conformal` abstains at both `n=5` and `n=10`, so all H7-v2 verdicts on DFD are **`undetermined`**.
+- **Identity-weighted FPR and real-source strata (D18, exploratory, 2026-11-12):** Celeb-DF's `121` real clusters are `51` celebrities (`108` Celeb-real videos) plus `70` YouTube-real clips with no identity label. Averaging the flag rate per held-out identity instead of per video, conformal at `n=20, α=0.05` gives `0.043–0.052` FPR across the `13` runs (`P(FPR_idw > 2α) = 0.12–0.16`). Restricting the reals to one source at a time (`--real-strata`, `results/tables/real_shot_strata_dev_celebdf.md`), conformal still gives `0.041–0.052` FPR (identity-weighted `0.044–0.051`) on Celeb-real (`51` identities) and YouTube-real (`70`), but the TPR/oracle ratio drops to `0.73–0.93`, below the `0.75` H7b-v2 bar for some runs. The zero-shot source threshold is worse on YouTube-real for `gend_official` (`0.187` vs `0.140`).
+- **Note on the rule at `n = 20`:** at `α = 0.05`, `k = ceil(0.95 × 21) = 20 = n`, so the conformal threshold is the **maximum** of the 20 calibration reals. The guarantee is on the expected FPR over calibration draws; any single draw can overshoot (hence `P(FPR > 2α)` of `0.08–0.16`). `np_umbrella` is the high-probability version and needs `n ≥ 59`.
 - **Confirmation Plan:** Pre-register `(unseen dataset with >= 40 real identities, budget n, α, confirmatory seed list)` alongside author sign-off in [`docs/decisions.md`](file:///e:/DEEPFAKE/docs/decisions.md) Sections 5 & 6 before running the confirmatory H7 evaluation.
 
 ---

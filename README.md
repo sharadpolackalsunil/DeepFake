@@ -128,9 +128,9 @@ An exhaustive index of all model checkpoints, parameter footprints, input tempor
 | Model Identifier | Architecture Class | Total Weights | Trainable Weights | Frame Window | Checkpoint Directory | Best Checkpoint File | Configuration File |
 | :--- | :--- | :---: | :---: | :---: | :--- | :--- | :--- |
 | **`gend_ours`** | `GenDModel` | 303.18M | 103,425 (0.034%) | $T=1$ | `outputs/checkpoints_gend_ours/seed{seed}/` | `best_ema.pt` | [`configs/train_gend.yaml`](configs/train_gend.yaml) |
-| **`smsdt_s`** | `SMSDTv2` ($L=0$) | 303.18M | 103,425 (0.034%) | $T=1$ | `outputs/checkpoints_v2_stage_b/seed{seed}/` | `best_ema.pt` | [`configs/train_s.yaml`](configs/train_s.yaml) |
-| **`smsdt_st`** | `SMSDTv2` ($L=2$) | 311.54M | 8,474,881 (2.72%) | $T=8$ | `outputs/checkpoints_st/seed{seed}/` | `best_ema.pt` | [`configs/train_st.yaml`](configs/train_st.yaml) |
-| **`smsdt_full`** | `SMSDTv3` | 312.18M | 9,103,363 (2.92%) | $T=8$ | `outputs/checkpoints_v3_stage_c/seed{seed}/` | `best_ema.pt` | [`configs/train_full.yaml`](configs/train_full.yaml) |
+| **`smsdt_s`** | `SMSDTv2` ($L=0$) | 303.85M | 777,478 (0.256%) | $T=1$ | `outputs/checkpoints_smsdt_s/seed{seed}/` | `best_ema.pt` | [`configs/train_s.yaml`](configs/train_s.yaml) |
+| **`smsdt_st`** | `SMSDTv2` ($L=2$) | 311.54M | 8,467,462 (2.72%) | $T=8$ | `outputs/checkpoints_smsdt_st/seed{seed}/` | `best_ema.pt` | [`configs/train_st.yaml`](configs/train_st.yaml) |
+| **`smsdt_full`** | `SMSDTv3` | 312.18M | 9,102,600 (2.92%) | $T=8$ | `outputs/checkpoints_smsdt_full/seed{seed}/` | `best_ema.pt` | [`configs/train_full.yaml`](configs/train_full.yaml) |
 | **`smsdt_v1`** | `SMSDT` | 26.68M | 26,678,659 (100%) | $T=8$ | `outputs/checkpoints/` | `best_ema.pt` | [`configs/train.yaml`](configs/train.yaml) |
 
 ### Checkpoint File Contents:
