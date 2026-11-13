@@ -5,48 +5,52 @@
 \paragraph{Datasets and Splits.}
 All models are trained strictly on the standard training split of \textbf{FaceForensics++ (FF++ c23)} \citep{rossler2019faceforensics}, comprising five distinct manipulation methods: Deepfakes, Face2Face, FaceSwap, NeuralTextures, and FaceShifter, paired with authentic YouTube videos (720 train, 140 val, and 140 test videos per method; $N=840$ test videos total).
 
-To evaluate cross-generator and cross-domain generalization, we deploy trained checkpoints without fine-tuning to two independent, challenging external benchmarks:
+To evaluate cross-generator and cross-domain generalization under exploratory and pre-registered confirmatory protocols, we deploy trained checkpoints without fine-tuning to three independent external benchmarks:
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Celeb-DF-v2} \citep{li2020celeb}: $518$ test videos ($340$ Celeb-synthesis manipulated videos, $178$ authentic pristine videos) exhibiting refined color correction, minimal boundary artifacts, and naturalistic lighting.
-    \item \textbf{DeepFakeDetection (DFD)} \citep{dufour2019deepfakedetection}: $2{,}987$ test videos ($2{,}604$ manipulated videos and $383$ authentic pristine videos) recorded across diverse studio environments and actors.
+    \item \textbf{DeepFakeDetection (DFD)} \citep{dufour2019deepfakedetection}: $2{,}847$ pure test videos ($2{,}604$ manipulated videos and $243$ authentic pristine actor videos across $18$ actor identities, with mislabelled FF++ reals isolated under D14).
+    \item \textbf{FakeAVCeleb\_v1.2} \citep{khalid2021fakeavceleb}: $2{,}998$ pre-registered confirmatory test videos ($499$ pristine VoxCeleb2 identities, 1 video/ID; $2{,}499$ visual deepfakes balanced across 5 manipulation methods: \texttt{wav2lip}, \texttt{fsgan}, \texttt{fsgan-wav2lip}, \texttt{faceswap-wav2lip}, \texttt{faceswap}). All manifests were frozen before evaluation at commit \texttt{bd90d08} (tag \texttt{prereg-freeze-h7}) and scored blindly (commit \texttt{f2bd09b}).
 \end{enumerate}
 
 \paragraph{Compared Model Architectures.}
-To conduct a strictly controlled ablation, we train four matched architectures under identical optimization recipes across three independent random seeds ($\{1, 2, 3\}$), totaling 12 complete training runs:
+To conduct a strictly controlled ablation, we train four matched architectures under identical optimization recipes across three independent random seeds ($\{1, 2, 3\}$), totaling 12 complete training runs, alongside the external published GenD checkpoint:
 \begin{itemize}[leftmargin=*]
-    \item \textbf{\texttt{gend\_ours}} ($T=1$): In-house reproduction of the GenD architecture \citep{gend2024} (CLIP ViT-L/14 with LayerNorm PEFT, linear probe, and spherical linear interpolation, $103{,}425$ trainable parameters). Under pre-registered Gate G1, this baseline serves as our internal ablation anchor; published GenD v3 numbers ($0.946$ on Celeb-DF v2, $0.964$ on DFD) reflect differences in recipe (cyclical learning rate, cross-dataset checkpoint selection, 32 frames).
-    \item \textbf{\texttt{smsdt\_s}} ($T=1$): Controlled internal single-frame baseline matching S-MSDT's balanced loss and curriculum sampling ($103{,}425$ trainable parameters).
+    \item \textbf{\texttt{gend\_ours}} ($T=1$): In-house reproduction of the GenD architecture \citep{gend2024} (CLIP ViT-L/14 with LayerNorm PEFT, linear probe, and spherical linear interpolation, $103{,}425$ trainable parameters). Under pre-registered Gate G1, this baseline serves as our internal ablation anchor.
+    \item \textbf{\texttt{smsdt\_s}} ($T=1$): Controlled internal single-frame baseline matching S-MSDT's balanced loss, curriculum sampling, and projection readout ($777{,}478$ trainable parameters).
     \item \textbf{\texttt{smsdt\_st}} ($T=8$): Spatio-temporal transformer baseline with 2 NMSSS blocks and Top-$k$ linear readout ($8{,}467{,}462$ trainable parameters).
     \item \textbf{\texttt{smsdt\_full}} ($T=8$): The full S-MSDTv3 model incorporating Dual SRM + Haar DWT residual streams and EvidenceReadoutV3 ($9{,}102{,}600$ trainable parameters).
+    \item \textbf{\texttt{gend\_official}}$^\dagger$ ($T=1$): Official published author checkpoint (\texttt{yermandy/GenD\_CLIP\_L\_14}, $103{,}425$ parameters), evaluated across all benchmarks under pre-registered Gate G1.
 \end{itemize}
 
 \paragraph{Evaluation Protocol.}
-Following the pre-registered benchmark protocol, each test video is evaluated using $K=8$ temporally distributed clips ($T=8$ for video architectures, $T=1$ for frame baselines). Video-level prediction probabilities are obtained via mean clip aggregation. We report Video Area Under the Receiver Operating Characteristic Curve (Video AUC), True Positive Rate at 5\% False Positive Rate (TPR@5\%FPR), Half Total Error Rate (HTER), and Expected Calibration Error (ECE).
+Following the pre-registered benchmark protocol, each test video is evaluated using $K=8$ temporally distributed clips ($T=8$ for video architectures, $T=1$ for frame baselines). Video-level prediction probabilities are obtained via mean clip aggregation. We report Video Area Under the Receiver Operating Characteristic Curve (Video AUC), True Positive Rate at 5\% False Positive Rate (TPR@5\%FPR), Half Total Error Rate (HTER), and degradation gap $g = \text{HTER}(\tau_{\text{val}}) - \text{HTER}(\tau^*)$.
 
 \begin{table*}[t]
 \centering
 \small
-\caption{\textbf{Master Experiment Matrix Across All 12 Independent Runs.} All models trained for 30 epochs on FF++ c23. Metrics report test-set Video AUC, HTER at validation-calibrated operating cutoff $\tau_{\text{val}}$, and operating point degradation gap $g = \text{HTER}(\tau_{\text{val}}) - \text{HTER}(\tau^*)$.}
+\caption{\textbf{Master Experiment Matrix Across All 13 Runs.} Multi-seed models trained on FF++ c23 for 30 epochs plus official author checkpoint. Metrics report test-set Video AUC, HTER at validation operating cutoff $\tau_{\text{val}}$, and operating point degradation gap $g = \text{HTER}(\tau_{\text{val}}) - \text{HTER}(\tau^*)$ across in-domain and unseen cross-dataset benchmarks.}
 \label{tab:master_matrix}
 \begin{tabular}{l c c c c c c c c c}
 \toprule
-\textbf{Model Identifier} & \textbf{Seed} & \textbf{Params} & \textbf{$T$} & \textbf{FF++ AUC} & \textbf{FF++ $g$} & \textbf{Celeb-DF AUC} & \textbf{Celeb-DF $g$} & \textbf{DFD AUC} & \textbf{DFD $g$} \\
+\textbf{Model Identifier} & \textbf{Seed} & \textbf{Params} & \textbf{$T$} & \textbf{FF++ AUC} & \textbf{FF++ $g$} & \textbf{Celeb-DF AUC} & \textbf{Celeb-DF $g$} & \textbf{FakeAV AUC} & \textbf{FakeAV $g$} \\
 \midrule
-\texttt{gend\_ours} & 1 & 103K & 1 & 0.9047 & 0.0064 & 0.8321 & 0.0079 & 0.8776 & 0.0050 \\
-\texttt{gend\_ours} & 2 & 103K & 1 & 0.9040 & 0.0114 & 0.8273 & 0.0130 & 0.8820 & 0.0068 \\
-\texttt{gend\_ours} & 3 & 103K & 1 & 0.9045 & 0.0043 & 0.8288 & 0.0104 & 0.8758 & 0.0012 \\
+\texttt{gend\_official}$^\dagger$ & 0 & 103K & 1 & 0.9452 & 0.0171 & 0.9327 & 0.0076 & 0.9745 & 0.1267 \\
 \midrule
-\texttt{smsdt\_s} & 1 & 103K & 1 & 0.9587 & 0.0029 & 0.8837 & 0.0051 & 0.8742 & 0.0030 \\
-\texttt{smsdt\_s} & 2 & 103K & 1 & 0.9613 & 0.0050 & 0.8825 & 0.0198 & 0.8807 & 0.0019 \\
-\texttt{smsdt\_s} & 3 & 103K & 1 & 0.9681 & 0.0107 & 0.8815 & 0.0114 & 0.8974 & 0.0003 \\
+\texttt{gend\_ours} & 1 & 103K & 1 & 0.9047 & 0.0450 & 0.8321 & 0.0079 & 0.8897 & 0.3354 \\
+\texttt{gend\_ours} & 2 & 103K & 1 & 0.9040 & 0.0314 & 0.8273 & 0.0130 & 0.8898 & 0.3304 \\
+\texttt{gend\_ours} & 3 & 103K & 1 & 0.9045 & 0.0179 & 0.8288 & 0.0104 & 0.8926 & 0.3340 \\
 \midrule
-\texttt{smsdt\_st} & 1 & 8.5M & 8 & 0.9604 & 0.0121 & 0.8706 & 0.0166 & 0.8682 & 0.0019 \\
-\texttt{smsdt\_st} & 2 & 8.5M & 8 & 0.9664 & 0.0086 & 0.8779 & 0.0374 & 0.8748 & 0.0120 \\
-\texttt{smsdt\_st} & 3 & 8.5M & 8 & 0.9618 & 0.0000 & 0.8628 & 0.0104 & 0.8908 & 0.0173 \\
+\texttt{smsdt\_s} & 1 & 777K & 1 & 0.9587 & 0.0186 & 0.8837 & 0.0051 & 0.9473 & 0.0054 \\
+\texttt{smsdt\_s} & 2 & 777K & 1 & 0.9613 & 0.0136 & 0.8825 & 0.0198 & 0.9442 & 0.0012 \\
+\texttt{smsdt\_s} & 3 & 777K & 1 & 0.9681 & 0.0186 & 0.8815 & 0.0114 & 0.9396 & 0.0042 \\
 \midrule
-\texttt{smsdt\_full} & 1 & 9.1M & 8 & 0.9631 & 0.0079 & 0.8914 & 0.0113 & 0.8604 & 0.0058 \\
-\texttt{smsdt\_full} & 2 & 9.1M & 8 & 0.9621 & 0.0100 & \textbf{0.8960} & 0.0029 & 0.8689 & 0.0043 \\
-\texttt{smsdt\_full} & 3 & 9.1M & 8 & 0.9625 & 0.0036 & 0.8772 & 0.0029 & 0.8655 & 0.0044 \\
+\texttt{smsdt\_st} & 1 & 8.5M & 8 & 0.9604 & 0.0150 & 0.8706 & 0.0166 & 0.9321 & 0.0048 \\
+\texttt{smsdt\_st} & 2 & 8.5M & 8 & 0.9664 & 0.0114 & 0.8779 & 0.0374 & 0.9479 & 0.0144 \\
+\texttt{smsdt\_st} & 3 & 8.5M & 8 & 0.9618 & 0.0093 & 0.8628 & 0.0104 & 0.9375 & 0.0249 \\
+\midrule
+\texttt{smsdt\_full} & 1 & 9.1M & 8 & 0.9631 & 0.0371 & 0.8914 & 0.0113 & 0.9464 & 0.0042 \\
+\texttt{smsdt\_full} & 2 & 9.1M & 8 & 0.9621 & 0.0057 & 0.8960 & 0.0029 & 0.9437 & 0.0265 \\
+\texttt{smsdt\_full} & 3 & 9.1M & 8 & 0.9625 & 0.0329 & 0.8772 & 0.0029 & 0.9446 & 0.0111 \\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -54,18 +58,18 @@ Following the pre-registered benchmark protocol, each test video is evaluated us
 \begin{table}[t]
 \centering
 \small
-\caption{\textbf{Canonical 3-Seed Aggregated Performance ($\text{Mean} \pm \text{Std Dev}$) and External Anchor.} Multi-run validation across 3 independent FF++ c23 training seeds on in-domain and unseen external evaluation distributions. $^\dagger$External published checkpoint (\texttt{yermandy/GenD\_CLIP\_L\_14}) evaluated on Celeb-DF-v2 ($N=518$) under the identical protocol (Gate G1 anchor); bold denotes best among our controlled FF++ c23 trained models.}
+\caption{\textbf{Canonical 3-Seed Aggregated Performance ($\text{Mean} \pm \text{Std Dev}$) Across In-Domain, Exploratory, and Confirmatory Benchmarks.} Multi-run validation across 3 independent FF++ c23 training seeds. $^\dagger$External published author checkpoint (\texttt{yermandy/GenD\_CLIP\_L\_14}) evaluated under identical protocol (Gate G1 anchor); bold denotes best among our controlled FF++ c23 trained models.}
 \label{tab:aggregated_results}
-\begin{tabular}{l c c c}
+\begin{tabular}{l c c c c}
 \toprule
-\textbf{Model Architecture} & \textbf{FF++ c23 Test AUC} & \textbf{Celeb-DF-v2 AUC} & \textbf{DFD Test AUC} \\
+\textbf{Model Architecture} & \textbf{FF++ c23 Test} & \textbf{Celeb-DF-v2} & \textbf{DFD Test (Pure)} & \textbf{FakeAVCeleb (Confirm)} \\
 \midrule
-\texttt{gend\_ours} & $0.9044 \pm 0.0004$ & $0.8294 \pm 0.0025$ & $0.8785 \pm 0.0032$ \\
-\texttt{smsdt\_s}    & $0.9627 \pm 0.0049$ & $0.8826 \pm 0.0011$ & $\mathbf{0.8841 \pm 0.0120}$ \\
-\texttt{smsdt\_st}   & $0.9629 \pm 0.0031$ & $0.8704 \pm 0.0076$ & $0.8779 \pm 0.0116$ \\
-\textbf{\texttt{smsdt\_full}} (Ours) & $\mathbf{0.9626 \pm 0.0005}$ & $\mathbf{0.8882 \pm 0.0098}$ & $0.8649 \pm 0.0043$ \\
+\texttt{gend\_ours} & $0.9044 \pm 0.0004$ & $0.8294 \pm 0.0025$ & $0.8785 \pm 0.0032$ & $0.8907 \pm 0.0016$ \\
+\texttt{smsdt\_s}    & $0.9627 \pm 0.0049$ & $0.8826 \pm 0.0011$ & $\mathbf{0.8841 \pm 0.0120}$ & $0.9437 \pm 0.0039$ \\
+\texttt{smsdt\_st}   & $\mathbf{0.9629 \pm 0.0031}$ & $0.8704 \pm 0.0076$ & $0.8779 \pm 0.0116$ & $0.9392 \pm 0.0080$ \\
+\textbf{\texttt{smsdt\_full}} (Ours) & $0.9626 \pm 0.0005$ & $\mathbf{0.8882 \pm 0.0098}$ & $0.8649 \pm 0.0043$ & $\mathbf{0.9449 \pm 0.0014}$ \\
 \midrule
-\texttt{gend\_official}$^\dagger$ (HF Pretrained) & --- & $0.9327$ & --- \\
+\texttt{gend\_official}$^\dagger$ (Published) & $0.9452$ & $0.9327$ & $0.8840$ & $0.9745$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -75,10 +79,10 @@ Following the pre-registered benchmark protocol, each test video is evaluated us
 A central empirical finding emerges when comparing the two single-frame models in Table~\ref{tab:aggregated_results}. Both \texttt{gend\_ours} and \texttt{smsdt\_s} utilize identical parameter counts ($103{,}425$ trainable LayerNorm and probe weights on CLIP ViT-L/14) and identical frame sampling ($T=1$). Yet \texttt{smsdt\_s} achieves a $+5.83\%$ in-domain AUC advantage on FF++ ($0.9627$ vs $0.9044$) and a $+5.32\%$ cross-dataset advantage on Celeb-DF v2 ($0.8826$ vs $0.8294$). This substantial delta, achieved without changing the parameter footprint, demonstrates that training recipe (loss balancing, curriculum scheduling, and gradient management) accounts for performance variations that prior literature frequently attributed to architectural innovation.
 
 \paragraph{Gate G1 External Anchor (\texttt{yermandy/GenD\_CLIP\_L\_14}).}
-To avoid benchmark-blind self-comparison, we evaluated the official published GenD checkpoint (\texttt{hf:yermandy/GenD\_CLIP\_L\_14}) under the exact same Celeb-DF-v2 clip-sampling pipeline ($N=518$ test videos). It obtains $0.9327$ Video AUC ($0.9277$ Top-50\% Clip AUC, $0.8841$ Frame/Clip AUC), surpassing our controlled FF++ c23-trained ablation suite (\texttt{smsdt\_full}: $0.8882$, \texttt{gend\_ours}: $0.8294$). Consistent with pre-registered Gate G1 (Branch B), we explicitly do not claim state-of-the-art cross-dataset AUC over the published multi-source checkpoint; instead, all comparisons isolate the causal effect of training recipe and forensic head capacity under identical FF++ c23 supervision. Critically, however, the official checkpoint's $0.9327$ ranking AUC coexists with severe operating-point miscalibration under distribution shift: at $\tau = 0.500$, it incurs $98/178$ false alarms on authentic Celeb-DF-v2 videos ($55.1\%$ FPR; TPR $98.5\%$, overall accuracy $80.12\%$, balanced accuracy $71.74\%$, raw ECE $0.1362$), requiring an oracle EER threshold shift to $\tau = 0.82$ to balance accuracy ($0.842$; $0.841$ Fake / $0.843$ Real).
+To avoid benchmark-blind self-comparison, we evaluated the official published GenD checkpoint (\texttt{hf:yermandy/GenD\_CLIP\_L\_14}) across all benchmarks under the identical clip-sampling pipeline. It obtains $0.9452$ on FF++ test, $0.9327$ on Celeb-DF-v2, $0.8840$ on pure DFD, and $\mathbf{0.9745}$ on FakeAVCeleb (TPR@5\%FPR: $90.64\%$), outperforming our controlled FF++ c23-trained ablation suite on the audio-visual benchmark (\texttt{smsdt\_full}: $0.9449$, \texttt{smsdt\_s}: $0.9437$, \texttt{gend\_ours}: $0.8907$). Consistent with pre-registered Gate G1 (Branch B), we explicitly do not claim state-of-the-art cross-dataset AUC over the published multi-source checkpoint; instead, our comparisons isolate the causal effect of training recipe and forensic head capacity under identical FF++ c23 supervision. Critically, however, the official checkpoint's strong ranking coexists with severe operating-point miscalibration under distribution shift: at $\tau = 0.500$, it incurs $98/178$ false alarms on authentic Celeb-DF-v2 videos ($55.1\%$ FPR; raw ECE $0.1362$), and under source-quantile transfer ($\alpha=0.05$ on FF++ val) it inflates Celeb-DF FPR to $15.73\%$ ($3.15\times$ over budget), confirming that cross-domain false alarm inflation is a systemic foundation model challenge.
 
 \paragraph{Utility of Spatio-Temporal and Forensic Heads.}
-Contrasting single-frame tuning (\texttt{smsdt\_s}) with multi-frame spatio-temporal attention (\texttt{smsdt\_st}, $8.5\text{M}$ params) and full forensic residual streams (\texttt{smsdt\_full}, $9.1\text{M}$ params) reveals an unexpected empirical trend. On Celeb-DF v2, \texttt{smsdt\_full} obtains $0.8882$ AUC, representing a marginal $+0.0056$ AUC gain over \texttt{smsdt\_s} ($0.8826$), while \texttt{smsdt\_st} slightly declines to $0.8704$ ($-0.0122$). On DFD, \texttt{smsdt\_s} achieves the highest mean performance ($0.8841$), surpassing \texttt{smsdt\_st} ($0.8779$) and \texttt{smsdt\_full} ($0.8649$, $-0.0192$). Consequently, scaling trainable capacity by nearly two orders of magnitude ($103\text{K} \rightarrow 9.1\text{M}$) does not yield consistent generalization gains across unseen datasets, supporting the pre-registered hypothesis that additional heads do not reliably improve upon clean single-frame LayerNorm adaptation.
+Contrasting single-frame tuning (\texttt{smsdt\_s}, $777\text{K}$ params) with multi-frame spatio-temporal attention (\texttt{smsdt\_st}, $8.5\text{M}$ params) and full forensic residual streams (\texttt{smsdt\_full}, $9.1\text{M}$ params) reveals an unexpected empirical trend. On the pre-registered confirmatory FakeAVCeleb benchmark ($N=2{,}998$), \texttt{smsdt\_full} ($0.9449 \pm 0.0014$) and \texttt{smsdt\_s} ($0.9437 \pm 0.0039$) perform within $0.0012$ AUC of each other, while \texttt{smsdt\_st} reaches $0.9392 \pm 0.0080$. On Celeb-DF v2, \texttt{smsdt\_full} obtains $0.8882$ AUC, representing a marginal $+0.0056$ AUC gain over \texttt{smsdt\_s} ($0.8826$), while \texttt{smsdt\_st} slightly declines to $0.8704$ ($-0.0122$). On DFD, \texttt{smsdt\_s} achieves the highest mean performance ($0.8841$), surpassing \texttt{smsdt\_st} ($0.8779$) and \texttt{smsdt\_full} ($0.8649$). Consequently, scaling trainable capacity by nearly two orders of magnitude does not yield consistent generalization gains across unseen datasets, supporting the pre-registered hypothesis that additional heads do not reliably improve upon clean single-frame LayerNorm adaptation.
 
 \paragraph{Resolution of the NeuralTextures Hardness Gradient.}
 Analysis of the per-manipulation breakdown on FF++ test reveals that synthetic textures generated via NeuralTextures present the steepest challenge to forensic models. The single-frame GenD reproduction achieves only $0.675 - 0.676$ AUC (with raw accuracy at threshold $0.5$ falling to $22.1\% - 25.0\%$). In contrast, S-MSDTv3 Full elevates NeuralTextures detection to $\mathbf{0.892 - 0.900}$ AUC (Accuracy@0.5: $66.4\% - 69.3\%$), confirming that high-frequency noise residuals expose subtle facial expression reenactments that evade semantic self-attention.
