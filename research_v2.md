@@ -8,7 +8,50 @@
 
 ---
 
-> **Audit & Execution Update (2026-11-13, branch `feat/eval-and-benchmarks` @ `657330c`).** Read [`docs/novelty_audit.md`](file:///e:/DEEPFAKE/docs/novelty_audit.md),
+## Table of Contents
+
+- [Audit & Execution Overview](#audit--execution-overview)
+- [1. Executive Summary & Experimental Objectives](#1-executive-summary--experimental-objectives)
+- [2. Models & Experimental Design](#2-models--experimental-design)
+- [3. RTX 5090 Empirical Log (Seed 1, Seed 2, Seed 3, FakeAVCeleb)](#3-rtx-5090-empirical-log-seed-1)
+  - [3.1 Initial Benchmark Diagnostic & Fix](#31-initial-benchmark-diagnostic--fix)
+  - [3.2 GenD-Style In-House Baseline Evaluation Results (Seed 1)](#32-gend-style-in-house-baseline-evaluation-results-seed-1-not-a-reproduction)
+  - [3.3 S-MSDT-S (Spatial-Only Baseline) Evaluation Results (Seed 1)](#33-s-msdt-s-spatial-only-baseline-evaluation-results-seed-1)
+  - [3.4 S-MSDTv3 Full Model Evaluation Results (Seed 1)](#34-s-msdtv3-full-model-evaluation-results-seed-1)
+  - [3.5 S-MSDT-ST (Spatio-Temporal Baseline) Evaluation Results (Seed 1)](#35-s-msdt-st-spatio-temporal-baseline-evaluation-results-seed-1)
+  - [3.6 Multi-Seed Replication Log: Seed 2 Results](#36-multi-seed-replication-log-seed-2-results)
+  - [3.7 Multi-Seed Replication Log: Seed 3 Results](#37-multi-seed-replication-log-seed-3-results)
+  - [3.8 Confirmatory Cross-Dataset Benchmark: FakeAVCeleb_v1.2](#38-confirmatory-cross-dataset-benchmark-fakeavceleb_v12-pre-registered-dataset-n2998-videos)
+- [4. Master Experiment Matrix & Comparative Analysis (RQ1)](#4-master-experiment-matrix--comparative-analysis-rq1)
+  - [4.1 Master Experiment Matrix (All 13 Runs)](#41-master-experiment-matrix-all-13-runs-regenerated-2026-11-12)
+  - [4.2 Canonical 3-Seed Aggregated Performance](#42-canonical-3-seed-aggregated-performance-mean--std-dev)
+  - [4.3 Hypothesis H1: Canonical 3-Seed Paired Cluster Bootstrap ΔAUC & Equivalence Tests](#43-hypothesis-h1-canonical-3-seed-paired-cluster-bootstrap-auc--equivalence-tests)
+- [5. Hypothesis H2: Operating Point Transfer & Threshold Degradation Audit](#5-hypothesis-h2-operating-point-transfer--threshold-degradation-audit)
+- [6. Hypothesis H3: Operational Prior Shift & Saerens EM Correction Audit](#6-hypothesis-h3-operational-prior-shift--saerens-em-correction-audit)
+- [7. Test-Time Adaptation (TTA) & Clip-Consistency Benchmark (RQ3 / H3b / H6)](#7-test-time-adaptation-tta--clip-consistency-benchmark-rq3--h3b--h6)
+- [8. Perturbation Robustness Benchmark (Corrected Pipeline)](#8-perturbation-robustness-benchmark-corrected-pipeline)
+- [9. Gate G1 Resolution: Official GenD Benchmark (`gend_official`)](#9-gate-g1-resolution-official-gend-benchmark-gend_official)
+- [10. False Positive Rate Control Under Domain Shift (Hypotheses H4 & H5)](#10-false-positive-rate-control-under-domain-shift-hypotheses-h4--h5)
+  - [10.1 Seed-by-Seed Dev-Quantile Transfer at α = 0.05](#101-seed-by-seed-dev-quantile-transfer-at-alpha--005---source-ffppval-celeb-df-v2-confirmatory)
+  - [10.2 Full H4a Summary & Paired H4b Comparisons](#102-full-h4a-summary--paired-h4b-comparisons-fpr_control_h4csv--fpr_control_h4bcsv)
+  - [10.3 Complete H5 Policy Comparison & Degenerate GMM Audit](#103-complete-h5-policy-comparison--degenerate-gmm-audit-fpr_controlcsv-fpr_control_prior_stresscsv-fpr_control_verdictsjson)
+  - [10.4 Eval-Time Readout & Branch Ablations on `smsdt_full`](#104-eval-time-readout--branch-ablations-on-smsdt_full-resultsscores_ablation-resultstables_ablation)
+- [11. Real-Shot Budget Transfer Benchmark (Hypothesis H7 — Confirmatory Validation on FakeAVCeleb_v1.2)](#11-real-shot-budget-transfer-benchmark-hypothesis-h7--confirmatory-validation-on-fakeavceleb_v12)
+  - [11.1 Confirmatory Protocol & Pre-Registration Freeze (`prereg-freeze-h7`)](#111-confirmatory-protocol--pre-registration-freeze-prereg-freeze-h7)
+  - [11.2 Confirmatory Results on FakeAVCeleb (n=20, α=0.05)](#112-confirmatory-results-on-fakeavceleb-n20-alpha005)
+  - [11.3 Hypothesis H7 Pre-Registered Verdicts](#113-hypothesis-h7-pre-registered-verdicts)
+  - [11.4 Prior Development Benchmarks (Celeb-DF-v2 & DFD)](#114-prior-development-benchmarks-celeb-df-v2--dfd)
+  - [11.5 Publication Figures](#115-publication-figures)
+- [12. Complete Artifact Inventory & Study Status Checklist](#12-complete-artifact-inventory--study-status-checklist)
+  - [12.1 Saved Result Artifacts](#121-saved-result-artifacts-feateval-and-benchmarks)
+  - [12.2 Study Status Checklist](#122-study-status-checklist)
+
+---
+
+### Audit & Execution Overview
+
+> [!IMPORTANT]
+> **Audit & Execution Update (2026-11-13, branch `feat/eval-and-benchmarks` @ `f1a7f3a`).** Read [`docs/novelty_audit.md`](file:///e:/DEEPFAKE/docs/novelty_audit.md),
 > [`docs/decisions.md`](file:///e:/DEEPFAKE/docs/decisions.md) (D1–D19 & Section 6), [`docs/credibility_plan.md`](file:///e:/DEEPFAKE/docs/credibility_plan.md), [`docs/research_v2_corrections.md`](file:///e:/DEEPFAKE/docs/research_v2_corrections.md), and [`docs/real_shot_benchmark.md`](file:///e:/DEEPFAKE/docs/real_shot_benchmark.md) for pre-registration context.
 > Repository state on `feat/eval-and-benchmarks`: **`65`** per-video score CSVs ([`results/scores/`](file:///e:/DEEPFAKE/results/scores), covering all 13 models across 5 evaluation splits: FF++ Test, FF++ Val, Celeb-DF v2, pure DFD, and FakeAVCeleb v1.2),
 > **`13`** Platt calibration JSONs ([`results/calib/`](file:///e:/DEEPFAKE/results/calib)), **`30`** ablation CSVs
