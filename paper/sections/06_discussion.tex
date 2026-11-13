@@ -10,9 +10,12 @@ The empirical findings across our 12 independent multi-seed runs and official au
     \item \textbf{Split-Conformal Real-Shot Calibration Resolves the False Alarm Crisis (H7-v2 Supported):} Calibrating on a tiny budget of $n=20$ unmanipulated target identities via split-conformal order statistics provides distribution-free false alarm control ($\le 4.72\%$ empirical FPR across all 13 models) while retaining $83.4\%\text{--}96.8\%$ of oracle recall, offering a practical, label-efficient deployment protocol.
 \end{enumerate}
 
-\subsection{Limitations and Failure Modes}
-Despite strong generalization, two clear boundary limitations remain:
+\subsection{Limitations and Threats to Validity}
+Despite strong generalization, several boundary conditions and validity considerations must be highlighted:
 \begin{itemize}[leftmargin=*]
+    \item \textbf{Cluster Structure and Bootstrap Keying:} In benchmark datasets such as FakeAVCeleb, manipulated videos are generated from the same source identities as authentic clips. Statistical evaluations must cluster bootstrap resamples strictly on underlying source identities rather than video IDs to avoid optimistic variance estimation.
+    \item \textbf{Compression and Generator Re-encoding Confounds:} Authentic reference videos derive from original VoxCeleb2 source footage, whereas manipulated counterparts undergo pipeline re-encoding by facial synthesis generators. While perturbation testing (Table~\ref{tab:robustness}) demonstrates robust performance across JPEG and blur regimes, deep models may exploit subtle compression artifacts.
+    \item \textbf{Scope of Manipulation Modalities:} Our confirmatory evaluation focuses on visual facial manipulations. Unaltered video paired with cloned audio (audio-only fakes) is excluded; furthermore, lip-sync manipulations (e.g., Wav2Lip) remain significantly more challenging for visual-only detectors ($\approx 0.80$ AUC), underscoring the necessity of integrated audio-visual forensics.
     \item \textbf{Extreme Prior Asymmetries ($\pi \le 0.10$):} As audited in Table~\ref{tab:h3_prior}, when synthetic content prevalence drops to $10\%$, even a moderate false-positive rate produces a substantial volume of false alarms. While Saerens EM tracks the shift, extreme class imbalances require conservative operational thresholds to avoid degrading user trust.
     \item \textbf{Computational Footprint for Multi-Clip Inference:} Processing $K=8$ clips of $T=8$ frames requires $64$ total image passes per video. While suitable for asynchronous verification and forensic audit workflows, real-time edge streaming demands temporal pruning or progressive multi-clip cascading.
 \end{itemize}
