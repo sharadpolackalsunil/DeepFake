@@ -240,6 +240,9 @@ The Beta-Binomial law accurately predicts the evaluated false-alarm violation ra
   2. **Validity Guarantee:** The observed mean FPR across draws satisfies $\text{mean}(\text{FPR}) \le \alpha + 2 \times \text{SE}_{\text{MC}}$ in **every cell** (130 out of 130 cells), where $\text{SE}_{\text{MC}} = \text{std}(\text{FPR}) / \sqrt{R}$ is the Monte Carlo standard error.
 - **Falsified if:** Either condition 1 or condition 2 fails.
 
+### 7.2a Outcome (recorded 2026-11-14)
+**Verdict: FALSIFIED** (`results/tables/h8_certificate_verdict.json`). Condition 1 passed in 130/130 cells. Condition 2 passed in 124/130; the 6 failures are all `fakeavceleb` (`smsdt_s_seed1` at n=19 and n=59, `smsdt_st_seed1` at n=19 and n=59, `smsdt_st_seed2` at (alpha=0.10, n=9) and (alpha=0.10, n=29)), 2.0 to 2.7 MC standard errors above the budget. The paper reports this verdict as registered. A post-hoc 3 SE check (largest 2.67) is labelled exploratory. The criteria above are not changed.
+
 ### 7.3 Experimental Design (130 Evaluated Cells)
 - **13 Pretrained Detector Checkpoints:**
   - Official GenD: `gend_official_seed0` (`hf:yermandy/GenD_CLIP_L_14`)
