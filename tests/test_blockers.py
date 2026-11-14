@@ -38,6 +38,7 @@ def test_blocker_2_cv2_imported_in_simulate_compression():
 
 def test_blocker_3_shard_discovery_and_cache_root():
     """Blocker 3: Shard pattern must respect cache_root and support brace expansion / file list."""
+    pytest.importorskip("webdataset")
     with tempfile.TemporaryDirectory() as tmpdir:
         dataset_dir = os.path.join(tmpdir, "test_ds")
         os.makedirs(dataset_dir, exist_ok=True)
@@ -58,7 +59,7 @@ def test_blocker_3_shard_discovery_and_cache_root():
 
 def test_blocker_4_with_epoch_prevents_infinite_loader():
     """Blocker 4: resampled=True must be bounded by with_epoch so epoch loop terminates."""
-    import webdataset as wds
+    wds = pytest.importorskip("webdataset")
     with tempfile.TemporaryDirectory() as tmpdir:
         class MockCfg:
             cache_root = tmpdir
@@ -156,6 +157,8 @@ def test_blocker_8_gradient_checkpointing_wired_in_vit():
 
 def test_blocker_9_to_onnx_accepts_dict_checkpoint():
     """Blocker 9: to_onnx must accept checkpoints saved as dict with model_state_dict."""
+    pytest.importorskip("onnx")
+    pytest.importorskip("onnxscript")
     with tempfile.TemporaryDirectory() as tmpdir:
         ckpt_path = os.path.join(tmpdir, "epoch0.pt")
         out_onnx = os.path.join(tmpdir, "model.onnx")
