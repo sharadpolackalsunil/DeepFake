@@ -210,4 +210,51 @@ Chosen: **(b)** (enforced in `tools/real_shot.py::h7v2_dataset_verdicts`)  Date:
 - **Visual fakes (Categories C `FakeVideo-RealAudio` + D `FakeVideo-FakeAudio`):** `meta_data.csv` lists `20,566` visual-fake rows across 5 methods (`wav2lip`, `fsgan`, `fsgan-wav2lip`, `faceswap-wav2lip`, `faceswap`), of which `20,544` `.mp4` files exist on disk (`22` missing in `FakeVideo-FakeAudio`). To keep balanced coverage across all 5 visual manipulation methods, we pre-register a deterministic stratified subsample (`seed = 0`, `--fakes-per-method 500` via `tools/prep_fakeavceleb.py`) yielding **`2,500` existing visual fakes** (`500` per method, stratified proportionally across categories `C` and `D`), for `3,000` videos total.
 - **Pre-scoring freeze & unopened hashing:** Commit `data/splits/fakeavceleb_index.csv` and `data/splits/fakeavceleb_identities.csv` before running `eval_cross` (using `--index data/splits/fakeavceleb_index.csv --store data/store_fakeavceleb --dataset-name fakeavceleb --real-source fakeavceleb_real --identity-csv data/splits/fakeavceleb_identities.csv` on the 13 runs: `gend_official` seed 0 + `gend_ours`, `smsdt_s`, `smsdt_st`, `smsdt_full` seeds 1–3). Hash `results/scores/*_fakeavceleb.csv` with `sha256sum` and commit unopened before running `python -m tools.real_shot --targets fakeavceleb --checks-on fakeavceleb --primary loc --tag _confirm_fakeavceleb`.
 
+---
+
+## 7. Pre-Registration of Hypothesis H8: Real-Shot Budget Certificate (Decision D20)
+
+**Date:** 2026-11-14  
+**Status:** `pre-registered`  
+**Git Tag:** `prereg-freeze-h8`  
+**Author Sign-Off:** Sharad [x] Aditya Raj [x] Aditya Kumar [x]
+
+### 7.1 Hypothesis Formulation
+Given any deepfake detector scoring function, a nominal false-alarm budget $\alpha \in (0, 1)$, and $n$ authentic videos drawn independently from the deployment domain (strictly one video per identity cluster), let the calibration scores be $s_{(1)} \le s_{(2)} \le \dots \le s_{(n)}$. The identity-level conformal threshold is:
+$$s^* = s_{(k)}, \qquad k = \lceil (n + 1)(1 - \alpha) \rceil$$
+Under identity-level exchangeability, the population false-positive rate follows a Beta distribution:
+$$\text{FPR}(s^*) \sim \text{Beta}(n + 1 - k, \; k), \qquad \mathbb{E}[\text{FPR}] = \frac{n + 1 - k}{n + 1} \le \alpha$$
+When evaluated on a finite held-out set of $m$ authentic real identities from the deployment domain, the count of false alarms $X = \sum_{i=1}^m \mathbb{I}(s_i > s^*)$ follows a **Beta-Binomial distribution**:
+$$X \sim \text{BetaBinomial}(m, \; n + 1 - k, \; k)$$
+Consequently, the probability that the evaluated false alarm rate exceeds $r \alpha$ (for tolerance factor $r = 2$) is given exactly in closed form by:
+$$P\left(\frac{X}{m} > r\alpha\right) = 1 - F_{\text{BB}}(\lfloor r\alpha m \rfloor; \; m, \; n + 1 - k, \; k)$$
+where $F_{\text{BB}}$ is the cumulative distribution function of the Beta-Binomial distribution.
+
+**Hypothesis Statement (H8):**  
+The Beta-Binomial law accurately predicts the evaluated false-alarm violation rate $P(\text{FPR}_{\text{eval}} > 2\alpha)$ across unseen evaluation domains, and the sample-size planner identifies optimal sample budgets $n$ where $\mathbb{E}[\text{FPR}] = \alpha$ exactly.
+
+### 7.2 Decision & Falsification Criteria
+- **Supported if:**
+  1. **Calibration Fidelity:** In at least **$90\%$ of cells** ($\ge 117$ out of 130 cells), the observed empirical failure rate $\hat{P}(\text{FPR}_{\text{eval}} > 2\alpha)$ across $R=1,000$ draws falls inside the symmetric $99\%$ binomial confidence interval around the Beta-Binomial predicted probability:
+     $$\hat{P} \in \left[ P_{\text{pred}} - 2.576 \sqrt{\frac{P_{\text{pred}}(1 - P_{\text{pred}})}{R}}, \; P_{\text{pred}} + 2.576 \sqrt{\frac{P_{\text{pred}}(1 - P_{\text{pred}})}{R}} \right]$$
+  2. **Validity Guarantee:** The observed mean FPR across draws satisfies $\text{mean}(\text{FPR}) \le \alpha + 2 \times \text{SE}_{\text{MC}}$ in **every cell** (130 out of 130 cells), where $\text{SE}_{\text{MC}} = \text{std}(\text{FPR}) / \sqrt{R}$ is the Monte Carlo standard error.
+- **Falsified if:** Either condition 1 or condition 2 fails.
+
+### 7.3 Experimental Design (130 Evaluated Cells)
+- **13 Pretrained Detector Checkpoints:**
+  - Official GenD: `gend_official_seed0` (`hf:yermandy/GenD_CLIP_L_14`)
+  - In-house PEFT Baselines: `gend_ours_seed{1,2,3}`
+  - S-MSDT Single-Frame Baselines: `smsdt_s_seed{1,2,3}`
+  - S-MSDT Spatio-Temporal: `smsdt_st_seed{1,2,3}`
+  - S-MSDT Full Multi-Scale: `smsdt_full_seed{1,2,3}`
+- **2 Unseen Evaluation Datasets:**
+  - `fakeavceleb`: $499$ pure VoxCeleb2 real identities ($1$ clip per identity; held-out $m = 499 - n$).
+  - `celebdf`: $121$ pure Celeb-real identities ($m = 121 - n$).
+  *(DFD is excluded from H8 because 18 actor identities cannot hold out $m \ge 20$ after calibration).*
+- **5 Pre-Registered Sweet-Spot Calibration Pairs $(\alpha, n)$:**
+  - $\alpha = 0.05$: $n \in \{19, 39, 59\}$ (sweet spots where $\mathbb{E}[\text{FPR}] = \frac{n+1-k}{n+1} = \alpha = 0.05$ exactly).
+  - $\alpha = 0.10$: $n \in \{9, 29\}$ (sweet spots where $\mathbb{E}[\text{FPR}] = \alpha = 0.10$ exactly).
+- **Protocol:** $R = 1,000$ independent draws per cell with fixed PRNG seed `42`, strictly drawing 1 video per identity cluster for calibration and evaluating on remaining held-out real identities + all target fakes.
+
+
 
