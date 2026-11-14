@@ -1,0 +1,56 @@
+{
+  "hypothesis": "H8",
+  "title": "Real-Shot Budget Certificate Beta-Binomial Prediction",
+  "total_cells": 130,
+  "ci_pass_cells": 130,
+  "ci_pass_rate": 1.0,
+  "ci_threshold_required": 0.9,
+  "validity_pass_cells": 124,
+  "validity_pass_rate": 0.9538461538461539,
+  "validity_required_cells": 130,
+  "full_pass_cells": 124,
+  "h8_verdict": "FALSIFIED",
+  "datasets": [
+    "fakeavceleb",
+    "celebdf"
+  ],
+  "models": [
+    "gend_official_seed0",
+    "gend_ours_seed1",
+    "gend_ours_seed2",
+    "gend_ours_seed3",
+    "smsdt_s_seed1",
+    "smsdt_s_seed2",
+    "smsdt_s_seed3",
+    "smsdt_st_seed1",
+    "smsdt_st_seed2",
+    "smsdt_st_seed3",
+    "smsdt_full_seed1",
+    "smsdt_full_seed2",
+    "smsdt_full_seed3"
+  ],
+  "configs": [
+    [
+      0.05,
+      19
+    ],
+    [
+      0.05,
+      39
+    ],
+    [
+      0.05,
+      59
+    ],
+    [
+      0.1,
+      9
+    ],
+    [
+      0.1,
+      29
+    ]
+  ],
+  "R": 1000,
+  "seed": 42
+}
