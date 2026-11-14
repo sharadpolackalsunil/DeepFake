@@ -83,7 +83,11 @@ def run_tta_stream(
         B, K, T, C, H, W = frames.shape
         frames_flat = frames.view(B * K, T, C, H, W)
         prior = batch.get("prior", None)
-        prior_flat = prior.to(device).view(B * K, T, -1) if prior is not None else None
+        if prior is not None:
+            prior = prior.to(device)
+            prior_flat = prior.view(B * K, T, -1)
+        else:
+            prior_flat = None
 
         if adapter.objective == "consistency":
             # For consistency, adapt_batch expects (B, K, ...) shaped frames

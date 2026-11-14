@@ -1,0 +1,102 @@
+{
+  "h5": {
+    "target_gmm@alpha=0.05": {
+      "verdict": "falsified (degenerate fits)",
+      "per_dataset": {
+        "celebdf": {
+          "err_policy": 0.06798002755121063,
+          "err_source": 0.044880433556309295,
+          "degenerate_rate": 1.0
+        },
+        "fakeavceleb": {
+          "err_policy": 0.041568539341737556,
+          "err_source": 0.033618617698388566,
+          "degenerate_rate": 1.0
+        }
+      }
+    },
+    "target_gmm@alpha=0.1": {
+      "verdict": "falsified (degenerate fits)",
+      "per_dataset": {
+        "celebdf": {
+          "err_policy": 0.082557044321618,
+          "err_source": 0.05757882769356662,
+          "degenerate_rate": 0.0
+        },
+        "fakeavceleb": {
+          "err_policy": 0.0795043237102254,
+          "err_source": 0.07126438364115338,
+          "degenerate_rate": 1.0
+        }
+      }
+    },
+    "target_gmm_anchored@alpha=0.05": {
+      "verdict": "falsified (degenerate fits)",
+      "per_dataset": {
+        "celebdf": {
+          "err_policy": 0.06724586864996646,
+          "err_source": 0.044880433556309295,
+          "degenerate_rate": 1.0
+        },
+        "fakeavceleb": {
+          "err_policy": 0.04185605010498522,
+          "err_source": 0.033618617698388566,
+          "degenerate_rate": 1.0
+        }
+      }
+    },
+    "target_gmm_anchored@alpha=0.1": {
+      "verdict": "falsified (degenerate fits)",
+      "per_dataset": {
+        "celebdf": {
+          "err_policy": 0.08160333180809055,
+          "err_source": 0.05757882769356662,
+          "degenerate_rate": 0.0
+        },
+        "fakeavceleb": {
+          "err_policy": 0.07961637216091064,
+          "err_source": 0.07126438364115338,
+          "degenerate_rate": 1.0
+        }
+      }
+    }
+  },
+  "notes": [],
+  "h4a": {
+    "models": {
+      "smsdt_st": {
+        "confirmatory": {
+          "3": false
+        },
+        "exploratory": {
+          "1": false,
+          "2": false
+        },
+        "n_confirmatory_seeds": 1,
+        "n_pass": 0,
+        "pass": null
+      },
+      "smsdt_full": {
+        "confirmatory": {
+          "3": true
+        },
+        "exploratory": {
+          "1": false,
+          "2": false
+        },
+        "n_confirmatory_seeds": 1,
+        "n_pass": 1,
+        "pass": null
+      }
+    },
+    "supported": "undetermined (fewer than 3 confirmatory seeds)",
+    "confirmatory_seeds": [
+      3,
+      4,
+      5
+    ]
+  },
+  "h4_failures": 9,
+  "h4_rows": 78,
+  "h4_failures_bootstrap_only": 9
+}

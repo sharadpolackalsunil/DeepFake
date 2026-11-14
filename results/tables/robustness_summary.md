@@ -1,16 +1,17 @@
-# Perturbation Robustness Benchmark Summary
+# Robustness Perturbation Benchmark: Celeb-DF-v2
+
+*Checkpoint: `outputs/checkpoints_smsdt_full/seed1/best_ema.pt` (Clean Baseline AUC: 0.8884)*
 
 | Perturbation | Severity / Quality | AUC | AUC Drop |
 | :--- | :--- | :---: | :---: |
 | Clean Baseline | None | 0.8884 | +0.0000 |
-| JPEG Quality | 90 | 0.6373 | +0.2511 |
-| JPEG Quality | 70 | 0.6341 | +0.2544 |
-| JPEG Quality | 50 | 0.6240 | +0.2644 |
-| JPEG Quality | 30 | 0.6260 | +0.2624 |
-| Gaussian Blur (sigma) | 0.5 | 0.6539 | +0.2346 |
-| Gaussian Blur (sigma) | 1.0 | 0.6278 | +0.2607 |
-| Gaussian Blur (sigma) | 2.0 | 0.5839 | +0.3046 |
-| Downscale Factor | 0.75 | 0.6446 | +0.2439 |
-| Downscale Factor | 0.5 | 0.6268 | +0.2617 |
-| Downscale Factor | 0.25 | 0.6035 | +0.2849 |
-
+| JPEG Quality | 90 | 0.8972 | -0.0088 |
+| JPEG Quality | 70 | 0.8829 | +0.0055 |
+| JPEG Quality | 50 | 0.8482 | +0.0402 |
+| JPEG Quality | 30 | 0.8048 | +0.0836 |
+| Gaussian Blur (sigma) | 0.5 | 0.8920 | -0.0035 |
+| Gaussian Blur (sigma) | 1.0 | 0.8732 | +0.0152 |
+| Gaussian Blur (sigma) | 2.0 | 0.7987 | +0.0898 |
+| Downscale Factor | 0.75 | 0.8907 | -0.0023 |
+| Downscale Factor | 0.5 | 0.8734 | +0.0151 |
+| Downscale Factor | 0.25 | 0.8217 | +0.0667 |

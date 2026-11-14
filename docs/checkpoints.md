@@ -9,9 +9,9 @@ This registry tracks the exact storage location, architecture specifications, pa
 | Model | Architecture Class | Total Params | Trainable Params | Input Shape | Checkpoint Folder | Best Weights File | Training Config |
 | :--- | :--- | :---: | :---: | :---: | :--- | :--- | :--- |
 | **GenD (Ours)** | `GenDModel` | 303.18M | 103,425 (0.034%) | $(B, 1, 3, 224, 224)$ | `outputs/checkpoints_gend_ours/seed{seed}/` | `best_ema.pt` / `last.pt` | [`configs/train_gend.yaml`](file:///e:/DEEPFAKE/configs/train_gend.yaml) |
-| **S-MSDT (S)** | `SMSDTv2` ($L=0$) | 303.18M | 103,425 (0.034%) | $(B, 1, 3, 224, 224)$ | `outputs/checkpoints_smsdt_s/seed{seed}/` | `best_ema.pt` / `last.pt` | [`configs/train_s.yaml`](file:///e:/DEEPFAKE/configs/train_s.yaml) |
-| **S-MSDT (ST)** | `SMSDTv2` ($L=2$) | 311.54M | 8,474,881 (2.72%) | $(B, 8, 3, 224, 224)$ | `outputs/checkpoints_st/seed{seed}/` | `best_ema.pt` / `last.pt` | [`configs/train_st.yaml`](file:///e:/DEEPFAKE/configs/train_st.yaml) |
-| **S-MSDTv3 (Full)** | `SMSDTv3` | 312.18M | 9,103,363 (2.92%) | $(B, 8, 3, 224, 224)$ | `outputs/checkpoints_v3_stage_c/seed{seed}/` | `best_ema.pt` / `last.pt` | [`configs/train_full.yaml`](file:///e:/DEEPFAKE/configs/train_full.yaml) |
+| **S-MSDT (S)** | `SMSDTv2` ($L=0$) | 303.85M | 777,478 (0.256%) | $(B, 1, 3, 224, 224)$ | `outputs/checkpoints_smsdt_s/seed{seed}/` | `best_ema.pt` / `last.pt` | [`configs/train_s.yaml`](file:///e:/DEEPFAKE/configs/train_s.yaml) |
+| **S-MSDT (ST)** | `SMSDTv2` ($L=2$) | 311.54M | 8,467,462 (2.72%) | $(B, 8, 3, 224, 224)$ | `outputs/checkpoints_smsdt_st/seed{seed}/` | `best_ema.pt` / `last.pt` | [`configs/train_st.yaml`](file:///e:/DEEPFAKE/configs/train_st.yaml) |
+| **S-MSDTv3 (Full)** | `SMSDTv3` | 312.18M | 9,102,600 (2.92%) | $(B, 8, 3, 224, 224)$ | `outputs/checkpoints_smsdt_full/seed{seed}/` | `best_ema.pt` / `last.pt` | [`configs/train_full.yaml`](file:///e:/DEEPFAKE/configs/train_full.yaml) |
 | **S-MSDT v1 (Phase 1)** | `SMSDT` | 26.68M | 26,678,659 (100%) | $(B, 8, 3, 224, 224)$ | `outputs/checkpoints/` | `best_ema.pt` | [`configs/train.yaml`](file:///e:/DEEPFAKE/configs/train.yaml) |
 
 ---
@@ -47,9 +47,9 @@ This registry tracks the exact storage location, architecture specifications, pa
 - **Architecture:** CLIP ViT-L/14 with LayerNorm-only PEFT + 2 Spatio-Temporal transformer blocks ($L=2$, $H=6$, dim=384) with factorized spatial attention and TemporalDiff velocity ($\Delta_t$).
 - **Input:** $T=8$ frames per clip ($224 \times 224$).
 - **Weights Stored At:**
-  - Seed 1: `outputs/checkpoints_st/seed1/best_ema.pt`
-  - Seed 2: `outputs/checkpoints_st/seed2/best_ema.pt`
-  - Seed 3: `outputs/checkpoints_st/seed3/best_ema.pt`
+  - Seed 1: `outputs/checkpoints_smsdt_st/seed1/best_ema.pt`
+  - Seed 2: `outputs/checkpoints_smsdt_st/seed2/best_ema.pt`
+  - Seed 3: `outputs/checkpoints_smsdt_st/seed3/best_ema.pt`
 - **Output Scores:**
   - Celeb-DF v2: `results/scores/smsdt_st_seed{seed}_celebdf.csv`
   - DFD: `results/scores/smsdt_st_seed{seed}_dfd.csv`

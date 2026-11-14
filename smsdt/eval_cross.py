@@ -10,6 +10,9 @@ import csv
 import json
 import os
 import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import numpy as np
 import torch
 from sklearn.metrics import roc_auc_score, log_loss
@@ -66,11 +69,25 @@ def youden_tau(p, y):
     return float(thr[idx])
 
 
+def load_identity_map(path: str) -> dict:
+    """video_id -> identity from a CSV with columns video_id, identity."""
+    import csv as _csv
+    with open(path, newline="", encoding="utf-8") as f:
+        rows = list(_csv.DictReader(f))
+    if not rows or not {"video_id", "identity"} <= set(rows[0]):
+        raise ValueError(f"{path}: needs columns video_id, identity")
+    return {r["video_id"]: r["identity"] for r in rows}
+
+
 def tpr_at_fpr(p, y, target_fpr):
-    """Calculate True Positive Rate at a fixed False Positive Rate target (e.g. 1% or 5%)."""
-    from sklearn.metrics import roc_curve
-    fpr, tpr, _ = roc_curve(y, p)
-    return float(np.interp(target_fpr, fpr, tpr))
+    """True Positive Rate at a fixed False Positive Rate target (e.g. 1% or 5%).
+
+    D16: conservative empirical operating point (achieved FPR <= target), shared with
+    tools/make_tables.py via smsdt/metric_defs.py. It previously interpolated the ROC
+    linearly, which disagreed with the tables.
+    """
+    from smsdt.metric_defs import tpr_at_fpr as _canonical
+    return _canonical(y, p, target_fpr)
 
 
 def compute_ece(p, y, n_bins=15):
@@ -652,12 +669,41 @@ def main():
     parser.add_argument("--calib", type=str, default=None, help="Path to frozen calibration JSON file (a, b, tau)")
     parser.add_argument("--save-scores", type=str, default=None, help="Path to export per-video score CSV")
     parser.add_argument("--ci", action="store_true", help="Compute 95%% bootstrap confidence intervals for primary metrics")
+    parser.add_argument("--branch-ablation", default="learned", choices=["learned", "token_only", "cls_only"],
+                        help="Eval-time diagnostic for S-MSDTv3: use only the token readout or only the "
+                             "global CLS head (the final logit blends both with sigmoid(beta)).")
+    parser.add_argument("--readout-ablation", default="learned",
+                        choices=["learned", "mean_patch", "lse_only", "att_only"],
+                        help="Eval-time diagnostic for S-MSDTv3 readout (H4 mechanism check). "
+                             "Not a substitute for retraining with a different readout.")
+    parser.add_argument("--real-source", type=str, default=None,
+                        help="real_source tag for the reals of this dataset (e.g. dfdc_real). Required for "
+                             "any dataset other than FF++, Celeb-DF and DFD: the automatic rule labels "
+                             "every other dataset's reals ffpp_youtube.")
+    parser.add_argument("--identity-csv", type=str, default=None,
+                        help="CSV with columns video_id,identity; sets cluster_id from it (needed for "
+                             "identity-level H7 calibration on a new dataset).")
     parser.add_argument("--skip-sweep", action="store_true", help="Skip printing threshold sensitivity sweep table")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Loading checkpoint: {args.ckpt} on {device}")
     model, model_type, norm_fn = load_model(args.ckpt, device)
+    if args.branch_ablation != "learned":
+        if not hasattr(model, "beta"):
+            raise SystemExit("--branch-ablation requires an S-MSDTv3 checkpoint (no beta blend found).")
+        model.branch_mode = args.branch_ablation
+        print(f"  * Branch ablation active: {args.branch_ablation} (sigmoid(beta) = "
+              f"{float(torch.sigmoid(model.beta)):.3f})")
+    if args.readout_ablation != "learned":
+        n_set = 0
+        for m in model.modules():
+            if hasattr(m, "readout_mode"):
+                m.readout_mode = args.readout_ablation
+                n_set += 1
+        if n_set == 0:
+            raise SystemExit("--readout-ablation requires an S-MSDTv3 checkpoint (no EvidenceReadoutV3 found).")
+        print(f"  * Readout ablation active: {args.readout_ablation} ({n_set} module(s))")
     print(f"Loaded model architecture: {model_type.upper()}")
 
     # Auto-detect T for Stage A (T=1) vs Stage B (T=8)
@@ -768,6 +814,7 @@ def main():
                 "manipulation", "cluster_id", "n_clips", "logit_mean",
                 "score_mean", "score_topk50"
             ])
+            identity_of = load_identity_map(args.identity_csv) if args.identity_csv else {}
             for i in range(len(res["video_ids"])):
                 v_id = str(res["video_ids"][i])
                 lbl = int(res["labels"][i])
@@ -776,7 +823,11 @@ def main():
                 # Assign real_source vs manipulation
                 if lbl == 0:
                     manip_str = ""
-                    if "celeb" in args.dataset_name.lower():
+                    if args.real_source:
+                        real_src = args.real_source
+                    elif "fakeavceleb" in args.dataset_name.lower():
+                        real_src = "fakeavceleb_real"
+                    elif "celeb" in args.dataset_name.lower():
                         real_src = "celebdf_real"
                     elif "dfd" in args.dataset_name.lower() or "deepfakedetection" in m_name.lower():
                         real_src = "dfd_actor"
@@ -791,11 +842,17 @@ def main():
                     cluster_id = v_id.split("_")[0]  # Celeb-DF celebrity id, e.g. id0
                 elif "__" in v_id:
                     cluster_id = v_id.split("__")[0]  # DFD actor pair, e.g. DFD_01_02
+                elif v_id.startswith("favc_"):
+                    # FakeAVCeleb: favc_real_<src>_<stem> or favc_fake_<cat>_<meth>_<idx>_<stem>
+                    parts = v_id.split("_")
+                    cluster_id = parts[2] if len(parts) > 2 else v_id
                 elif "_" in v_id:
                     parts = v_id.split("_")
                     cluster_id = parts[1] if len(parts) > 1 else v_id
                 else:
                     cluster_id = v_id
+                if v_id in identity_of:
+                    cluster_id = identity_of[v_id]
 
                 top50_score = f"{res['scores_top50'][i]:.4f}" if "scores_top50" in res and i < len(res["scores_top50"]) else ""
                 

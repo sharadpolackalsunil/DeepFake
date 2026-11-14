@@ -1,0 +1,310 @@
+{
+  "primary": "loc",
+  "development_selection": {
+    "celebdf": {
+      "primary": "loc",
+      "errors": {
+        "loc_transfer": 0.0374363319167857,
+        "ls_transfer": 0.07627149878456398,
+        "shrink_transfer": 0.05454885613856896
+      },
+      "alpha": 0.05,
+      "n": 10
+    }
+  },
+  "delta": 0.05,
+  "n_boot_ucb": 200,
+  "n_rep": 500,
+  "min_n_np_umbrella": {
+    "0.05": 59,
+    "0.1": 29
+  },
+  "notes": [],
+  "verdicts": {
+    "celebdf": {
+      "h7a_v1": "not supported (gend_ours, smsdt_full, smsdt_s, smsdt_st)",
+      "h7b_v1": "not supported (gend_official, gend_ours, smsdt_st)",
+      "runs_v1": {
+        "gend_official_seed0": {
+          "primary": "loc",
+          "transfer_err": 0.042545902563827925,
+          "source_err": 0.10804001673999172,
+          "naive_err": 0.07489593198103503,
+          "h7a_pass": true,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.07924117647058823,
+          "oracle_tpr": 0.7468941176470589,
+          "h7b_pass": false
+        },
+        "gend_ours_seed1": {
+          "primary": "loc",
+          "transfer_err": 0.03888756214793661,
+          "source_err": 0.03308614216619071,
+          "naive_err": 0.0626324131473696,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.2725,
+          "oracle_tpr": 0.537235294117647,
+          "h7b_pass": false
+        },
+        "gend_ours_seed2": {
+          "primary": "loc",
+          "transfer_err": 0.037603153925818644,
+          "source_err": 0.03308614216619071,
+          "naive_err": 0.06435786654809623,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.26242352941176467,
+          "oracle_tpr": 0.5169235294117647,
+          "h7b_pass": false
+        },
+        "gend_ours_seed3": {
+          "primary": "loc",
+          "transfer_err": 0.03916098354063719,
+          "source_err": 0.03308614216619071,
+          "naive_err": 0.06435183644844261,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.2701235294117647,
+          "oracle_tpr": 0.541964705882353,
+          "h7b_pass": false
+        },
+        "smsdt_full_seed1": {
+          "primary": "loc",
+          "transfer_err": 0.039889103617241226,
+          "source_err": 0.06803256319026352,
+          "naive_err": 0.0741965905529451,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.002,
+          "ucb_tpr": 0.44167058823529415,
+          "oracle_tpr": 0.5450529411764705,
+          "h7b_pass": true
+        },
+        "smsdt_full_seed2": {
+          "primary": "loc",
+          "transfer_err": 0.03538588651410268,
+          "source_err": 0.040451020738523316,
+          "naive_err": 0.07560955953832053,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.006,
+          "ucb_tpr": 0.4258529411764706,
+          "oracle_tpr": 0.5724117647058823,
+          "h7b_pass": false
+        },
+        "smsdt_full_seed3": {
+          "primary": "loc",
+          "transfer_err": 0.07861595773871577,
+          "source_err": 0.10747101768578267,
+          "naive_err": 0.08463553948162032,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.028,
+          "ucb_tpr": 0.4974647058823529,
+          "oracle_tpr": 0.5395941176470588,
+          "h7b_pass": true
+        },
+        "smsdt_s_seed1": {
+          "primary": "loc",
+          "transfer_err": 0.013486288660481993,
+          "source_err": 0.004190222632910112,
+          "naive_err": 0.06974743803567025,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.4175,
+          "oracle_tpr": 0.5374117647058824,
+          "h7b_pass": false
+        },
+        "smsdt_s_seed2": {
+          "primary": "loc",
+          "transfer_err": 0.030424266774331812,
+          "source_err": 0.007297789610962688,
+          "naive_err": 0.0686553467981497,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.004,
+          "ucb_tpr": 0.49130588235294126,
+          "oracle_tpr": 0.5472529411764706,
+          "h7b_pass": true
+        },
+        "smsdt_s_seed3": {
+          "primary": "loc",
+          "transfer_err": 0.028258422375367645,
+          "source_err": 0.017782791168205095,
+          "naive_err": 0.07653753682290244,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.5247941176470589,
+          "oracle_tpr": 0.5563117647058823,
+          "h7b_pass": true
+        },
+        "smsdt_st_seed1": {
+          "primary": "loc",
+          "transfer_err": 0.040202760046438156,
+          "source_err": 0.04519220564782361,
+          "naive_err": 0.07939803205235695,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.042,
+          "ucb_tpr": 0.44011764705882356,
+          "oracle_tpr": 0.47895294117647064,
+          "h7b_pass": true
+        },
+        "smsdt_st_seed2": {
+          "primary": "loc",
+          "transfer_err": 0.030038299581430963,
+          "source_err": 0.028801532763028,
+          "naive_err": 0.07452295572836011,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.29564117647058824,
+          "oracle_tpr": 0.4527941176470589,
+          "h7b_pass": false
+        },
+        "smsdt_st_seed3": {
+          "primary": "loc",
+          "transfer_err": 0.032173727431883424,
+          "source_err": 0.028804241243919265,
+          "naive_err": 0.07151042721776099,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.3538235294117647,
+          "oracle_tpr": 0.5388705882352941,
+          "h7b_pass": false
+        }
+      },
+      "h7a_v2": "supported",
+      "h7b_v2": "supported",
+      "h7c_v2": "supported",
+      "n_real_identities": 121,
+      "per_run": [
+        {
+          "model": "gend_official",
+          "seed": "seed0",
+          "src_p2a": 1.0,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0416,
+          "conf_tpr": 0.5847,
+          "oracle_tpr": 0.7469,
+          "naive_fpr": 0.0816
+        },
+        {
+          "model": "gend_ours",
+          "seed": "seed1",
+          "src_p2a": 0.0,
+          "gmm_p2a": 1.0,
+          "conf_fpr": 0.0411,
+          "conf_tpr": 0.4452,
+          "oracle_tpr": 0.5372,
+          "naive_fpr": 0.0769
+        },
+        {
+          "model": "gend_ours",
+          "seed": "seed2",
+          "src_p2a": 0.0,
+          "gmm_p2a": 1.0,
+          "conf_fpr": 0.0428,
+          "conf_tpr": 0.4393,
+          "oracle_tpr": 0.5169,
+          "naive_fpr": 0.0794
+        },
+        {
+          "model": "gend_ours",
+          "seed": "seed3",
+          "src_p2a": 0.0,
+          "gmm_p2a": 1.0,
+          "conf_fpr": 0.0408,
+          "conf_tpr": 0.4381,
+          "oracle_tpr": 0.542,
+          "naive_fpr": 0.0779
+        },
+        {
+          "model": "smsdt_full",
+          "seed": "seed1",
+          "src_p2a": 0.928,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0431,
+          "conf_tpr": 0.4505,
+          "oracle_tpr": 0.5451,
+          "naive_fpr": 0.0837
+        },
+        {
+          "model": "smsdt_full",
+          "seed": "seed2",
+          "src_p2a": 0.118,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.044,
+          "conf_tpr": 0.4899,
+          "oracle_tpr": 0.5724,
+          "naive_fpr": 0.0861
+        },
+        {
+          "model": "smsdt_full",
+          "seed": "seed3",
+          "src_p2a": 1.0,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0543,
+          "conf_tpr": 0.5187,
+          "oracle_tpr": 0.5396,
+          "naive_fpr": 0.0964
+        },
+        {
+          "model": "smsdt_s",
+          "seed": "seed1",
+          "src_p2a": 0.0,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0458,
+          "conf_tpr": 0.4705,
+          "oracle_tpr": 0.5374,
+          "naive_fpr": 0.0854
+        },
+        {
+          "model": "smsdt_s",
+          "seed": "seed2",
+          "src_p2a": 0.0,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0481,
+          "conf_tpr": 0.4887,
+          "oracle_tpr": 0.5473,
+          "naive_fpr": 0.0843
+        },
+        {
+          "model": "smsdt_s",
+          "seed": "seed3",
+          "src_p2a": 0.0,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0508,
+          "conf_tpr": 0.4967,
+          "oracle_tpr": 0.5563,
+          "naive_fpr": 0.0939
+        },
+        {
+          "model": "smsdt_st",
+          "seed": "seed1",
+          "src_p2a": 0.358,
+          "gmm_p2a": 1.0,
+          "conf_fpr": 0.0464,
+          "conf_tpr": 0.4042,
+          "oracle_tpr": 0.479,
+          "naive_fpr": 0.0946
+        },
+        {
+          "model": "smsdt_st",
+          "seed": "seed2",
+          "src_p2a": 0.002,
+          "gmm_p2a": 0.266,
+          "conf_fpr": 0.0432,
+          "conf_tpr": 0.3899,
+          "oracle_tpr": 0.4528,
+          "naive_fpr": 0.0835
+        },
+        {
+          "model": "smsdt_st",
+          "seed": "seed3",
+          "src_p2a": 0.0,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0391,
+          "conf_tpr": 0.4498,
+          "oracle_tpr": 0.5389,
+          "naive_fpr": 0.0777
+        }
+      ]
+    }
+  }
+}

@@ -16,7 +16,7 @@ We leverage OpenAI's CLIP ViT-L/14 \citep{radford2021learning} ($H=W=224$, patch
 \begin{equation}
 \text{LN}(\mathbf{z}; \gamma, \beta) = \frac{\mathbf{z} - \mu}{\sqrt{\sigma^2 + \epsilon}} \odot \gamma + \beta
 \end{equation}
-This Parameter-Efficient Fine-Tuning (PEFT) strategy optimizes only $103{,}425$ parameters ($<0.034\%$ of the 304M backbone parameters), preventing over-parameterized memorization of dataset-specific artifacts.
+This Parameter-Efficient Fine-Tuning (PEFT) strategy optimizes only $103{,}425$ LayerNorm parameters in the backbone ($<0.034\%$ of the 304M backbone parameters), preventing over-parameterized memorization of dataset-specific artifacts. When paired with downstream classification heads, the single-frame baseline (\texttt{smsdt\_s}) contains $777{,}478$ trainable parameters, while the in-house GenD reproduction (\texttt{gend\_ours}) contains $103{,}425$ parameters. By contrast, the multi-frame spatio-temporal variant (\texttt{smsdt\_st}) and full forensic model (\texttt{smsdt\_full}) introduce $8{,}467{,}462$ and $9{,}102{,}600$ trainable parameters, respectively.
 
 \subsection{Dual High-Frequency Residual Stream (ResidualStream)}
 Standard self-attention mechanisms inherently act as low-pass filters, dampening localized high-frequency manipulation artifacts. To retain pixel-level forensic cues, we extract multi-scale residual signatures directly from raw pixel space $\mathbf{X}_0 \in [0, 1]^{BT \times 3 \times H \times W}$:

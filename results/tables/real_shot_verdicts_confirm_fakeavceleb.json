@@ -1,0 +1,323 @@
+{
+  "primary": "loc",
+  "development_selection": {
+    "fakeavceleb": {
+      "primary": "loc",
+      "errors": {
+        "loc_transfer": 0.03589655497876357,
+        "ls_transfer": 0.08083111530596193,
+        "shrink_transfer": 0.05322963662104766
+      },
+      "alpha": 0.05,
+      "n": 10
+    }
+  },
+  "delta": 0.05,
+  "n_boot_ucb": 200,
+  "n_rep": 500,
+  "min_n_np_umbrella": {
+    "0.05": 59,
+    "0.1": 29
+  },
+  "notes": [],
+  "verdicts": {
+    "fakeavceleb": {
+      "h7a_v1": "not supported (gend_official, gend_ours, smsdt_full, smsdt_s, smsdt_st)",
+      "h7b_v1": "not supported (gend_official, gend_ours)",
+      "runs_v1": {
+        "gend_official_seed0": {
+          "primary": "loc",
+          "transfer_err": 0.0459877300613497,
+          "source_err": 0.03416359918200409,
+          "naive_err": 0.08412556237218814,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.46419207683073227,
+          "oracle_tpr": 0.9166322529011606,
+          "h7b_pass": false
+        },
+        "gend_ours_seed1": {
+          "primary": "loc",
+          "transfer_err": 0.049693251533742336,
+          "source_err": 0.04614723926380368,
+          "naive_err": 0.07891820040899797,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.04143097238895558,
+          "oracle_tpr": 0.6530388155262105,
+          "h7b_pass": false
+        },
+        "gend_ours_seed2": {
+          "primary": "loc",
+          "transfer_err": 0.04972188139059305,
+          "source_err": 0.0721676891615542,
+          "naive_err": 0.07845930470347648,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.03568307322929172,
+          "oracle_tpr": 0.6452140856342538,
+          "h7b_pass": false
+        },
+        "gend_ours_seed3": {
+          "primary": "loc",
+          "transfer_err": 0.049697341513292435,
+          "source_err": 0.06817995910020448,
+          "naive_err": 0.07716237218813905,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.05315486194477791,
+          "oracle_tpr": 0.652797118847539,
+          "h7b_pass": false
+        },
+        "smsdt_full_seed1": {
+          "primary": "loc",
+          "transfer_err": 0.030429856850715743,
+          "source_err": 0.05222085889570552,
+          "naive_err": 0.07838977505112474,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.7248603441376551,
+          "oracle_tpr": 0.8074981992797118,
+          "h7b_pass": true
+        },
+        "smsdt_full_seed2": {
+          "primary": "loc",
+          "transfer_err": 0.02561840490797546,
+          "source_err": 0.016085889570552146,
+          "naive_err": 0.07574764826175868,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.7020552220888355,
+          "oracle_tpr": 0.7771356542617047,
+          "h7b_pass": true
+        },
+        "smsdt_full_seed3": {
+          "primary": "loc",
+          "transfer_err": 0.053786503067484656,
+          "source_err": 0.058130879345603265,
+          "naive_err": 0.0822085889570552,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.014,
+          "ucb_tpr": 0.769639055622249,
+          "oracle_tpr": 0.8119623849539815,
+          "h7b_pass": true
+        },
+        "smsdt_s_seed1": {
+          "primary": "loc",
+          "transfer_err": 0.02722822085889571,
+          "source_err": 0.02796319018404909,
+          "naive_err": 0.07959386503067484,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.730673069227691,
+          "oracle_tpr": 0.83584393757503,
+          "h7b_pass": true
+        },
+        "smsdt_s_seed2": {
+          "primary": "loc",
+          "transfer_err": 0.0250200408997955,
+          "source_err": 0.009869120654396728,
+          "naive_err": 0.07971451942740286,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.7618263305322128,
+          "oracle_tpr": 0.8251412565026011,
+          "h7b_pass": true
+        },
+        "smsdt_s_seed3": {
+          "primary": "loc",
+          "transfer_err": 0.04072106339468303,
+          "source_err": 0.02404089979550102,
+          "naive_err": 0.07619468302658487,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.006,
+          "ucb_tpr": 0.7688803521408563,
+          "oracle_tpr": 0.8049427771108442,
+          "h7b_pass": true
+        },
+        "smsdt_st_seed1": {
+          "primary": "loc",
+          "transfer_err": 0.020003680981595093,
+          "source_err": 0.00809406952965235,
+          "naive_err": 0.07908384458077711,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.6799423769507803,
+          "oracle_tpr": 0.7852076830732292,
+          "h7b_pass": true
+        },
+        "smsdt_st_seed2": {
+          "primary": "loc",
+          "transfer_err": 0.021417586912065443,
+          "source_err": 0.011987730061349695,
+          "naive_err": 0.07734642126789366,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.6667234893957583,
+          "oracle_tpr": 0.8256478591436573,
+          "h7b_pass": true
+        },
+        "smsdt_st_seed3": {
+          "primary": "loc",
+          "transfer_err": 0.02732965235173824,
+          "source_err": 0.006028220858895704,
+          "naive_err": 0.07822290388548057,
+          "h7a_pass": false,
+          "ucb_viol_2a": 0.0,
+          "ucb_tpr": 0.6907298919567827,
+          "oracle_tpr": 0.7970292116846738,
+          "h7b_pass": true
+        }
+      },
+      "h7a_v2": "not supported",
+      "h7b_v2": "supported",
+      "h7c_v2": "supported",
+      "n_real_identities": 499,
+      "per_run": [
+        {
+          "model": "gend_official",
+          "seed": "seed0",
+          "src_p2a": 0.0,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0459,
+          "conf_tpr": 0.8494,
+          "oracle_tpr": 0.9166,
+          "naive_fpr": 0.0897,
+          "conf_fpr_idw": 0.0459
+        },
+        {
+          "model": "gend_ours",
+          "seed": "seed1",
+          "src_p2a": 0.092,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0455,
+          "conf_tpr": 0.5463,
+          "oracle_tpr": 0.653,
+          "naive_fpr": 0.0861,
+          "conf_fpr_idw": 0.0455
+        },
+        {
+          "model": "gend_ours",
+          "seed": "seed2",
+          "src_p2a": 1.0,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.045,
+          "conf_tpr": 0.5381,
+          "oracle_tpr": 0.6452,
+          "naive_fpr": 0.0867,
+          "conf_fpr_idw": 0.045
+        },
+        {
+          "model": "gend_ours",
+          "seed": "seed3",
+          "src_p2a": 1.0,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0454,
+          "conf_tpr": 0.5563,
+          "oracle_tpr": 0.6528,
+          "naive_fpr": 0.0855,
+          "conf_fpr_idw": 0.0454
+        },
+        {
+          "model": "smsdt_full",
+          "seed": "seed1",
+          "src_p2a": 0.842,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0439,
+          "conf_tpr": 0.7447,
+          "oracle_tpr": 0.8075,
+          "naive_fpr": 0.0871,
+          "conf_fpr_idw": 0.0439
+        },
+        {
+          "model": "smsdt_full",
+          "seed": "seed2",
+          "src_p2a": 0.0,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0441,
+          "conf_tpr": 0.7376,
+          "oracle_tpr": 0.7771,
+          "naive_fpr": 0.0872,
+          "conf_fpr_idw": 0.0441
+        },
+        {
+          "model": "smsdt_full",
+          "seed": "seed3",
+          "src_p2a": 0.994,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0453,
+          "conf_tpr": 0.7723,
+          "oracle_tpr": 0.812,
+          "naive_fpr": 0.0869,
+          "conf_fpr_idw": 0.0453
+        },
+        {
+          "model": "smsdt_s",
+          "seed": "seed1",
+          "src_p2a": 0.0,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0449,
+          "conf_tpr": 0.7971,
+          "oracle_tpr": 0.8358,
+          "naive_fpr": 0.0884,
+          "conf_fpr_idw": 0.0449
+        },
+        {
+          "model": "smsdt_s",
+          "seed": "seed2",
+          "src_p2a": 0.0,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0472,
+          "conf_tpr": 0.799,
+          "oracle_tpr": 0.8251,
+          "naive_fpr": 0.0888,
+          "conf_fpr_idw": 0.0472
+        },
+        {
+          "model": "smsdt_s",
+          "seed": "seed3",
+          "src_p2a": 0.0,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0471,
+          "conf_tpr": 0.7793,
+          "oracle_tpr": 0.8049,
+          "naive_fpr": 0.0872,
+          "conf_fpr_idw": 0.0471
+        },
+        {
+          "model": "smsdt_st",
+          "seed": "seed1",
+          "src_p2a": 0.0,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0462,
+          "conf_tpr": 0.7369,
+          "oracle_tpr": 0.7852,
+          "naive_fpr": 0.0897,
+          "conf_fpr_idw": 0.0462
+        },
+        {
+          "model": "smsdt_st",
+          "seed": "seed2",
+          "src_p2a": 0.0,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0469,
+          "conf_tpr": 0.7705,
+          "oracle_tpr": 0.8256,
+          "naive_fpr": 0.0897,
+          "conf_fpr_idw": 0.0469
+        },
+        {
+          "model": "smsdt_st",
+          "seed": "seed3",
+          "src_p2a": 0.0,
+          "gmm_p2a": 0.0,
+          "conf_fpr": 0.0462,
+          "conf_tpr": 0.7495,
+          "oracle_tpr": 0.797,
+          "naive_fpr": 0.085,
+          "conf_fpr_idw": 0.0462
+        }
+      ]
+    }
+  }
+}

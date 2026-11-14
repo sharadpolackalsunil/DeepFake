@@ -94,7 +94,7 @@ def test_collapse_detection_degenerate_predictions():
             self.ln = nn.LayerNorm(16)
             self.bias = nn.Parameter(torch.tensor([10.0]))
         def forward(self, x):
-            return x.mean(dim=-1) + self.bias
+            return self.ln(x).mean(dim=-1) + self.bias
             
     deg_model = DegenerateModel()
     adapter = TTAAdapter(deg_model, mode="online")

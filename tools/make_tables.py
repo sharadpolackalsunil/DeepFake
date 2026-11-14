@@ -15,6 +15,18 @@ from typing import Dict, List, Optional
 
 from tools.stats import fast_auc
 from tools.threshold_transfer import compute_rates, find_oracle_tau
+from smsdt.metric_defs import tpr_at_fpr
+
+
+def load_scores_pure(cpath: str, dname: str) -> pd.DataFrame:
+    """Read a score CSV and keep only the dataset's own reals (D14; e.g. pure DFD)."""
+    from tools.stats import apply_pure_negatives
+    df = pd.read_csv(cpath)
+    try:
+        df, _ = apply_pure_negatives(df, dname)
+    except (ValueError, KeyError):
+        pass
+    return df
 
 
 def df_to_markdown(df: pd.DataFrame) -> str:
@@ -68,16 +80,9 @@ def compute_dataset_metrics(
     _, _, _, hter_ora = find_oracle_tau(labels, scores)
     gap_g = max(0.0, hter_val - hter_ora)
     
-    # Biometric utility: TPR @ 5% FPR
-    # Sort reals to find score at 95th percentile (5% FPR threshold)
-    reals = scores[labels == 0]
-    fakes = scores[labels == 1]
-    
-    if len(reals) > 0 and len(fakes) > 0:
-        thresh_5fpr = float(np.percentile(reals, 95.0))
-        tpr_5fpr = float(np.mean(fakes >= thresh_5fpr))
-    else:
-        tpr_5fpr = float("nan")
+    # Biometric utility: TPR @ 5% FPR (D16: one canonical, conservative definition shared
+    # with smsdt/eval_cross.py; the old np.percentile rule disagreed with the eval logs)
+    tpr_5fpr = tpr_at_fpr(labels, scores, 0.05)
         
     return {
         "auc": float(auc),
@@ -149,7 +154,7 @@ def generate_experiment_matrix(
         for cpath in csvs:
             dname = os.path.splitext(os.path.basename(cpath))[0]
             try:
-                df = pd.read_csv(cpath)
+                df = load_scores_pure(cpath, dname)
                 metrics = compute_dataset_metrics(df, tau_val=tau_val)
                 row[f"{dname}_auc"] = metrics["auc"]
                 row[f"{dname}_hter"] = metrics["hter_val"]
@@ -203,7 +208,7 @@ def generate_experiment_matrix(
         }
         for dname, cpath in file_list:
             try:
-                df = pd.read_csv(cpath)
+                df = load_scores_pure(cpath, dname)
                 metrics = compute_dataset_metrics(df, tau_val=tau_val)
                 row[f"{dname}_auc"] = metrics["auc"]
                 row[f"{dname}_hter"] = metrics["hter_val"]
@@ -224,7 +229,8 @@ def generate_experiment_matrix(
         "Model", "seed", "tau_val",
         "ffpp_pure_macro_auc", "ffpp_auc", "ffpp_hter", "ffpp_tpr5",
         "celebdf_auc", "celebdf_hter", "celebdf_gap_g", "celebdf_tpr5",
-        "dfd_auc", "dfd_hter", "dfd_gap_g", "dfd_tpr5"
+        "dfd_auc", "dfd_hter", "dfd_gap_g", "dfd_tpr5",
+        "fakeavceleb_auc", "fakeavceleb_hter", "fakeavceleb_gap_g", "fakeavceleb_tpr5",
     ]
     present_preferred = [c for c in preferred_order if c in df_out.columns]
     remaining = [c for c in df_out.columns if c not in present_preferred]
@@ -236,6 +242,29 @@ def generate_experiment_matrix(
 
 build_experiment_matrix = generate_experiment_matrix
 
+MATRIX_NOTE = ("Reals are pure per dataset (D14: DFD keeps its 243 actor reals only). "
+               "`*_tpr5` is TPR at the conservative empirical 5%-FPR point (D16, "
+               "`smsdt/metric_defs.py`). `*_hter` and `*_gap_g` use the run's FF++-val Platt/Youden "
+               "cutoff `tau_val`.")
+
+
+def aggregate_matrix(matrix: pd.DataFrame) -> pd.DataFrame:
+    """Mean and sd over seeds per architecture (run name without the _seedN suffix)."""
+    if matrix.empty:
+        return matrix
+    m = matrix.copy()
+    m["arch"] = m["Model"].str.replace(r"_seed\d+$", "", regex=True)
+    cols = [c for c in m.columns if c.endswith(("_auc", "_tpr5")) and m[c].dtype.kind == "f"]
+    rows = []
+    for arch, g in m.groupby("arch", sort=True):
+        row = {"arch": arch, "n_seeds": int(len(g))}
+        for c in cols:
+            v = g[c].dropna()
+            row[c] = (f"{v.mean():.4f} +/- {v.std(ddof=1):.4f}" if len(v) > 1
+                      else (f"{v.iloc[0]:.4f}" if len(v) else "-"))
+        rows.append(row)
+    return pd.DataFrame(rows)
+
 
 def main():
     os.makedirs("results/tables", exist_ok=True)
@@ -245,10 +274,17 @@ def main():
     out_md = "results/tables/experiment_matrix.md"
     
     matrix.to_csv(out_csv, index=False)
+    agg = aggregate_matrix(matrix)
+    agg.to_csv("results/tables/experiment_matrix_agg.csv", index=False)
+    with open("results/tables/experiment_matrix_agg.md", "w") as f:
+        f.write("# Experiment matrix, mean +/- sd over seeds (auto-generated)\n\n")
+        f.write(MATRIX_NOTE + "\n\n")
+        f.write(df_to_markdown(agg) + "\n")
     
     with open(out_md, "w") as f:
         f.write("# Master Experiment Matrix (Auto-Generated)\n\n")
         f.write(f"*Generated from raw score CSVs in `results/scores/` ({len(matrix)} total runs)*\n\n")
+        f.write(MATRIX_NOTE + "\n\n")
         if len(matrix) > 0:
             f.write(df_to_markdown(matrix))
             f.write("\n")
