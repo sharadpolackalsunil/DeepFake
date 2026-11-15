@@ -1,0 +1,90 @@
+\section{Proof of Proposition~\ref{prop:bb}}
+\label{app:proof}
+
+\emph{Exchangeable case.} Because the $n+m$ scores are exchangeable and almost surely distinct, the ordering of the scores by value is a uniformly random arrangement of $n$ calibration and $m$ audit labels. Sort all scores in decreasing order. The threshold $\hat\tau=S_{(k)}$ is the $(n-k+1)$-th calibration score from the top, so exactly $a-1=n-k$ calibration scores lie above it. The event $\{X=x\}$ occurs when the first $x+n-k$ positions hold $x$ audit and $n-k$ calibration scores, the next position holds $\hat\tau$, and the remaining $m-x+k-1$ positions hold $m-x$ audit and $k-1$ calibration scores. Hence
+\[
+P(X=x)=\frac{\binom{x+a-1}{x}\binom{m-x+b-1}{m-x}}{\binom{n+m}{m}},\qquad x=0,\dots,m,
+\]
+with $a=n+1-k$ and $b=k$. This is the Beta-Binomial$(m,a,b)$ probability mass function, by the standard negative-hypergeometric (P\'olya urn) identity. We also checked the identity numerically to machine precision for all $(n,k,m)$ used in this paper. Its mean is $ma/(a+b)=ma/(n+1)$.
+
+\emph{I.i.d.\ continuous case.} Let $G$ be the continuous distribution function of authentic scores and $U_i=G(S_i)$, which are i.i.d.\ uniform. Then $G(\hat\tau)=U_{(k)}\sim\mathrm{Beta}(k,n+1-k)$ and $\mathrm{FPR}(\hat\tau)=1-G(\hat\tau)\sim\mathrm{Beta}(n+1-k,k)$ \citep{vovk2012conditional}. Given the calibration set, the $m$ audit indicators $\mathbb{1}[S_j>\hat\tau]$ are i.i.d.\ Bernoulli$(\mathrm{FPR})$, so $X\mid\mathrm{FPR}\sim\mathrm{Binomial}(m,\mathrm{FPR})$, and mixing over the Beta law gives the same Beta-Binomial distribution. \Eqref{eq:pviol} is its upper tail. \qed
+
+\emph{Ties.} If scores can tie and alerts require $s>\hat\tau$, breaking ties at random gives a version with distinct scores in which $X$ can only be larger, so $X$ is stochastically dominated by the Beta-Binomial law and the rule is conservative.
+
+\section{Pre-registration and deviations}
+\label{app:prereg}
+
+Hypotheses, decision rules, dataset roles and analysis code paths were recorded in an append-only decision log in the code repository before the corresponding analyses. Confirmatory data were frozen by committing manifests and tagging the commit (\texttt{prereg-freeze-h7} for the FakeAVCeleb manifest, \texttt{prereg-freeze-h8} for the H8 design); FakeAVCeleb score files were hashed and committed before they were opened. The log, tags and hashes are in the supplementary material. Table~\ref{tab:dev} lists every logged deviation that affects a reported result.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Logged deviations from the registered plan and how they are handled in this paper.}
+\label{tab:dev}
+\begin{tabular}{l p{6.2cm} p{6.0cm}}
+\toprule
+ID & Deviation & Handling here \\
+\midrule
+D1, D19 & Five training seeds per model registered; three trained & H1 and H4a reported as undetermined; three-seed results descriptive \\
+D2, D3 & Early H1 runs used too few resamples, unadjusted intervals and the wrong comparison pairs & Re-run with 10{,}000 resamples, Bonferroni, ST--S and Full--S \\
+D4, D14 & DFD negatives initially included FF++ reals & Only the 243 DFD actor reals are used \\
+D5, D13 & H2 threshold applied on the wrong scale; coarse bootstrap clusters & Calibrated scale, identity clusters; H2 undetermined \\
+D6 & H3a posteriors uncalibrated; HTER is prior-invariant & Calibrated posteriors, all runs; H3a kept as registered (falsified) \\
+D7 & Comparison to GenD made before the official checkpoint was run & Official checkpoint run through the same pipeline \\
+D8 & DFD overlaps development data & DFD is development data only \\
+D10 & FPR bootstrap used coarse clusters & Identity-level clusters \\
+D11 & Seeds seen before registration counted as confirmatory for H4 & Excluded; H4a undetermined \\
+D12 & Out-of-support mixture thresholds not flagged & Flagged as degenerate \\
+D15 & An ablation changed only part of the readout & Not used for any claim \\
+D16 & Two definitions of TPR at $5\%$ FPR & One conservative definition throughout \\
+D17 & Trainable parameters of S-MSDT-S misreported & Counts built from training configurations; S and GenD-style not footprint-matched \\
+D18 & Celeb-DF reals mix two sources; video- vs identity-weighted FPR & Both weights reported; H7b-v2 requires both; per-source results exploratory \\
+D20 & H8 registered after H7 & Reported as registered; verdict falsified \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{H7 revision.} The first version of H7 compared shape-transfer estimators fitted to 10 and 20 target reals. On the Celeb-DF and DFD development data its two main conditions were not supported for most detectors. It was then revised to the version reported here (H7a--c-v2) before FakeAVCeleb was scored. We report both versions. On FakeAVCeleb the first version remains not supported: its H7a condition fails for every detector family and its H7b condition for two of the five.
+
+\section{Detector and training details}
+\label{app:models}
+
+\paragraph{Backbone.} CLIP ViT-L/14 at $224\times224$ input, patch size 14, width 1024. All weights are frozen except the LayerNorm scale and shift parameters ($102{,}400$).
+
+\paragraph{Heads.} GenD-style (ours) uses an L2-normalized class token and a linear classifier ($1{,}025$ head parameters). S-MSDT-S projects patch tokens to width 384 and pools them with an attention-based multiple-instance readout and a class-token head ($675{,}078$). S-MSDT-ST adds learned temporal position embeddings and two transformer blocks whose queries also receive temporal differences $\Delta Z_t=Z_t-Z_{t-1}$, with a top-$k$ readout. S-MSDT-Full adds a residual stream: three fixed $5\times5$ SRM high-pass filters \citep{fridrich2012rich} and the high-frequency sub-bands of a two-level Haar wavelet transform are projected to the token width and added to the patch tokens through a learned sigmoid gate initialized at $\sigma(-4)\approx0.018$; its readout uses four learned queries, an additive bias towards a mouth-region mask derived from facial landmarks, and log-sum-exp pooling with a learned temperature (initial value 3).
+
+\paragraph{Training.} FaceForensics++ c23 training split, five manipulation methods with matched real--fake pairs; 30 epochs; 16 pairs per step; learning rates $10^{-4}$ for LayerNorm and $5\times10^{-4}$ for the head, $3\%$ warm-up and decay to $1\%$ of the peak rate; weight decay $0.05$; label smoothing $0.05$; gradient clipping at $1$; an exponential moving average of weights (decay $0.999$) selected on FF++ validation from epoch 5; seeds 1--3. The published GenD checkpoint is used as released.
+
+\paragraph{Compute.} Each video is scored from 8 clips; temporal models process 64 frames per video and single-frame models 8.
+
+\section{Additional results}
+\label{app:extra}
+
+\input{tables/appx_per_run}
+\input{tables/appx_real_shot_runs}
+\input{tables/appx_h8_fail}
+\input{tables/appx_h8_reseed}
+\input{tables/appx_strata}
+\input{tables/appx_tta}
+\input{tables/appx_prior}
+\input{tables/appx_h2}
+\input{tables/appx_robust}
+\input{tables/appx_h1}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figures/confirm/fig4_real_shot_fail.pdf}
+\caption{Frequency of draws whose audited FPR exceeds $2\alpha$ on FakeAVCeleb, as a function of $n$ ($\alpha=0.05$). Conformal values follow the Beta-Binomial prediction (about $0.12$ at $n=20$ and $0.05$ at $n=30$).}
+\label{fig:appx_fail}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figures/confirm/fig3_real_shot_tpr.pdf}
+\caption{TPR relative to the oracle threshold on FakeAVCeleb as a function of $n$ ($\alpha=0.05$). Ratios above 1 for the naive quantile reflect its higher false-alarm rate.}
+\label{fig:appx_tpr}
+\end{figure}
+
+\section{Reproducibility}
+\label{app:repro}
+The supplementary archive contains the training configurations, data-split manifests and identity files, per-video score files for all 13 checkpoints and four test sets, calibration files, the evaluation and statistics code, the decision log, and \texttt{tools/paper\_tables.py}, which regenerates every table and Figure~\ref{fig:h8} from the committed results, and \texttt{tools/h8\_reseed\_check.py} for the post-hoc check of Table~\ref{tab:appx_h8_reseed}. The real-shot experiments use fixed random seeds (42 for the registered H8 run). Model weights will be released with the de-anonymized version.

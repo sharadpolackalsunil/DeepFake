@@ -1,50 +1,59 @@
-\documentclass{article}
-
-% Formatting for TMLR submission
+\documentclass[10pt]{article} % For LaTeX2e
 \usepackage{tmlr}
+% If accepted, instead use the following line for the camera-ready submission:
+%\usepackage[accepted]{tmlr}
+% To de-anonymize and remove mentions to TMLR (for example for posting to preprint servers), instead use the following:
+%\usepackage[preprint]{tmlr}
 
-\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{amsmath,amssymb,amsfonts,amsthm}
 \usepackage{booktabs}
+\usepackage{longtable}
 \usepackage{graphicx}
 \usepackage{enumitem}
 \usepackage{microtype}
 \usepackage{hyperref}
 \usepackage{url}
-\usepackage{subcaption}
 \usepackage{algorithm}
-\usepackage{algorithmic}
+\usepackage[noend]{algpseudocode}
 
-\title{How Many Real Videos Does a Deepfake Detector Need to Keep Its False-Alarm Promise? A Real-Shot Budget Certificate}
+\input{math_commands.tex}
 
-% Authors are anonymized for initial review
-\author{\name Anonymous Authors\thanks{Assistive language models were utilized for text editing and grammar refinement; the authors take full responsibility for all scientific claims and contents.} \email anonymous@domain.org \\
-      \addr Department of Computer Science\\
-      University of Anonymity}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+
+\title{How Many Real Videos Does a Deepfake Detector Need\\to Keep Its False-Alarm Promise? A Pre-Registered Study}
+
+% Authors must not appear in the submitted version. They should be hidden
+% as long as the tmlr package is used without the [accepted] or [preprint] options.
+\author{\name Anonymous authors\thanks{Large language models were used as assistive tools for editing text and checking code. All numbers in this paper are generated from committed result files by a script in the supplementary material, and the authors take full responsibility for the content.} \email anonymous@example.com \\
+      \addr Paper under double-blind review}
+
+\newcommand{\fix}{\marginpar{FIX}}
+\newcommand{\new}{\marginpar{NEW}}
 
 \def\month{11}
 \def\year{2026}
-\def\openreview{\url{https://openreview.net/forum?id=XXXXXX}}
+\def\openreview{\url{https://openreview.net/forum?id=XXXX}}
 
 \begin{document}
 
 \maketitle
 
 \begin{abstract}
-Zero-shot operational thresholds break the false-alarm budget of every evaluated deepfake detector under domain shift---including published foundation model weights---inflating nominal $5\%$ false-positive budgets up to $15.7\%$ on Celeb-DF and $19.3\%$ on DFD, while unsupervised mixture models collapse entirely under realistic fake prevalence. Across a controlled study spanning 13 detector checkpoints and 4 evaluation benchmarks, we demonstrate that scaling model capacity (adding multi-frame spatio-temporal attention or high-frequency forensic residual streams) does not resolve domain transfer: our central architectural hypothesis (\textbf{H1}) is supported on the pre-registered FakeAVCeleb-v1.2 benchmark ($N=2{,}998$ videos, $991$ clusters), proving that multi-frame heads are statistically equivalent within $\pm 0.01$ AUC to compact single-frame LayerNorm tuning ($777\text{K}$ parameters). The fundamental bottleneck is calibration, not capacity. We propose the \textbf{Real-Shot Budget Certificate}, a parameter-free deployment protocol that calibrates the alert threshold on a small number of authentic target identities (about 20 to 60) with a split-conformal rule. Given the calibration size, an exact \textbf{Beta-Binomial law} predicts in closed form how often the false-alarm rate measured on a held-out set exceeds twice the budget. This gives a sample-size planner with sweet-spot sizes ($n \in \{19, 39, 59\}$ for $\alpha=0.05$) at which the expected false-alarm rate equals the budget, and a three-way triage policy (alert / review / pass). In a pre-registered 130-cell confirmatory evaluation (\textbf{H8}) over 13 models, 2 external datasets and 5 sweet-spot configurations, the predicted failure rate lies inside the $99\%$ binomial interval in all 130 cells. The pre-registered H8 verdict is nevertheless \emph{falsified}: the second criterion, that mean false-alarm rate stays within $\alpha + 2\,\mathrm{SE}$ in every cell, fails in 6 of 130 cells (all on FakeAVCeleb, overshoot at most $0.0062$ in absolute FPR). We report both outcomes and treat the sample-size planner as supported only for the prediction-fidelity claim.
+A deepfake detector on a platform is run through an alert threshold, and that threshold carries a promise: at most a fraction $\alpha$ of authentic uploads will be flagged. We ask whether the promise survives a change of domain and how many authentic target videos are needed to restore it. Across 13 checkpoints (four detector families trained on FaceForensics++ with three seeds each, plus the published GenD checkpoint) and three target datasets, video AUC does not tell whether the budget holds. A source threshold set for $\alpha=0.05$ gives false-positive rates from $0.011$ to $0.193$, and the detector with the highest target AUC has the largest inflation ($0.157$ on Celeb-DF, $0.193$ on DFD). Label-free repairs (mixture-model thresholds, test-time entropy minimization, EM prior correction) fail their pre-registered tests. Calibrating on $n$ authentic target identities with the split-conformal order statistic restores the budget. On FakeAVCeleb, frozen before scoring, $n=20$ gives a mean false-positive rate of $0.044$--$0.047$ in all 13 runs and keeps $84$--$97\%$ of oracle recall; the uncorrected empirical quantile gives $0.085$--$0.090$. Because the false-positive rate a deployer measures on a finite audit set is itself random, we add a Real-Shot Budget Certificate: an exact Beta-Binomial law for the number of false alarms on $m$ held-out identities, valid under exchangeability alone. It yields a sample-size planner and a flag/review/pass rule. In a pre-registered 130-cell test, the predicted exceedance probability fell inside its $99\%$ interval in all 130 cells, but the registered validity criterion failed in 6 cells by at most $0.0062$, so the registered hypothesis is falsified. We report both results and explain why the criterion was too strict.
 \end{abstract}
 
 \input{sections/01_introduction}
 \input{sections/02_related_work}
-\input{sections/03_method}
-\input{sections/04_experiments}
-\input{sections/05_statistical_audit}
+\input{sections/03_certificate}
+\input{sections/04_setup}
+\input{sections/05_results}
 \input{sections/06_discussion}
-
-\subsubsection*{Acknowledgments}
-Computational resources were provided in part by high-performance GPU clusters. We thank the anonymous reviewers for their valuable feedback and suggestions.
 
 \bibliography{references}
 \bibliographystyle{tmlr}
 
-\end{document}
+\appendix
+\input{sections/appendix}
 
+\end{document}

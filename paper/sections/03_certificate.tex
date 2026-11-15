@@ -1,0 +1,58 @@
+\section{Real-shot calibration and the budget certificate}
+\label{sec:cert}
+
+\paragraph{Setting.}
+A detector maps a video $v$ to a score $s(v)\in\mathbb{R}$, larger meaning more likely fake, and raises an alert when $s(v)>\tau$. For a target domain with authentic-video distribution $P_0$, the false-positive rate of a threshold is $\mathrm{FPR}(\tau)=P_0(s(V)>\tau)$ and the budget is $\mathrm{FPR}(\tau)\le\alpha$. In the \emph{real-shot} setting the deployer can collect authentic videos from $n$ distinct identities in the target domain, one video each, but has no labelled fakes. Calibrating per identity matters: several videos of one person are not independent draws, and the guarantee we want is for the next identity.
+
+\paragraph{Thresholds compared.}
+Let $s_{(1)}\le\dots\le s_{(n)}$ be the sorted calibration scores. We compare:
+\begin{itemize}[leftmargin=*,itemsep=1pt]
+    \item \textbf{source quantile}: the $(1-\alpha)$ quantile of authentic source-domain (FF++ validation) scores; no target data;
+    \item \textbf{naive quantile}: $s_{(\lceil(1-\alpha)n\rceil)}$, the empirical quantile of the $n$ target reals;
+    \item \textbf{conformal}: $\hat\tau=s_{(k)}$ with $k=\lceil(n+1)(1-\alpha)\rceil$, which abstains if $k>n$, that is if $n<1/\alpha-1$ \citep{vovk2012conditional,angelopoulos2023gentle}.
+\end{itemize}
+The conformal rule differs from the naive one only in using $n+1$ in place of $n$, which costs one order statistic and is what makes the guarantee below hold at small $n$.
+
+\paragraph{The law of the audited false-alarm count.}
+A deployer who has set $\hat\tau$ will later audit it on $m$ further authentic identities and count the false alarms $X$. Even if $\mathbb{E}[\mathrm{FPR}]\le\alpha$, the audited rate $X/m$ can exceed $\alpha$, and a deployer needs to know how often.
+
+\begin{proposition}[Audited false alarms]
+\label{prop:bb}
+Let $S_1,\dots,S_{n+m}$ be exchangeable scores of authentic videos that are almost surely distinct, the first $n$ used for calibration and the last $m$ for audit. Let $\hat\tau=S_{(k)}$ be the $k$-th smallest calibration score, $1\le k\le n$, and $X=\#\{j>n: S_j>\hat\tau\}$. Then
+\begin{equation}
+X\sim\mathrm{BetaBinomial}(m,\;a,\;b),\qquad a=n+1-k,\quad b=k,
+\label{eq:bb}
+\end{equation}
+so that $\mathbb{E}[X/m]=a/(n+1)$, and for any tolerance $r\alpha$,
+\begin{equation}
+P\!\left(\tfrac{X}{m}>r\alpha\right)=1-F_{\mathrm{BB}}\big(\lfloor r\alpha m\rfloor;\,m,a,b\big).
+\label{eq:pviol}
+\end{equation}
+If in addition the scores are i.i.d.\ from a continuous distribution, the population rate $\mathrm{FPR}(\hat\tau)$ given the calibration set is $\mathrm{Beta}(a,b)$ and $X\mid\mathrm{FPR}\sim\mathrm{Binomial}(m,\mathrm{FPR})$.
+\end{proposition}
+
+The i.i.d.\ part is the classical Beta law of split-conformal coverage \citep{vovk2012conditional,bates2023testing}. The first part needs only exchangeability, so it also covers the common practice of splitting one finite pool of authentic videos into calibration and audit parts without replacement, as we do in our experiments. The proof is a counting argument over the uniformly random relative order of the $n+m$ scores (Appendix~\ref{app:proof}). Ties can only reduce $X$ when alerts require $s>\hat\tau$, so with tied scores the rule is conservative.
+
+\paragraph{Sweet spots and the planner.}
+With $k=\lceil(n+1)(1-\alpha)\rceil$ the expected rate is $(n+1-k)/(n+1)\le\alpha$, with equality exactly when $n=j/\alpha-1$ for an integer $j\ge1$: $n\in\{19,39,59,\dots\}$ at $\alpha=0.05$ and $n\in\{9,19,29,\dots\}$ at $\alpha=0.10$. Between these values the rule is conservative and loses recall; at $\alpha=0.05$, $n=30$ gives an expected rate of $0.032$. \Eqref{eq:pviol} turns a requirement such as ``the audited rate should exceed $2\alpha$ with probability at most $0.10$'' into a choice of $n$, but the answer depends on $m$ as well (Table~\ref{tab:planner}). An audit on $m\approx460$ identities exceeds $0.10$ with probability $0.091$ at $n=39$ and $0.045$ at $n=79$. With $m=82$, the audit size left on Celeb-DF, the same $n=39$ gives $0.107$. A small audit is noisy, and a planner that reports only $n$ understates how often the deployer will see the audited rate exceed the tolerance.
+
+\input{tables/planner}
+
+\paragraph{Triage.}
+Two calibrated thresholds from the same $n$ reals, $\hat\tau_\alpha$ and $\hat\tau_\beta$ with $\beta>\alpha$ (we use $\beta=2\alpha$), give a three-way rule: \emph{flag} if $s>\hat\tau_\alpha$, \emph{review} if $\hat\tau_\beta<s\le\hat\tau_\alpha$, and \emph{pass} otherwise. Proposition~\ref{prop:bb} applies to each threshold separately, so the expected share of authentic videos that are flagged is at most $\alpha$ and the share sent to flag or review is at most $\beta$. Algorithm~\ref{alg:cert} summarizes the procedure.
+
+\begin{algorithm}[t]
+\caption{Real-Shot Budget Certificate}
+\label{alg:cert}
+\begin{algorithmic}[1]
+\Require detector $s(\cdot)$; budgets $\alpha<\beta$; planned audit size $m$; tolerance $r$ (default 2); target risk $\rho$ (e.g.\ $0.10$)
+\State Choose the smallest sweet-spot $n$ with $1-F_{\mathrm{BB}}(\lfloor r\alpha m\rfloor;m,n+1-k,k)\le\rho$ \Comment{\eqref{eq:pviol}}
+\State Collect one authentic target video from each of $n$ distinct identities; score them
+\State $k_\alpha\gets\lceil(n+1)(1-\alpha)\rceil$, $k_\beta\gets\lceil(n+1)(1-\beta)\rceil$; $\hat\tau_\alpha\gets s_{(k_\alpha)}$, $\hat\tau_\beta\gets s_{(k_\beta)}$
+\State Report $\mathbb{E}[\mathrm{FPR}]=(n+1-k_\alpha)/(n+1)$ and $P(X/m>r\alpha)$ from \eqref{eq:pviol}
+\State Deploy: flag if $s>\hat\tau_\alpha$; review if $\hat\tau_\beta<s\le\hat\tau_\alpha$; pass otherwise
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{Assumptions.}
+The guarantee is for authentic videos exchangeable with the calibration set. It says nothing about recall, which depends on the detector, and it does not survive a further shift between calibration and use; in that case the deployer must recalibrate (Section~\ref{sec:discussion}).
