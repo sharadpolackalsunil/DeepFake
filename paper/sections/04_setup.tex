@@ -1,0 +1,54 @@
+\section{Experimental setup}
+\label{sec:setup}
+
+\paragraph{Detectors.}
+All trained detectors use a frozen CLIP ViT-L/14 image encoder \citep{radford2021learning,dosovitskiy2020image} in which only the LayerNorm parameters ($102{,}400$) are tuned, following GenD \citep{yermakov2026gend}. They differ in the head on top of the encoder:
+\textbf{GenD-style (ours)}, our re-implementation of the GenD recipe with a linear head ($103{,}425$ trainable parameters, one frame per clip);
+\textbf{S-MSDT-S}, a single-frame model with an attention-pooled projection head ($777{,}478$);
+\textbf{S-MSDT-ST}, which adds two spatio-temporal transformer blocks over $T=8$ frames ($8{,}467{,}462$);
+\textbf{S-MSDT-Full}, which further adds a gated stream of fixed high-pass residuals (SRM filters \citep{fridrich2012rich} and a two-level Haar wavelet) and a log-sum-exp evidence readout ($9{,}102{,}600$).
+Each is trained on FaceForensics++ c23 \citep{rossler2019faceforensics} for 30 epochs with three seeds, giving 12 runs. Parameter counts are computed by building each model from its training configuration. The 13th checkpoint is the published GenD CLIP ViT-L/14 model \citep{yermakov2026gend}, run through the same pipeline; it was trained by its authors on a different data recipe, so it is a reference point and not a controlled comparison. Architecture and training details are in Appendix~\ref{app:models}.
+
+\paragraph{Data and roles.}
+FF++ c23 provides training data, a validation split (the \emph{source} for thresholds) and an in-domain test set of $840$ videos. We evaluate on three targets:
+\textbf{Celeb-DF v2} \citep{li2020celeb}, $518$ test videos with $178$ authentic videos from $121$ identities (51 celebrities and 70 YouTube clips without identity labels, each its own identity);
+\textbf{DFD} \citep{dufour2019deepfakedetection}, $2{,}847$ videos with $243$ authentic videos of $18$ actors; and
+\textbf{FakeAVCeleb v1.2} \citep{khalid2021fakeavceleb}, $2{,}998$ videos with $499$ authentic VoxCeleb2 identities (one video each) and $2{,}499$ visual fakes stratified over five manipulation methods. Audio-only fakes are excluded because all detectors are visual.
+DFD was used during development, so it is treated as \emph{development data} and never decides a hypothesis. Celeb-DF was inspected during development of the real-shot protocol and is \emph{exploratory} for it. FakeAVCeleb is the \emph{confirmatory} target: its manifest was committed and tagged before any detector was scored, and the score files were hashed before they were analysed.
+
+\paragraph{Scoring.}
+Each video is scored from $K=8$ clips spread over its length ($T=8$ frames per clip for the temporal models, one frame for the others), and the video score is the mean clip logit. We report video AUC and the TPR at the conservative empirical $5\%$-FPR point (the lowest threshold with empirical FPR at most $5\%$).
+
+\paragraph{Real-shot protocol.}
+For a target with $N$ authentic identities and calibration size $n$, a draw samples $n$ identities without replacement, takes one authentic video from each, fits a threshold, and evaluates it on the authentic videos of the remaining $m=N-n$ identities and on all fakes. We repeat this $500$ times per $(n,\alpha)$ for the H7 curves, with $n\in\{5,10,15,20,30,40,60\}$, and $1{,}000$ times per cell for H8. We report the mean FPR over draws, the frequency $P(\mathrm{FPR}>2\alpha)$ of draws whose audited rate exceeds twice the budget, and the TPR. ``Oracle'' recall uses a threshold set on the test reals themselves; retained TPR is the ratio of a method's TPR to the oracle TPR.
+
+\paragraph{Statistics.}
+AUC comparisons use a paired bootstrap over identity clusters \citep{field2007bootstrapping} with $10{,}000$ resamples, which accounts for fakes derived from the same source person (991 clusters on FakeAVCeleb). Equivalence uses the margin $\delta=0.01$ AUC: a comparison is \emph{equivalent} if its interval lies inside $[-\delta,\delta]$, \emph{better} or \emph{worse} if it excludes $[-\delta,\delta]$ on one side, and \emph{inconclusive} otherwise \citep{schuirmann1987comparison}. The two pre-specified comparisons use Bonferroni-adjusted $97.5\%$ intervals.
+
+\paragraph{Pre-registration.}
+Table~\ref{tab:hyp} lists every registered hypothesis and its outcome. H1--H3 were registered at the start of the project and H4a--H6 after exploratory analysis of early seeds, which those tests therefore exclude where the log requires it; H7 was revised once after the development run on Celeb-DF and before FakeAVCeleb was scored (both versions are reported); H8 was registered after the H7 results and before its 130-cell evaluation was run. The decision log, deviations and git tags are summarized in Appendix~\ref{app:prereg}.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\caption{Registered hypotheses and outcomes. ``Undetermined'' means the registered test could not be run as specified; we then report the result as descriptive only. $^a$Two further confirmatory training seeds were registered but not trained (deviation D19).}
+\label{tab:hyp}
+\begin{tabular}{l p{8.9cm} l}
+\toprule
+ID & Registered statement (abridged) & Outcome \\
+\midrule
+H1 & Neither ST nor Full improves AUC over S by more than $\delta=0.01$ on unseen data & undetermined$^a$ \\
+H2 & A validation-frozen threshold loses $\ge0.05$ HTER against the per-dataset optimum & undetermined \\
+H3a & EM prior correction lowers frozen-threshold HTER by $\ge0.03$, without collapse & falsified \\
+H3b & Entropy-minimization TTA lowers frozen-threshold HTER by $\ge0.03$, without collapse & falsified \\
+H4a & With an $\alpha=0.05$ source threshold, ST and Full exceed $2\alpha$ on unseen data & undetermined$^a$ \\
+H5 & A label-free mixture threshold halves the FPR error of the source threshold & falsified \\
+H6 & Clip-consistency TTA lowers HTER by $\ge0.03$ and beats entropy TTA by $\ge0.01$, without collapse & falsified \\
+H7a-v2 & No zero-shot threshold (source or mixture) is safe across detectors & not supported \\
+H7b-v2 & Conformal calibration on $n=20$ identities: mean FPR $\le\alpha+0.01$, TPR $\ge0.75\times$ oracle, every run & \textbf{supported} \\
+H7c-v2 & The naive quantile at $n=20$ exceeds $\alpha+0.02$ in most runs & \textbf{supported} \\
+H8 & Beta-Binomial prediction fidelity in $\ge90\%$ of 130 cells \emph{and} mean FPR $\le\alpha+2\,\mathrm{SE}$ in every cell & falsified \\
+\bottomrule
+\end{tabular}
+\end{table}
